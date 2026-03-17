@@ -2,263 +2,156 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://cdn.tailwindcss.com"></script>
-    <title>Lucra | Fixed Pro</title>
+    <title>Lucra | Live Sync</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        :root { --bg: #0b1624; --card: #152233; --accent: #00ff66; --odd: #233245; --blue: #3b82f6; --yellow: #ffcc00; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: white; margin: 0; -webkit-tap-highlight-color: transparent; }
         
-        :root {
-            --bg-main: #0b1624;
-            --bg-card: #152233;
-            --accent: #00ff66;
-            --odd-box: #233245;
-        }
-
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: var(--bg-main); 
-            color: white;
-            -webkit-tap-highlight-color: transparent;
-            overflow-x: hidden;
-        }
-
-        .match-row {
-            background-color: var(--bg-card);
-            border: 1px solid rgba(255,255,255,0.05);
-            margin-bottom: 4px; /* Tighter spacing for density */
-            padding: 10px 12px;
-            border-radius: 8px;
-        }
-
-        .odd-btn {
-            background-color: var(--odd-box);
-            border-radius: 6px;
-            width: 54px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 12px;
-            transition: all 0.1s ease;
-        }
-
-        .odd-btn.selected {
-            background-color: #3b82f6;
-            color: white;
-        }
-
-        .nav-dock {
-            background: #0f1c2e;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .fab-slip {
-            background: #ffcc00;
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            top: -15px;
-            border: 4px solid var(--bg-main);
-        }
-
-        /* Fixed Modal Transition */
-        #market-modal {
-            transition: opacity 0.3s ease;
-        }
-        #modal-inner {
-            transform: translateY(100%);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        #market-modal.active #modal-inner {
-            transform: translateY(0);
-        }
-
+        /* High Density Row - matches image_131a02.png */
+        .match-row { background: var(--card); border: 1px solid rgba(255,255,255,0.05); margin-bottom: 4px; padding: 10px 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; }
+        .odd-btn { background: var(--odd); border-radius: 6px; width: 54px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; transition: 0.1s; }
+        .odd-btn.selected { background: var(--blue) !important; }
+        
+        /* Modal & Footer styling from image_1395bb.png */
+        .modal-sheet { transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        #market-modal.active .modal-sheet { transform: translateY(0); }
+        .nav-dock { background: #0f1c2e; border-top: 1px solid rgba(255,255,255,0.1); height: 65px; }
+        .fab-slip { background: var(--yellow); width: 54px; height: 54px; border-radius: 50%; position: relative; top: -18px; border: 4px solid var(--bg); display: flex; align-items: center; justify-content: center; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="pb-32">
+<body class="pb-24">
 
-    <div class="bg-[#00ff66] text-black py-2 px-4 flex justify-between items-center text-[10px] font-black uppercase sticky top-0 z-[100]">
-        <span>Deposit via M-PESA paybill 562424</span>
-        <span class="underline">Login to deposit</span>
+    <div class="bg-[#00ff66] text-black py-1.5 px-4 flex justify-between items-center text-[10px] font-black uppercase sticky top-0 z-[100]">
+        <span>Lucra Live DB Connected</span>
+        <span class="underline">Refresh</span>
     </div>
 
     <div class="px-3">
         <header class="flex justify-between items-center py-4">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-[#00ff66] rounded-lg flex items-center justify-center font-black text-black">L</div>
-                <span class="font-bold text-sm">Sign In</span>
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-[#00ff66] rounded flex items-center justify-center font-black text-black">L</div>
+                <span class="font-black text-sm tracking-tighter">LUCRA</span>
             </div>
-            <button class="bg-[#00ff66] text-black px-5 py-2 rounded-lg font-bold text-xs uppercase">Sign Up</button>
+            <button class="bg-[#00ff66] text-black px-4 py-1.5 rounded-md font-bold text-xs">JOIN</button>
         </header>
 
-        <div class="flex gap-2 overflow-x-auto no-scrollbar mb-4">
-            <button class="bg-[#00ff66]/20 text-[#00ff66] border border-[#00ff66] px-4 py-2 rounded-lg text-[11px] font-bold whitespace-nowrap">⚽ Soccer</button>
-            <button class="bg-white/5 text-gray-400 px-4 py-2 rounded-lg text-[11px] font-bold whitespace-nowrap">🏀 Basketball</button>
-            <button class="bg-white/5 text-gray-400 px-4 py-2 rounded-lg text-[11px] font-bold whitespace-nowrap">🎾 Tennis</button>
-            <button class="bg-white/5 text-gray-400 px-4 py-2 rounded-lg text-[11px] font-bold whitespace-nowrap">🏈 Rugby</button>
-        </div>
-
-        <div class="flex gap-4 items-center mb-4 text-[11px] font-bold text-gray-500 border-b border-white/5 pb-2">
-            <span class="text-[#00ff66] border-b-2 border-[#00ff66] pb-2">🔥 Popular</span>
-            <span class="pb-2">🕒 Upcoming</span>
-            <span class="pb-2">🏆 Leagues</span>
-        </div>
-
-        <div class="flex justify-between px-3 mb-2 text-[9px] font-bold text-gray-500 uppercase tracking-widest">
-            <span>Match Details</span>
-            <div class="flex gap-10 mr-4">
-                <span>1</span>
-                <span>X</span>
-                <span>2</span>
-            </div>
-        </div>
-
-        <div id="match-container">
-            </div>
+        <div id="loader" class="text-center py-20 opacity-30 text-[10px] font-bold uppercase tracking-widest">Fetching Scrapped Data...</div>
+        <div id="match-container" class="space-y-1"></div>
     </div>
 
     <div id="market-modal" class="fixed inset-0 z-[1000] hidden flex items-end">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="closeModal()"></div>
-        <div id="modal-inner" class="relative w-full bg-[#0b1624] rounded-t-[2rem] flex flex-col max-h-[80vh] border-t border-white/10">
-            <div class="p-5 flex justify-between items-center bg-[#152233] rounded-t-[2rem]">
+        <div class="modal-sheet relative w-full bg-[#0b1624] rounded-t-3xl flex flex-col max-h-[85vh] border-t border-white/10">
+            <div class="p-4 flex justify-between items-center bg-[#152233] rounded-t-3xl">
                 <div>
-                    <p id="modal-league" class="text-[9px] text-[#00ff66] font-bold uppercase tracking-widest"></p>
-                    <h2 id="modal-teams" class="text-sm font-bold mt-1"></h2>
+                    <p id="m-league" class="text-[9px] text-[#00ff66] font-bold uppercase"></p>
+                    <h2 id="m-teams" class="text-xs font-bold mt-1"></h2>
                 </div>
-                <button onclick="closeModal()" class="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white text-xl">✕</button>
+                <button onclick="closeModal()" class="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white text-lg">✕</button>
             </div>
-            <div id="modal-content" class="p-5 overflow-y-auto no-scrollbar pb-24 space-y-6">
-                </div>
+            <div id="m-content" class="p-4 overflow-y-auto no-scrollbar pb-32"></div>
         </div>
     </div>
 
-    <nav class="fixed bottom-0 left-0 right-0 nav-dock flex justify-between items-center px-6 h-16 z-[900]">
-        <div class="flex flex-col items-center gap-1 opacity-50"><span class="text-xl">🏠</span><span class="text-[8px] font-bold uppercase">Home</span></div>
-        <div class="flex flex-col items-center gap-1 opacity-50 relative">
-            <span class="absolute -top-1 -right-2 bg-[#00ff66] text-black text-[8px] font-black px-1 rounded-full">13</span>
+    <nav class="fixed bottom-0 left-0 right-0 nav-dock flex justify-between items-center px-6 z-[900]">
+        <div class="flex flex-col items-center gap-1 text-[#00ff66]">
+            <span class="text-xl">🏠</span><span class="text-[8px] font-bold uppercase">Home</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 opacity-40 relative">
+            <span class="bg-[#00ff66] text-black text-[7px] font-black px-1.5 rounded absolute -top-1 -right-2">9</span>
             <span class="text-xl">📺</span><span class="text-[8px] font-bold uppercase">Live</span>
         </div>
-        <div onclick="toggleSlip()" class="fab-slip cursor-pointer"><span class="text-black text-xl">📄</span></div>
-        <div class="flex flex-col items-center gap-1 opacity-50"><span class="text-xl">📋</span><span class="text-[8px] font-bold uppercase">My Bets</span></div>
-        <div class="flex flex-col items-center gap-1 opacity-50"><span class="text-xl">👤</span><span class="text-[8px] font-bold uppercase">Profile</span></div>
+        <div onclick="alert('Slip Open')" class="fab-slip cursor-pointer shadow-xl">
+            <span class="bg-red-500 text-white text-[8px] font-black px-1.5 rounded-full absolute -top-1 -right-1 border-2 border-[#0f1c2e]">1</span>
+            <span class="text-black text-xl">📄</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 opacity-40">
+            <span class="text-xl">📋</span><span class="text-[8px] font-bold uppercase">My Bets</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 opacity-40">
+            <span class="text-xl">👤</span><span class="text-[8px] font-bold uppercase">Profile</span>
+        </div>
     </nav>
 
-    <div id="quick-slip-bar" class="fixed bottom-20 left-4 right-4 bg-[#111823] border border-[#00ff66] p-3 rounded-xl flex justify-between items-center hidden z-[850] shadow-2xl">
-        <div class="flex items-center gap-3">
-            <div class="bg-[#00ff66] text-black w-6 h-6 rounded flex items-center justify-center font-black text-xs" id="slip-count">0</div>
-            <span id="quick-odds" class="text-white font-black text-xs">0.00 ODDS</span>
-        </div>
-        <button class="bg-[#00ff66] text-black px-4 py-1.5 rounded font-black text-[10px] uppercase">Place Bet ></button>
-    </div>
-
     <script>
-        // Expanded Dataset to ensure "at least 4 games" visibility
-        const allMatches = [
-            { p_id: '1', league: 'UEFA Champions League', home: 'Sporting CP', away: 'Bodø/Glimt', h_odd: '1.52', d_odd: '5.50', a_odd: '5.00', time: '10:45 AM', markets: 285 },
-            { p_id: '2', league: 'England Championship', home: 'Watford', away: 'Wrexham', h_odd: '2.33', d_odd: '3.40', a_odd: '3.10', time: '12:45 PM', markets: 215 },
-            { p_id: '3', league: 'England Championship', home: 'Southampton', away: 'Norwich City', h_odd: '2.00', d_odd: '3.70', a_odd: '3.60', time: 'Tomorrow', markets: 213 },
-            { p_id: '4', league: 'UEFA Champions League', home: 'Liverpool', away: 'Galatasaray SK', h_odd: '1.28', d_odd: '6.25', a_odd: '9.75', time: 'Tomorrow', markets: 276 },
-            { p_id: '5', league: 'Spain La Liga', home: 'Real Madrid', away: 'Girona', h_odd: '1.45', d_odd: '4.20', a_odd: '6.00', time: '8:00 PM', markets: 190 },
-            { p_id: '6', league: 'Italy Serie A', home: 'AC Milan', away: 'Juventus', h_odd: '2.10', d_odd: '3.10', a_odd: '3.20', time: 'Tonight', markets: 240 }
-        ];
+        let allMatches = [];
+        let slip = [];
 
-        let betSlip = [];
+        async function fetchFromPython() {
+            try {
+                // This targets your index.py handler
+                const res = await fetch('/api'); 
+                const data = await res.json();
+                
+                // Map the Python RealDictCursor keys to UI keys
+                allMatches = data.map(m => ({
+                    id: m.id,
+                    league: m.league_name || m.league || "Pro League",
+                    home: m.home_team || m.home,
+                    away: m.away_team || m.away,
+                    h_odd: m.home_odds || m.h_odd || "1.00",
+                    d_odd: m.draw_odds || m.d_odd || "1.00",
+                    a_odd: m.away_odds || m.a_odd || "1.00",
+                    time: m.start_date || "Today"
+                }));
 
-        function renderMatches() {
+                document.getElementById('loader').classList.add('hidden');
+                render();
+            } catch (e) {
+                document.getElementById('loader').innerText = "DB CONNECTION ERROR";
+            }
+        }
+
+        function render() {
             const container = document.getElementById('match-container');
-            container.innerHTML = allMatches.map(m => {
-                const check = (v) => betSlip.some(b => b.matchId === m.p_id && b.selection === v);
+            container.innerHTML = allMatches.map(g => {
+                const isS = (t) => slip.some(s => s.id === g.id && s.t === t);
                 return `
-                <div class="match-row flex items-center">
-                    <div class="flex-1 min-w-0 pr-4" onclick="openExtraMarkets('${m.p_id}')">
-                        <p class="text-[8px] text-gray-500 font-bold uppercase truncate">${m.league} • ${m.time}</p>
-                        <h3 class="text-xs font-bold truncate mt-0.5">${m.home}</h3>
-                        <h3 class="text-xs font-bold truncate">${m.away}</h3>
-                        <span class="text-[9px] text-[#00ff66] font-bold mt-1 inline-block">+${m.markets} Markets</span>
+                <div class="match-row">
+                    <div class="flex-1 min-w-0 pr-4" onclick="openModal('${g.id}')">
+                        <p class="text-[8px] text-gray-500 font-bold uppercase truncate mb-0.5">${g.league}</p>
+                        <h3 class="text-[13px] font-bold truncate leading-tight">${g.home}</h3>
+                        <h3 class="text-[13px] font-bold truncate leading-tight">${g.away}</h3>
+                        <span class="text-[9px] text-[#00ff66] font-bold mt-1 inline-block">View Markets</span>
                     </div>
-                    <div class="flex gap-1">
-                        <button onclick="addToSlip('${m.p_id}', '1', '${m.h_odd}')" class="odd-btn ${check('1') ? 'selected' : ''}">${m.h_odd}</button>
-                        <button onclick="addToSlip('${m.p_id}', 'X', '${m.d_odd}')" class="odd-btn ${check('X') ? 'selected' : ''}">${m.d_odd}</button>
-                        <button onclick="addToSlip('${m.p_id}', '2', '${m.a_odd}')" class="odd-btn ${check('2') ? 'selected' : ''}">${m.a_odd}</button>
+                    <div class="flex gap-1.5">
+                        <button onclick="toggle('${g.id}','1','${g.h_odd}')" class="odd-btn ${isS('1')?'selected':''}">${g.h_odd}</button>
+                        <button onclick="toggle('${g.id}','X','${g.d_odd}')" class="odd-btn ${isS('X')?'selected':''}">${g.d_odd}</button>
+                        <button onclick="toggle('${g.id}','2','${g.a_odd}')" class="odd-btn ${isS('2')?'selected':''}">${g.a_odd}</button>
                     </div>
                 </div>`;
             }).join('');
         }
 
-        function addToSlip(matchId, selection, odd) {
-            const index = betSlip.findIndex(b => b.matchId === matchId);
-            if (index > -1 && betSlip[index].selection === selection) {
-                betSlip.splice(index, 1);
-            } else {
-                if (index > -1) betSlip.splice(index, 1);
-                betSlip.push({ matchId, selection, odd: parseFloat(odd) });
-            }
-            updateSlipUI();
-            renderMatches();
+        function toggle(id, t, o) {
+            const i = slip.findIndex(s => s.id === id);
+            if (i > -1 && slip[i].t === t) slip.splice(i, 1);
+            else { if (i > -1) slip.splice(i, 1); slip.push({ id, t, o }); }
+            render();
         }
 
-        function updateSlipUI() {
-            const bar = document.getElementById('quick-slip-bar');
-            if (betSlip.length > 0) {
-                bar.classList.remove('hidden');
-                document.getElementById('slip-count').innerText = betSlip.length;
-                const total = betSlip.reduce((s, i) => s * i.odd, 1).toFixed(2);
-                document.getElementById('quick-odds').innerText = `${total} ODDS`;
-            } else {
-                bar.classList.add('hidden');
-            }
-        }
-
-        function openExtraMarkets(id) {
-            const m = allMatches.find(x => x.p_id === id);
-            if (!m) return;
-            
-            document.getElementById('modal-teams').innerText = `${m.home} vs ${m.away}`;
-            document.getElementById('modal-league').innerText = m.league;
-            
-            // Generate dummy extra markets for the modal
-            document.getElementById('modal-content').innerHTML = `
-                <div class="bg-white/5 p-4 rounded-xl">
-                    <p class="text-[10px] font-bold text-gray-500 uppercase mb-3">Both Teams To Score</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button class="bg-[#233245] p-3 rounded-lg flex justify-between text-xs font-bold"><span>Yes</span><span>1.85</span></button>
-                        <button class="bg-[#233245] p-3 rounded-lg flex justify-between text-xs font-bold"><span>No</span><span>1.95</span></button>
-                    </div>
-                </div>
-                <div class="bg-white/5 p-4 rounded-xl">
-                    <p class="text-[10px] font-bold text-gray-500 uppercase mb-3">Double Chance</p>
-                    <div class="grid grid-cols-3 gap-2">
-                        <button class="bg-[#233245] p-3 rounded-lg text-center text-[10px] font-bold">1X<br>1.25</button>
-                        <button class="bg-[#233245] p-3 rounded-lg text-center text-[10px] font-bold">12<br>1.30</button>
-                        <button class="bg-[#233245] p-3 rounded-lg text-center text-[10px] font-bold">X2<br>2.10</button>
-                    </div>
-                </div>
-            `;
-
-            const modal = document.getElementById('market-modal');
-            modal.classList.remove('hidden');
-            setTimeout(() => modal.classList.add('active'), 10);
+        function openModal(id) {
+            const g = allMatches.find(x => x.id == id);
+            if(!g) return;
+            document.getElementById('m-teams').innerText = `${g.home} vs ${g.away}`;
+            document.getElementById('m-league').innerText = g.league;
+            document.getElementById('m-content').innerHTML = `<div class="bg-white/5 p-4 rounded-xl text-center text-[10px] font-bold opacity-30">Loading Extra Markets...</div>`;
+            const m = document.getElementById('market-modal');
+            m.classList.remove('hidden');
+            setTimeout(() => m.classList.add('active'), 10);
         }
 
         function closeModal() {
-            const modal = document.getElementById('market-modal');
-            modal.classList.remove('active');
-            setTimeout(() => modal.classList.add('hidden'), 300);
+            const m = document.getElementById('market-modal');
+            m.classList.remove('active');
+            setTimeout(() => m.classList.add('hidden'), 300);
         }
 
-        function toggleSlip() {
-            alert("Booking Slip Summary: " + betSlip.length + " selections active.");
-        }
-
-        // Initialize
-        renderMatches();
+        fetchFromPython();
     </script>
 </body>
 </html>
