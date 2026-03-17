@@ -4,84 +4,121 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
-    <title>Lucra | Elite Odds</title>
+    <title>Lucra | Pro Dashboard</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0b121c; }
+        .bet-card { background-color: #16202c; border: 1px solid #1f2937; }
+        .odd-box { background-color: #232f3e; border: 1px solid #2d3b4d; transition: all 0.2s; }
+        .odd-box:hover { background-color: #2d3b4d; border-color: #00ff66; }
+        .neon-text { color: #00ff66; }
+        .neon-bg { background-color: #00ff66; }
+    </style>
 </head>
-<body class="bg-[#0b0b0b] text-gray-100 font-sans">
-    <div class="max-w-3xl mx-auto p-4">
-        <header class="flex justify-between items-center py-6">
-            <h1 class="text-2xl font-black text-[#00ff66] italic">LUCRA</h1>
-            <div class="flex items-center gap-2">
-                <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Live Markets</span>
+<body class="text-white pb-20">
+
+    <div class="neon-bg text-black text-[10px] font-bold py-2 px-4 flex justify-between items-center sticky top-0 z-50">
+        <span>Deposit via M-PESA paybill 562424</span>
+        <span class="underline">Login to deposit</span>
+    </div>
+
+    <div class="max-w-md mx-auto px-4">
+        <header class="flex justify-between items-center py-4">
+            <div class="flex items-center gap-4">
+                <span class="text-2xl font-black italic neon-text">L</span>
+                <button class="bg-gray-800 px-4 py-1.5 rounded-md text-sm font-semibold">Sign In</button>
             </div>
+            <button class="neon-bg text-black px-6 py-1.5 rounded-md text-sm font-bold">Sign Up</button>
         </header>
 
-        <div id="loader" class="text-center py-20 text-gray-600">Syncing with Render DB...</div>
+        <div class="flex gap-2 overflow-x-auto py-2 no-scrollbar mb-4">
+            <button class="border border-green-500 bg-[#00ff661a] neon-text px-4 py-1.5 rounded-lg text-sm flex items-center gap-2">⚽ Soccer</button>
+            <button class="border border-gray-700 px-4 py-1.5 rounded-lg text-sm text-gray-400">🏀 Basketball</button>
+            <button class="border border-gray-700 px-4 py-1.5 rounded-lg text-sm text-gray-400">🎾 Tennis</button>
+        </div>
+
+        <div class="flex justify-between items-end mb-4 border-b border-gray-800 pb-2">
+            <span class="text-xs font-bold uppercase text-gray-400">Odds</span>
+            <div class="flex gap-12 text-[10px] font-bold text-gray-500 uppercase mr-12">
+                <span>1</span><span>X</span><span>2</span>
+            </div>
+        </div>
+
+        <div id="loader" class="text-center py-10 text-gray-600">Loading live matches...</div>
+        
         <div id="match-container" class="space-y-3"></div>
     </div>
 
-<script>
-    function toggleMarkets(id) {
-        const el = document.getElementById(id);
-        el.classList.toggle('hidden');
-    }
+    <nav class="fixed bottom-0 left-0 right-0 bg-[#0b121c] border-t border-gray-800 py-3 px-6 flex justify-between items-center z-50">
+        <div class="text-center neon-text flex flex-col items-center">
+            <span class="text-xl">🏠</span>
+            <span class="text-[9px] font-bold uppercase">Home</span>
+        </div>
+        <div class="bg-yellow-400 p-4 rounded-full -mt-12 shadow-xl">
+            <span class="text-black text-xl">📄</span>
+        </div>
+        <div class="text-center text-gray-500 flex flex-col items-center">
+            <span class="text-xl">👤</span>
+            <span class="text-[9px] font-bold uppercase">Profile</span>
+        </div>
+    </nav>
 
-    async function fetchMatches() {
-        try {
-            const res = await fetch('/api');
-            const matches = await res.json();
-            document.getElementById('loader').classList.add('hidden');
-            const container = document.getElementById('match-container');
+    <script>
+        function toggleMarkets(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('hidden');
+        }
 
-            container.innerHTML = matches.map(m => {
-                // Parse the all_markets JSON if it's a string, otherwise use as is
-                const markets = typeof m.all_markets === 'string' ? JSON.parse(m.all_markets) : m.all_markets;
+        async function fetchMatches() {
+            try {
+                const res = await fetch('/api');
+                const matches = await res.json();
+                document.getElementById('loader').classList.add('hidden');
+                const container = document.getElementById('match-container');
 
-                return `
-                <div class="bg-[#141414] border border-gray-800 rounded-xl overflow-hidden shadow-2xl">
-                    <div class="p-4 flex justify-between items-center cursor-pointer hover:bg-[#1a1a1a]" onclick="toggleMarkets('extra-${m.p_id}')">
-                        <div class="flex-1">
-                            <p class="text-[9px] text-[#00ff66] font-bold uppercase tracking-tighter mb-1">${m.league}</p>
-                            <h3 class="font-bold text-sm md:text-base">${m.home} vs ${m.away}</h3>
-                            <p class="text-[10px] text-gray-500 mt-1">${new Date(m.start_date).toLocaleString()}</p>
-                        </div>
-                        <div class="flex gap-2">
-                            ${[m.h_odd, m.d_odd, m.a_odd].map((odd, i) => `
-                                <div class="bg-[#1e1e1e] w-12 h-10 rounded border border-gray-700 flex flex-col items-center justify-center">
-                                    <span class="text-[8px] text-gray-500 uppercase">${['1','X','2'][i]}</span>
-                                    <span class="text-[#00ff66] font-bold text-xs">${odd || '-'}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                        <div class="ml-3 text-gray-600 text-xs tracking-tighter">+${m.market_count} ▾</div>
-                    </div>
+                container.innerHTML = matches.map(m => {
+                    const markets = typeof m.all_markets === 'string' ? JSON.parse(m.all_markets) : m.all_markets;
                     
-                    <div id="extra-${m.p_id}" class="hidden bg-[#0d0d0d] p-4 border-t border-gray-800">
-                        <div class="space-y-4">
-                            ${markets && markets.length > 0 ? markets.map(market => `
-                                <div>
-                                    <p class="text-[9px] text-gray-500 mb-2 border-b border-gray-800 pb-1 uppercase tracking-widest">${market.name}</p>
-                                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    return `
+                    <div class="bet-card rounded-xl overflow-hidden shadow-lg">
+                        <div class="p-4 flex justify-between items-center cursor-pointer" onclick="toggleMarkets('extra-${m.p_id}')">
+                            <div class="flex-1">
+                                <p class="text-[9px] text-gray-500 font-bold mb-1 uppercase">${m.league}</p>
+                                <h3 class="font-semibold text-sm leading-tight">${m.home}</h3>
+                                <h3 class="font-semibold text-sm leading-tight mb-2">${m.away}</h3>
+                                <span class="text-[10px] neon-text font-bold">+${m.market_count}</span>
+                            </div>
+                            
+                            <div class="flex gap-1">
+                                ${[m.h_odd, m.d_odd, m.a_odd].map(odd => `
+                                    <div class="odd-box w-14 h-14 rounded-md flex items-center justify-center font-bold text-sm">
+                                        ${odd || '-'}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div id="extra-${m.p_id}" class="hidden bg-[#0d141d] p-4 border-t border-gray-800">
+                            ${markets ? markets.map(market => `
+                                <div class="mb-4 last:mb-0">
+                                    <p class="text-[10px] text-gray-500 uppercase font-bold mb-2 tracking-widest border-b border-gray-800 pb-1">${market.name}</p>
+                                    <div class="grid grid-cols-2 gap-2">
                                         ${market.odds.map(o => `
-                                            <div class="bg-[#1a1a1a] p-2 rounded border border-gray-800 flex justify-between items-center">
+                                            <div class="odd-box p-2 rounded flex justify-between items-center">
                                                 <span class="text-[10px] text-gray-400">${o.display}</span>
-                                                <span class="text-[#00ff66] font-bold text-xs">${o.odd_value}</span>
+                                                <span class="text-xs font-bold neon-text">${o.odd_value}</span>
                                             </div>
                                         `).join('')}
                                     </div>
                                 </div>
-                            `).join('') : '<p class="text-xs text-gray-600">No deep markets found. Run the scraper again.</p>'}
+                            `).join('') : ''}
                         </div>
                     </div>
-                </div>
-                `;
-            }).join('');
-        } catch (e) {
-            console.error(e);
-            document.getElementById('loader').innerText = "Error loading data.";
+                    `;
+                }).join('');
+            } catch (e) { console.error(e); }
         }
-    }
-    fetchMatches();
-</script>
+        fetchMatches();
+    </script>
 </body>
 </html>
