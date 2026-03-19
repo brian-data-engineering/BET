@@ -4,12 +4,14 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
 import os
+import json
 
 # 1. Database Configuration
 DB_URL = os.getenv("DATABASE_URL")
 
-# 2. Initialize Connection Pool (More stable for Render/Vercel)
+# 2. Initialize Connection Pool
 try:
+    # Using Min 1, Max 10 connections
     postgreSQL_pool = psycopg2.pool.SimpleConnectionPool(1, 10, DB_URL)
 except Exception as e:
     print(f"Error creating connection pool: {e}")
@@ -39,22 +41,36 @@ def list_matches():
         conn = get_db_conn()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
+        # This query uses JSONB aggregation to attach odds to each match
+        # It specifically looks for the '1X2' or 'Match Winner' market odds
         cur.execute("""
             SELECT 
                 m.match_id, 
-                m.home_team AS home, 
-                m.away_team AS away, 
-                m.start_time AS start, 
+                m.home_team, 
+                m.away_team, 
+                m.start_time, 
                 c.competition_name AS competition,
-                -- Logic: If the start time is in the past, it's 'live', otherwise 'upcoming'
                 CASE 
                     WHEN m.start_time::timestamp <= NOW() THEN 'live'
                     ELSE 'upcoming'
-                END as status
+                END as status,
+                -- Nested JSON array of odds
+                COALESCE(
+                    (SELECT json_agg(json_build_object(
+                        'display', o.display,
+                        'value', o.odd_value,
+                        'odd_key', o.odd_key,
+                        'market_name', mk.name
+                    ))
+                    FROM odds o
+                    JOIN markets mk ON o.match_id = mk.match_id AND o.sub_type_id = mk.sub_type_id
+                    WHERE o.match_id = m.match_id 
+                    AND (mk.name = '1X2' OR mk.name = 'Match Winner' OR mk.sub_type_id = '1')
+                    ), '[]'
+                ) as odds
             FROM matches m
             JOIN competitions c ON m.competition_id = c.competition_id
-            -- Show games from 3 hours ago up to 48 hours in the future
-            WHERE m.start_time::timestamp > NOW() - INTERVAL '3 hours'
+            WHERE m.start_time::timestamp > NOW() - INTERVAL '6 hours'
               AND m.start_time::timestamp < NOW() + INTERVAL '48 hours'
             ORDER BY m.start_time::timestamp ASC;
         """)
@@ -75,7 +91,6 @@ def match_odds(match_id: str):
         conn = get_db_conn()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 'odd_value' renamed to 'value' for the OddsTable component
         cur.execute("""
             SELECT 
                 mk.name as market_name, 
@@ -98,4 +113,4 @@ def match_odds(match_id: str):
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "project": "Lucra"}
+    return {"status": "healthy", "project": "Lucra", "pool_size": 10}
