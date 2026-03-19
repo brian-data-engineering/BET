@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import Link from 'next/link';
-import { Trophy, Clock, ArrowRight } from 'lucide-react';
+import { Trophy, Clock } from 'lucide-react';
 import OddsTable from '../components/OddsTable';
 
 export default function MatchesBySport({ matches = [] }) {
   const [selectedSport, setSelectedSport] = useState('Soccer');
 
-  // 1. Filter matches based on the selected sport button
-  // Note: Ensure your scraper/database 'competition' names include these keywords
+  // Filter matches based on the selected sport button
   const filteredMatches = matches.filter(match => 
     match.competition.toLowerCase().includes(selectedSport.toLowerCase()) ||
-    (selectedSport === 'Soccer' && match.competition.includes('League')) // Fallback logic
+    (selectedSport === 'Soccer' && match.competition.toLowerCase().includes('league'))
   );
 
   return (
@@ -53,19 +52,28 @@ export default function MatchesBySport({ matches = [] }) {
                       <span className="bg-lucra-dark text-[10px] font-black px-2 py-1 rounded text-lucra-green border border-lucra-green/10">
                         {match.competition}
                       </span>
-                      <span className="text-[10px] text-gray-500 flex items-center gap-1 font-bold">
+                      
+                      {/* HYDRATION FIX APPLIED HERE */}
+                      <span 
+                        className="text-[10px] text-gray-500 flex items-center gap-1 font-bold"
+                        suppressHydrationWarning
+                      >
                         <Clock size={12} />
-                        {new Date(match.start).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                        {new Date(match.start).toLocaleString([], { 
+                          weekday: 'short', 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
                       </span>
                     </div>
 
                     <Link href={`/match/${match.match_id}`} className="block space-y-1">
-                      <div className="flex items-center justify-between group-hover:translate-x-1 transition-transform">
-                        <h3 className="text-lg font-bold text-gray-100 group-hover:text-lucra-green">{match.home}</h3>
-                      </div>
-                      <div className="flex items-center justify-between group-hover:translate-x-1 transition-transform">
-                        <h3 className="text-lg font-bold text-gray-100 group-hover:text-lucra-green">{match.away}</h3>
-                      </div>
+                      <h3 className="text-lg font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
+                        {match.home}
+                      </h3>
+                      <h3 className="text-lg font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
+                        {match.away}
+                      </h3>
                     </Link>
                   </div>
 
@@ -81,7 +89,6 @@ export default function MatchesBySport({ matches = [] }) {
               </div>
             ))
           ) : (
-            /* No Matches Found for Sport */
             <div className="text-center py-20 bg-lucra-card/20 rounded-3xl border border-dashed border-gray-800">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-800/50 mb-4">
                 <Trophy className="text-gray-600" size={30} />
