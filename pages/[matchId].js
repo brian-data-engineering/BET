@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-import Navbar from '../../components/Navbar';
-import Betslip from '../../components/Betslip';
+import Navbar from '../components/Navbar';
+import Betslip from '../components/Betslip';
 import { ChevronLeft, Clock, Trophy, Activity } from 'lucide-react';
 import Link from 'next/link';
 
