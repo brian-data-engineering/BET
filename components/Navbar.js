@@ -4,7 +4,7 @@ export default function Navbar() {
   return (
     <nav className="bg-lucra-dark border-b border-gray-800 p-4 flex items-center justify-between sticky top-0 z-50">
       <div className="flex items-center gap-8">
-        <h1 className="text-2xl font-black text-lucra-green tracking-tighter italic">LUCRA</h1>
+        <h1 className="text-2xl font-black text-lucra-green tracking-tighter italic">ALFAYO</h1>
         
         <div className="hidden md:flex items-center bg-lucra-card border border-gray-700 rounded-lg px-3 py-1.5 w-64">
           <Search size={16} className="text-gray-500" />
