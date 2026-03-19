@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, Timer, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Timer, ShieldCheck, Trophy } from 'lucide-react';
 
 export default function MatchDetail({ odds = [], matchInfo }) {
   const router = useRouter();
@@ -66,7 +66,11 @@ export default function MatchDetail({ odds = [], matchInfo }) {
               </h1>
             </div>
 
-            <div className="flex items-center gap-2 text-gray-500 font-bold text-sm">
+            {/* HYDRATION FIX APPLIED BELOW */}
+            <div 
+              className="flex items-center gap-2 text-gray-500 font-bold text-sm"
+              suppressHydrationWarning
+            >
               <Timer size={14} />
               {new Date(matchInfo.start).toLocaleString([], { 
                 weekday: 'long', 
@@ -126,13 +130,9 @@ export async function getServerSideProps(context) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bet-backend-q7vi.onrender.com';
 
   try {
-    // 1. Fetch the odds for this match
     const res = await fetch(`${API_URL}/matches/${matchId}/odds`);
     const odds = await res.json();
 
-    // 2. Fetch the basic match info if odds are empty
-    // If your backend doesn't have a /matches/${matchId} endpoint, 
-    // we use the first odd's info as fallback
     let matchInfo = null;
     if (odds && odds.length > 0) {
       matchInfo = {
