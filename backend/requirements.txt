@@ -1,4 +1,5 @@
-fastapi==0.110.0
-uvicorn==0.27.1
-psycopg2-binary==2.9.9
-requests==2.31.0
+fastapi
+uvicorn
+psycopg2-binary
+psycopg2  # Keep both or just binary, but binary is safer for Render
+python-multipart
