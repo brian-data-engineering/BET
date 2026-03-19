@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 11, 22, 27; /* #0b161b */
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-start-rgb));
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar for that pro look */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b161b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00ff88; /* Lucra Green on hover */
+}
+
+/* Glass effect for the odds buttons */
+.odds-button {
+  @apply bg-slate-900/50 border border-transparent transition-all duration-200;
+}
+
+.odds-button:hover {
+  @apply border-lucra-green bg-slate-800 text-lucra-green;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+}
