@@ -1,19 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  env: {
-    // Replace this with your actual Render URL
-    NEXT_PUBLIC_API_URL: 'https://lucra-backend.onrender.com',
+  images: {
+    domains: ['api.betika.com'], // In case you pull team logos later
   },
-  // This helps prevent CORS issues during development
   async rewrites() {
     return [
       {
+        // This lets you call /api/matches instead of the full Render URL
         source: '/api/:path*',
-        destination: 'https://lucra-backend.onrender.com/:path*',
+        destination: 'https://lucra-data.onrender.com/:path*',
       },
     ];
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
