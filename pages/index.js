@@ -1,4 +1,4 @@
-import { useState } from 'react'; // Added useState
+import { useState } from 'react';
 import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
@@ -8,8 +8,6 @@ import { Trophy, Clock } from 'lucide-react';
 export default function Home({ matches = [] }) {
   const [activeTab, setActiveTab] = useState('live');
 
-  // Logic to separate matches based on time (Current time: 2026-03-19)
-  // We use a small buffer (e.g., 2 hours) to keep matches in "Live" while they are being played
   const now = new Date();
   
   const liveMatches = matches.filter((match) => {
@@ -22,7 +20,6 @@ export default function Home({ matches = [] }) {
     return startTime > now;
   });
 
-  // Decide which list to render
   const displayMatches = activeTab === 'live' ? liveMatches : upcomingMatches;
 
   return (
@@ -53,7 +50,7 @@ export default function Home({ matches = [] }) {
             <button className="bg-black text-white px-4 py-1.5 rounded-lg text-xs font-bold uppercase not-italic">Claim</button>
           </div>
 
-          {/* Navigation Tabs - Now Functional */}
+          {/* Navigation Tabs */}
           <div className="flex gap-6 mb-6 border-b border-gray-800 pb-2 overflow-x-auto">
             <button 
               onClick={() => setActiveTab('live')}
@@ -85,7 +82,9 @@ export default function Home({ matches = [] }) {
                         <span className="text-[10px] text-lucra-green font-black uppercase tracking-widest bg-lucra-green/10 px-2 py-0.5 rounded border border-lucra-green/20">
                           {match.competition}
                         </span>
-                        <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold">
+                        
+                        {/* HYDRATION FIX APPLIED BELOW */}
+                        <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold" suppressHydrationWarning>
                           <Clock size={10} />
                           {new Date(match.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </div>
