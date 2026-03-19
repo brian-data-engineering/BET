@@ -7,24 +7,27 @@ import { Trophy, Clock } from 'lucide-react';
 
 export default function Home({ matches = [] }) {
   const [activeTab, setActiveTab] = useState('live');
-  const [selectedSport, setSelectedSport] = useState('Soccer'); // New state for sidebar
+  const [selectedSport, setSelectedSport] = useState('Soccer');
 
   const now = new Date();
   
-  // 1. Filter by Sport first
+  // 1. Filter by Sport using the DB column 'competition_id'
   const sportFilteredMatches = matches.filter((match) => {
-    const comp = match.competition?.toLowerCase() || "";
+    const comp = (match.competition_id || match.competition || "").toLowerCase();
     const sport = selectedSport.toLowerCase();
+    // Logic: Matches if competition contains sport name OR is 'Soccer' and contains 'league'
     return comp.includes(sport) || (sport === 'soccer' && comp.includes('league'));
   });
 
-  // 2. Then split into Live vs Upcoming
+  // 2. Split into Live vs Upcoming using DB column 'start_time'
   const liveMatches = sportFilteredMatches.filter((match) => {
-    return new Date(match.start) <= now; 
+    const startTime = new Date(match.start_time || match.start);
+    return startTime <= now; 
   });
 
   const upcomingMatches = sportFilteredMatches.filter((match) => {
-    return new Date(match.start) > now;
+    const startTime = new Date(match.start_time || match.start);
+    return startTime > now;
   });
 
   const displayMatches = activeTab === 'live' ? liveMatches : upcomingMatches;
@@ -35,7 +38,7 @@ export default function Home({ matches = [] }) {
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
-        {/* 1. LEFT SIDEBAR (Now Functional) */}
+        {/* 1. LEFT SIDEBAR */}
         <aside className="hidden lg:col-span-2 lg:block space-y-2">
           {['Soccer', 'Basketball', 'Tennis', 'Cricket', 'Rugby', 'Hockey'].map((sport) => (
             <button 
@@ -43,12 +46,12 @@ export default function Home({ matches = [] }) {
               onClick={() => setSelectedSport(sport)}
               className={`w-full flex items-center gap-3 p-3 rounded-xl transition text-left border ${
                 selectedSport === sport 
-                ? 'text-lucra-green bg-lucra-card/50 border-lucra-green/20 font-bold' 
+                ? 'text-lucra-green bg-lucra-card/50 border-lucra-green/20 font-bold shadow-[0_0_15px_rgba(0,255,135,0.05)]' 
                 : 'text-lucra-text-dim border-transparent hover:text-white hover:bg-slate-800'
               }`}
             >
               {sport === 'Soccer' ? (
-                <Trophy size={18} />
+                <Trophy size={18} className={selectedSport === 'Soccer' ? "text-lucra-green" : "text-gray-500"} />
               ) : (
                 <div className={`w-1.5 h-1.5 rounded-full ${selectedSport === sport ? 'bg-lucra-green' : 'bg-gray-700'}`} />
               )}
@@ -62,7 +65,7 @@ export default function Home({ matches = [] }) {
           
           <div className="bg-lucra-green text-black p-4 rounded-xl flex justify-between items-center font-black italic tracking-tighter shadow-lg shadow-lucra-green/10">
             <span className="text-sm md:text-base uppercase">Daily Reward: 10% Cashback on All Losses</span>
-            <button className="bg-black text-white px-4 py-1.5 rounded-lg text-xs font-bold uppercase not-italic">Claim</button>
+            <button className="bg-black text-white px-4 py-1.5 rounded-lg text-xs font-bold uppercase not-italic hover:scale-105 transition-transform">Claim</button>
           </div>
 
           {/* Navigation Tabs */}
@@ -84,44 +87,60 @@ export default function Home({ matches = [] }) {
           {/* Match Cards Container */}
           <div className="grid gap-3">
             {displayMatches.length > 0 ? (
-              displayMatches.map((match) => (
-                <div key={match.match_id} className="bg-lucra-card border border-gray-800/50 rounded-xl p-4 hover:border-gray-500/50 transition-all group">
-                  <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                    
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-3">
-                        {activeTab === 'live' && (
-                          <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                        )}
-                        <span className="text-[10px] text-lucra-green font-black uppercase tracking-widest bg-lucra-green/10 px-2 py-0.5 rounded border border-lucra-green/20">
-                          {match.competition}
-                        </span>
-                        
-                        <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold" suppressHydrationWarning>
-                          <Clock size={10} />
-                          {new Date(match.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </div>
-                      </div>
+              displayMatches.map((match) => {
+                // DATA MAPPING FROM DB COLUMNS
+                const home = match.home_team || match.home;
+                const away = match.away_team || match.away;
+                const start = match.start_time || match.start;
+                const competition = match.competition_id || match.competition;
+                const odds = match.odds || match.market_odds || [];
+
+                return (
+                  <div key={match.match_id} className="bg-lucra-card border border-gray-800/50 rounded-xl p-4 hover:border-gray-500/50 transition-all group">
+                    <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                       
-                      <Link href={`/match/${match.match_id}`} className="block">
-                        <div className="space-y-1">
-                          <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
-                            {match.home}
-                          </h3>
-                          <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
-                            {match.away}
-                          </h3>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-3">
+                          {activeTab === 'live' && (
+                            <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                          )}
+                          <span className="text-[10px] text-lucra-green font-black uppercase tracking-widest bg-lucra-green/10 px-2 py-0.5 rounded border border-lucra-green/20">
+                            {competition}
+                          </span>
+                          
+                          <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold" suppressHydrationWarning>
+                            <Clock size={10} />
+                            {start ? new Date(start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
+                          </div>
                         </div>
-                      </Link>
-                    </div>
+                        
+                        <Link href={`/match/${match.match_id}`} className="block">
+                          <div className="space-y-1">
+                            <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
+                              {home}
+                            </h3>
+                            <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
+                              {away}
+                            </h3>
+                          </div>
+                        </Link>
+                      </div>
 
-                    <div className="md:w-72">
-                      <OddsTable odds={match.odds || []} />
-                    </div>
+                      <div className="md:w-72">
+                        {/* If odds exist, show table, otherwise show placeholder */}
+                        {odds.length > 0 ? (
+                          <OddsTable odds={odds} />
+                        ) : (
+                          <div className="h-12 flex items-center justify-center bg-slate-900/30 rounded-lg border border-dashed border-gray-800 text-[10px] text-gray-600 uppercase font-bold">
+                            Odds Suspended
+                          </div>
+                        )}
+                      </div>
 
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="flex flex-col items-center justify-center py-24 bg-lucra-card/30 rounded-3xl border border-dashed border-gray-800">
                 <div className="w-16 h-16 bg-gray-800/50 rounded-full flex items-center justify-center mb-4 text-gray-600">
@@ -153,9 +172,11 @@ export async function getServerSideProps() {
     const res = await fetch(`${API_URL}/matches`);
     if (!res.ok) throw new Error("API not responding");
     const matches = await res.json();
+    
+    // Ensure we are passing an array
     return { props: { matches: Array.isArray(matches) ? matches : [] } };
   } catch (err) {
-    console.error("Lucra Data Fetch Error:", err);
+    print("Lucra Data Fetch Error:", err);
     return { props: { matches: [] } };
   }
 }
