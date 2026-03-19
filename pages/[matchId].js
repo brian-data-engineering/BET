@@ -1,156 +1,151 @@
 import { useRouter } from 'next/router';
+import { useState, useEffect } from 'react';
+import Navbar from '../../components/Navbar';
+import Betslip from '../../components/Betslip';
+import { ChevronLeft, Clock, Trophy, Activity } from 'lucide-react';
 import Link from 'next/link';
-import { ArrowLeft, Timer, ShieldCheck, Trophy } from 'lucide-react';
 
-export default function MatchDetail({ odds = [], matchInfo }) {
+export default function MatchDetail({ match, odds = [] }) {
   const router = useRouter();
 
-  // Handle loading state
-  if (router.isFallback) {
-    return (
-      <div className="min-h-screen bg-lucra-dark flex items-center justify-center">
-        <div className="animate-pulse text-lucra-green font-black text-xl italic uppercase">
-          Loading Lucra Data...
-        </div>
-      </div>
-    );
+  // If the page is still loading or match data is missing
+  if (router.isFallback || !match) {
+    return <div className="min-h-screen bg-lucra-dark text-white flex items-center justify-center">Loading Lucra Match...</div>;
   }
 
-  // Handle case where match is not found
-  if (!matchInfo) {
-    return (
-      <div className="min-h-screen bg-lucra-dark text-white p-10 text-center">
-        <h1 className="text-2xl font-bold mb-4">Match Not Found</h1>
-        <Link href="/" className="text-lucra-green hover:underline">Return Home</Link>
-      </div>
-    );
-  }
-
-  // Filter for the main 1X2 Market
-  const mainMarket = odds.filter(o => 
-    o.market_name?.toUpperCase() === "1X2" || 
-    o.market_name?.toLowerCase().includes("winner")
-  );
+  // Group odds by market_name so we can display them in sections
+  const groupedOdds = odds.reduce((acc, odd) => {
+    const name = odd.market_name || "Other Markets";
+    if (!acc[name]) acc[name] = [];
+    acc[name].push(odd);
+    return acc;
+  }, {});
 
   return (
-    <div className="min-h-screen bg-lucra-dark text-white p-4 md:p-8 font-sans">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-lucra-dark text-white font-sans">
+      <Navbar />
+
+      <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
-        {/* Navigation */}
-        <Link 
-          href="/" 
-          className="flex items-center gap-2 text-gray-400 hover:text-lucra-green text-sm mb-8 transition-colors group"
-        >
-          <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-          Back to Lobby
-        </Link>
-        
-        {/* Match Header Card */}
-        <div className="bg-lucra-card border border-gray-800 rounded-3xl p-8 mb-10 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-lucra-green to-transparent opacity-50" />
+        {/* MAIN CONTENT */}
+        <main className="col-span-12 lg:col-span-9 space-y-6">
           
-          <div className="flex flex-col items-center gap-4 relative z-10">
-            <span className="text-[10px] bg-slate-800 text-lucra-green px-3 py-1 rounded-full font-black uppercase tracking-[0.2em] border border-lucra-green/20">
-              {matchInfo.competition}
-            </span>
+          {/* Back Button & Header */}
+          <div className="flex items-center gap-4">
+            <Link href="/" className="p-2 hover:bg-slate-800 rounded-full transition">
+              <ChevronLeft size={24} />
+            </Link>
+            <div>
+              <h1 className="text-xl font-black uppercase tracking-tight text-lucra-green">
+                {match.competition_name || match.competition || "Match Details"}
+              </h1>
+            </div>
+          </div>
+
+          {/* Scoreboard / Team Header */}
+          <div className="bg-lucra-card border border-gray-800 rounded-3xl p-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Trophy size={120} />
+            </div>
             
-            <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-12 w-full py-4">
-              <h1 className="text-3xl md:text-5xl font-black italic tracking-tighter text-center uppercase">
-                {matchInfo.home}
-              </h1>
-              <div className="bg-lucra-green text-black px-3 py-1 rounded font-black italic text-sm skew-x-[-10deg]">
-                VS
+            <div className="flex justify-between items-center text-center relative z-10">
+              <div className="flex-1">
+                <div className="w-16 h-16 bg-slate-800 rounded-2xl mx-auto mb-4 flex items-center justify-center border border-gray-700">
+                  <span className="text-2xl font-bold">{match.home_team?.[0]}</span>
+                </div>
+                <h2 className="text-2xl font-black">{match.home_team}</h2>
+                <span className="text-gray-500 text-sm font-bold uppercase">Home</span>
               </div>
-              <h1 className="text-3xl md:text-5xl font-black italic tracking-tighter text-center uppercase text-gray-300">
-                {matchInfo.away}
-              </h1>
-            </div>
 
-            {/* HYDRATION FIX APPLIED BELOW */}
-            <div 
-              className="flex items-center gap-2 text-gray-500 font-bold text-sm"
-              suppressHydrationWarning
-            >
-              <Timer size={14} />
-              {new Date(matchInfo.start).toLocaleString([], { 
-                weekday: 'long', 
-                month: 'short', 
-                day: 'numeric', 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })}
-            </div>
-          </div>
-        </div>
+              <div className="px-8">
+                <div className="bg-lucra-green/10 text-lucra-green px-4 py-2 rounded-full font-black text-sm mb-2 border border-lucra-green/20">
+                  VS
+                </div>
+                <div className="flex items-center gap-1 text-gray-500 text-xs font-bold" suppressHydrationWarning>
+                   <Clock size={12} />
+                   {new Date(match.start_time).toLocaleDateString()} {new Date(match.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </div>
+              </div>
 
-        {/* Odds Section */}
-        <section>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold flex items-center gap-3">
-              <span className="w-1.5 h-6 bg-lucra-green rounded-full shadow-[0_0_10px_rgba(0,255,135,0.5)]"></span> 
-              Match Result (1X2)
-            </h2>
-            <div className="flex items-center gap-1 text-[10px] text-gray-500 uppercase font-black">
-              <ShieldCheck size={12} className="text-lucra-green" />
-              Verified Odds
+              <div className="flex-1">
+                <div className="w-16 h-16 bg-slate-800 rounded-2xl mx-auto mb-4 flex items-center justify-center border border-gray-700">
+                  <span className="text-2xl font-bold">{match.away_team?.[0]}</span>
+                </div>
+                <h2 className="text-2xl font-black">{match.away_team}</h2>
+                <span className="text-gray-500 text-sm font-bold uppercase">Away</span>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {mainMarket.length > 0 ? (
-              mainMarket.map((odd, i) => (
-                <button 
-                  key={i} 
-                  className="bg-slate-900/50 border border-gray-800 p-8 rounded-2xl hover:border-lucra-green group transition-all relative overflow-hidden active:scale-95"
-                >
-                  <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <Trophy size={40} />
+          {/* ODDS SECTIONS */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <Activity size={20} className="text-lucra-green" />
+              Available Markets
+            </h3>
+
+            {Object.keys(groupedOdds).length > 0 ? (
+              Object.entries(groupedOdds).map(([marketName, marketOdds]) => (
+                <div key={marketName} className="bg-lucra-card/50 border border-gray-800 rounded-2xl p-4">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4 px-2">
+                    {marketName}
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {marketOdds.map((odd, idx) => (
+                      <button 
+                        key={idx}
+                        className="flex justify-between items-center bg-slate-900 border border-gray-800 p-4 rounded-xl hover:border-lucra-green transition-all group"
+                      >
+                        <span className="text-sm font-bold text-gray-400 group-hover:text-white uppercase">
+                          {odd.display}
+                        </span>
+                        <span className="text-lucra-green font-black text-lg">
+                          {parseFloat(odd.value).toFixed(2)}
+                        </span>
+                      </button>
+                    ))}
                   </div>
-                  <p className="text-gray-500 text-xs mb-2 uppercase font-black tracking-widest">{odd.display}</p>
-                  <p className="text-4xl font-black text-white group-hover:text-lucra-green transition-colors">
-                    {odd.value}
-                  </p>
-                </button>
+                </div>
               ))
             ) : (
-              <div className="col-span-3 py-10 text-center bg-lucra-card/20 rounded-2xl border border-dashed border-gray-800">
-                <p className="text-gray-500 font-bold uppercase tracking-widest text-sm">Odds suspended or unavailable</p>
+              <div className="text-center py-12 bg-lucra-card/20 rounded-2xl border border-dashed border-gray-800">
+                <p className="text-gray-600 font-bold uppercase text-xs">No active markets for this match</p>
               </div>
             )}
           </div>
-        </section>
+        </main>
+
+        {/* RIGHT SIDEBAR */}
+        <aside className="hidden lg:col-span-3 lg:block">
+          <Betslip />
+        </aside>
 
       </div>
     </div>
   );
 }
 
-export async function getServerSideProps(context) {
-  const { matchId } = context.params;
+export async function getServerSideProps({ params }) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bet-backend-q7vi.onrender.com';
-
+  
   try {
-    const res = await fetch(`${API_URL}/matches/${matchId}/odds`);
-    const odds = await res.json();
+    // 1. Fetch Match Details
+    const matchRes = await fetch(`${API_URL}/matches`);
+    const allMatches = await matchRes.json();
+    const match = allMatches.find(m => m.match_id === params.matchId) || null;
 
-    let matchInfo = null;
-    if (odds && odds.length > 0) {
-      matchInfo = {
-        home: odds[0].home,
-        away: odds[0].away,
-        competition: odds[0].competition,
-        start: odds[0].start,
-      };
-    }
+    // 2. Fetch Specific Odds for this Match
+    const oddsRes = await fetch(`${API_URL}/matches/${params.matchId}/odds`);
+    const odds = await oddsRes.json();
 
     return { 
       props: { 
-        odds: Array.isArray(odds) ? odds : [], 
-        matchInfo 
+        match, 
+        odds: Array.isArray(odds) ? odds : [] 
       } 
     };
   } catch (err) {
-    console.error("Detail Fetch Error:", err);
-    return { props: { odds: [], matchInfo: null } };
+    console.error("Match Detail Fetch Error:", err);
+    return { props: { match: null, odds: [] } };
   }
 }
