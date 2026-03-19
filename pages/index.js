@@ -7,17 +7,24 @@ import { Trophy, Clock } from 'lucide-react';
 
 export default function Home({ matches = [] }) {
   const [activeTab, setActiveTab] = useState('live');
+  const [selectedSport, setSelectedSport] = useState('Soccer'); // New state for sidebar
 
   const now = new Date();
   
-  const liveMatches = matches.filter((match) => {
-    const startTime = new Date(match.start);
-    return startTime <= now; 
+  // 1. Filter by Sport first
+  const sportFilteredMatches = matches.filter((match) => {
+    const comp = match.competition?.toLowerCase() || "";
+    const sport = selectedSport.toLowerCase();
+    return comp.includes(sport) || (sport === 'soccer' && comp.includes('league'));
   });
 
-  const upcomingMatches = matches.filter((match) => {
-    const startTime = new Date(match.start);
-    return startTime > now;
+  // 2. Then split into Live vs Upcoming
+  const liveMatches = sportFilteredMatches.filter((match) => {
+    return new Date(match.start) <= now; 
+  });
+
+  const upcomingMatches = sportFilteredMatches.filter((match) => {
+    return new Date(match.start) > now;
   });
 
   const displayMatches = activeTab === 'live' ? liveMatches : upcomingMatches;
@@ -28,17 +35,25 @@ export default function Home({ matches = [] }) {
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
-        {/* 1. LEFT SIDEBAR */}
+        {/* 1. LEFT SIDEBAR (Now Functional) */}
         <aside className="hidden lg:col-span-2 lg:block space-y-2">
-          <div className="text-lucra-green bg-lucra-card/50 border border-lucra-green/20 p-3 rounded-xl flex items-center gap-3 font-bold">
-            <Trophy size={18} />
-            Soccer
-          </div>
-          {['Basketball', 'Tennis', 'Cricket', 'Rugby', 'Hockey'].map((sport) => (
-            <div key={sport} className="text-lucra-text-dim hover:text-white hover:bg-slate-800 p-3 rounded-xl flex items-center gap-3 transition cursor-pointer group">
-              <div className="w-1.5 h-1.5 rounded-full bg-gray-700 group-hover:bg-lucra-green" />
+          {['Soccer', 'Basketball', 'Tennis', 'Cricket', 'Rugby', 'Hockey'].map((sport) => (
+            <button 
+              key={sport} 
+              onClick={() => setSelectedSport(sport)}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl transition text-left border ${
+                selectedSport === sport 
+                ? 'text-lucra-green bg-lucra-card/50 border-lucra-green/20 font-bold' 
+                : 'text-lucra-text-dim border-transparent hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {sport === 'Soccer' ? (
+                <Trophy size={18} />
+              ) : (
+                <div className={`w-1.5 h-1.5 rounded-full ${selectedSport === sport ? 'bg-lucra-green' : 'bg-gray-700'}`} />
+              )}
               {sport}
-            </div>
+            </button>
           ))}
         </aside>
 
@@ -56,7 +71,7 @@ export default function Home({ matches = [] }) {
               onClick={() => setActiveTab('live')}
               className={`${activeTab === 'live' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2 whitespace-nowrap transition-all`}
             >
-              Live Now ({liveMatches.length})
+              Live {selectedSport} ({liveMatches.length})
             </button>
             <button 
               onClick={() => setActiveTab('upcoming')}
@@ -64,7 +79,6 @@ export default function Home({ matches = [] }) {
             >
               Upcoming ({upcomingMatches.length})
             </button>
-            <button className="text-gray-500 hover:text-white pb-2 px-2 transition whitespace-nowrap">Leagues</button>
           </div>
 
           {/* Match Cards Container */}
@@ -83,7 +97,6 @@ export default function Home({ matches = [] }) {
                           {match.competition}
                         </span>
                         
-                        {/* HYDRATION FIX APPLIED BELOW */}
                         <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold" suppressHydrationWarning>
                           <Clock size={10} />
                           {new Date(match.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -103,11 +116,7 @@ export default function Home({ matches = [] }) {
                     </div>
 
                     <div className="md:w-72">
-                      <OddsTable odds={match.odds || [
-                        { display: '1', value: '2.10' },
-                        { display: 'X', value: '3.40' },
-                        { display: '2', value: '3.25' }
-                      ]} />
+                      <OddsTable odds={match.odds || []} />
                     </div>
 
                   </div>
@@ -119,9 +128,9 @@ export default function Home({ matches = [] }) {
                   <Trophy size={32} />
                 </div>
                 <h3 className="text-lg font-bold text-gray-400">
-                  No {activeTab} matches found
+                  No {selectedSport} {activeTab} matches found
                 </h3>
-                <p className="text-sm text-gray-600">Check the other tab for more games.</p>
+                <p className="text-sm text-gray-600">Try switching sports or check the other tab.</p>
               </div>
             )}
           </div>
