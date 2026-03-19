@@ -2,7 +2,7 @@ from fastapi import FastAPI
 import psycopg2
 import os
 
-DB_URL = os.getenv("postgresql://lucra_data_user:vDaB83cpWXjV2PvQJkz2YygjODVWiX5R@dpg-d6s8ujkr85hc73eoi0og-a.oregon-postgres.render.com/lucra_data")  # set in Render environment variables
+DB_URL = os.getenv("DATABASE_URL")  # set in Render environment variables
 app = FastAPI()
 
 def get_connection():
