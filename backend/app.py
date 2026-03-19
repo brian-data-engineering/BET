@@ -39,7 +39,7 @@ def list_matches():
         conn = get_db_conn()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # We use 'AS' to rename columns so they match your Frontend code
+        # We add '::timestamp' to tell Postgres to convert the text on the fly
         cur.execute("""
             SELECT 
                 m.match_id, 
@@ -49,15 +49,15 @@ def list_matches():
                 c.competition_name AS competition
             FROM matches m
             JOIN competitions c ON m.competition_id = c.competition_id
-            WHERE m.start_time > NOW() - INTERVAL '3 hours'
-            ORDER BY m.start_time ASC;
+            WHERE m.start_time::timestamp > NOW() - INTERVAL '3 hours'
+            ORDER BY m.start_time::timestamp ASC;
         """)
         rows = cur.fetchall()
         cur.close()
         return rows
     except Exception as e:
         print(f"Database Error: {e}")
-        raise HTTPException(status_code=500, detail="Database connection failed")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
             return_db_conn(conn)
