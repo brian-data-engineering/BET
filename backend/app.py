@@ -39,17 +39,23 @@ def list_matches():
         conn = get_db_conn()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # We add '::timestamp' to tell Postgres to convert the text on the fly
         cur.execute("""
             SELECT 
                 m.match_id, 
                 m.home_team AS home, 
                 m.away_team AS away, 
                 m.start_time AS start, 
-                c.competition_name AS competition
+                c.competition_name AS competition,
+                -- Logic: If the start time is in the past, it's 'live', otherwise 'upcoming'
+                CASE 
+                    WHEN m.start_time::timestamp <= NOW() THEN 'live'
+                    ELSE 'upcoming'
+                END as status
             FROM matches m
             JOIN competitions c ON m.competition_id = c.competition_id
+            -- Show games from 3 hours ago up to 48 hours in the future
             WHERE m.start_time::timestamp > NOW() - INTERVAL '3 hours'
+              AND m.start_time::timestamp < NOW() + INTERVAL '48 hours'
             ORDER BY m.start_time::timestamp ASC;
         """)
         rows = cur.fetchall()
