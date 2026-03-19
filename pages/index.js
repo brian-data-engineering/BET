@@ -33,7 +33,7 @@ export default function Home({ matches = [] }) {
   const displayMatches = activeTab === 'live' ? liveMatches : upcomingMatches;
 
   return (
-    <div className="min-h-screen bg-Alfayo-dark text-white font-sans">
+    <div className="min-h-screen bg-Lucra-dark text-white font-sans">
       <Navbar />
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
