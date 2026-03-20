@@ -2,14 +2,19 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Trophy, Clock } from 'lucide-react';
 import OddsTable from '../components/OddsTable';
+// 1. Import Supabase
+import { supabase } from '../lib/supabaseClient';
 
 export default function MatchesBySport({ matches = [] }) {
   const [selectedSport, setSelectedSport] = useState('Soccer');
 
+  // Helper to clean up team names (removes quotes)
+  const cleanName = (name) => name ? name.replace(/['"]+/g, '') : '';
+
   // Filter matches based on the selected sport button
   const filteredMatches = matches.filter(match => 
-    match.competition.toLowerCase().includes(selectedSport.toLowerCase()) ||
-    (selectedSport === 'Soccer' && match.competition.toLowerCase().includes('league'))
+    (match.competition_name || "").toLowerCase().includes(selectedSport.toLowerCase()) ||
+    (selectedSport === 'Soccer' && (match.competition_name || "").toLowerCase().includes('league'))
   );
 
   return (
@@ -50,16 +55,15 @@ export default function MatchesBySport({ matches = [] }) {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
                       <span className="bg-lucra-dark text-[10px] font-black px-2 py-1 rounded text-lucra-green border border-lucra-green/10">
-                        {match.competition}
+                        {match.competition_name}
                       </span>
                       
-                      {/* HYDRATION FIX APPLIED HERE */}
                       <span 
                         className="text-[10px] text-gray-500 flex items-center gap-1 font-bold"
                         suppressHydrationWarning
                       >
                         <Clock size={12} />
-                        {new Date(match.start).toLocaleString([], { 
+                        {new Date(match.start_time).toLocaleString([], { 
                           weekday: 'short', 
                           hour: '2-digit', 
                           minute: '2-digit' 
@@ -67,23 +71,19 @@ export default function MatchesBySport({ matches = [] }) {
                       </span>
                     </div>
 
-                    <Link href={`/match/${match.match_id}`} className="block space-y-1">
+                    <Link href={`/${match.match_id}`} className="block space-y-1">
                       <h3 className="text-lg font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
-                        {match.home}
+                        {cleanName(match.home_team)}
                       </h3>
                       <h3 className="text-lg font-bold text-gray-100 group-hover:text-lucra-green transition-colors">
-                        {match.away}
+                        {cleanName(match.away_team)}
                       </h3>
                     </Link>
                   </div>
 
                   {/* Quick Betting Options */}
                   <div className="lg:w-80">
-                    <OddsTable odds={match.odds || [
-                      { display: '1', value: '1.95' },
-                      { display: 'X', value: '3.10' },
-                      { display: '2', value: '3.80' }
-                    ]} />
+                    <OddsTable odds={match.odds || []} />
                   </div>
                 </div>
               </div>
@@ -103,16 +103,23 @@ export default function MatchesBySport({ matches = [] }) {
   );
 }
 
+// 2. Updated to pull from Supabase
 export async function getServerSideProps() {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bet-backend-q7vi.onrender.com';
-  
   try {
-    const res = await fetch(`${API_URL}/matches`);
-    if (!res.ok) throw new Error("API Connection Failed");
-    const data = await res.json();
-    return { props: { matches: Array.isArray(data) ? data : [] } };
+    const { data: matches, error } = await supabase
+      .from('matches')
+      .select('*, odds(*)')
+      .order('start_time', { ascending: true });
+
+    if (error) throw error;
+
+    return { 
+      props: { 
+        matches: matches || [] 
+      } 
+    };
   } catch (err) {
-    console.error("Match Page Fetch Error:", err);
+    console.error("Explore Page Fetch Error:", err);
     return { props: { matches: [] } };
   }
 }
