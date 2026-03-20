@@ -153,32 +153,33 @@ export default function Home({ matches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    const { data: matches, error } = await supabase
+    // 1. Fetch the raw data exactly as it exists in the DB
+    const { data: rawMatches, error } = await supabase
       .from('matches')
-      .select(`
-        *,
-        odds (
-          id,
-          match_id,
-          odd_key,
-          display,
-          value:odd_value  // This is the magic line! It renames 'odd_value' to 'value' on the fly.
-        )
-      `) 
+      .select('*, odds(*)') 
       .order('start_time', { ascending: true });
 
     if (error) {
       console.error("Supabase Error:", error.message);
-      throw error;
+      return { props: { matches: [] } };
     }
+
+    // 2. "The Fixer": Manually map 'odd_value' to 'value' so the UI can read it
+    const cleanMatches = (rawMatches || []).map(match => ({
+      ...match,
+      odds: (match.odds || []).map(o => ({
+        ...o,
+        value: o.odd_value || o.value || 0 // Try both names just in case!
+      }))
+    }));
 
     return { 
       props: { 
-        matches: matches || [] 
+        matches: JSON.parse(JSON.stringify(cleanMatches)) 
       } 
     };
   } catch (err) {
-    console.error("Server Side Fetch Error:", err);
+    console.error("Global Fetch Error:", err);
     return { props: { matches: [] } };
   }
 }
