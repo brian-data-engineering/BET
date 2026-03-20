@@ -3,26 +3,29 @@ import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import OddsTable from '../components/OddsTable';
+import { useBets } from '../context/BetContext'; // Import the global hook
 import { Trophy, Clock } from 'lucide-react';
 
 export default function Home({ matches = [] }) {
   const [activeTab, setActiveTab] = useState('live');
   const [selectedSport, setSelectedSport] = useState('Soccer');
-  const [slipItems, setSlipItems] = useState([]); // State to hold betslip selections
+  
+  // Use global state instead of local useState
+  const { slipItems, setSlipItems } = useBets(); 
 
   const now = new Date();
   
-  // 1. Logic to add/remove bets from the slip
+  // Logic to add/remove bets from the global slip
   const toggleBet = (odd, match) => {
     const betId = `${match.match_id}-${odd.odd_key}`;
     
     setSlipItems(prev => {
-      // If this specific odd is already in the slip, remove it (toggle off)
+      // Toggle off if already selected
       if (prev.find(item => item.id === betId)) {
         return prev.filter(item => item.id !== betId);
       }
       
-      // Remove any other bet from this same match (Standard 1X2 behavior)
+      // Filter out other selections for the SAME match (1X2 standard)
       const otherMatches = prev.filter(item => item.matchId !== match.match_id);
       
       const newSelection = {
@@ -38,14 +41,14 @@ export default function Home({ matches = [] }) {
     });
   };
 
-  // 2. Filter by Sport using the DB column 'competition_id'
+  // 1. Filter by Sport
   const sportFilteredMatches = matches.filter((match) => {
     const comp = (match.competition_id || match.competition || "").toLowerCase();
     const sport = selectedSport.toLowerCase();
     return comp.includes(sport) || (sport === 'soccer' && comp.includes('league'));
   });
 
-  // 3. Split into Live vs Upcoming using DB column 'start_time'
+  // 2. Split Live vs Upcoming
   const liveMatches = sportFilteredMatches.filter((match) => {
     const startTime = new Date(match.start_time || match.start);
     return startTime <= now; 
@@ -64,7 +67,7 @@ export default function Home({ matches = [] }) {
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
-        {/* 1. LEFT SIDEBAR */}
+        {/* LEFT SIDEBAR */}
         <aside className="hidden lg:col-span-2 lg:block space-y-2">
           {['Soccer', 'Basketball', 'Tennis', 'Cricket', 'Rugby', 'Hockey'].map((sport) => (
             <button 
@@ -86,42 +89,39 @@ export default function Home({ matches = [] }) {
           ))}
         </aside>
 
-        {/* 2. MAIN FEED */}
+        {/* MAIN FEED */}
         <main className="col-span-12 lg:col-span-7 space-y-4">
           
           <div className="bg-lucra-green text-black p-4 rounded-xl flex justify-between items-center font-black italic tracking-tighter shadow-lg">
             <span className="text-sm md:text-base uppercase">Daily Reward: 10% Cashback on All Losses</span>
-            <button className="bg-black text-white px-4 py-1.5 rounded-lg text-xs font-bold uppercase not-italic">Claim</button>
+            <button className="bg-black text-white px-4 py-1.5 rounded-lg text-xs font-bold uppercase not-italic hover:scale-105 transition-transform">Claim</button>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex gap-6 mb-6 border-b border-gray-800 pb-2">
+          <div className="flex gap-6 mb-6 border-b border-gray-800 pb-2 overflow-x-auto">
             <button 
               onClick={() => setActiveTab('live')}
-              className={`${activeTab === 'live' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2 transition-all`}
+              className={`${activeTab === 'live' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2 whitespace-nowrap transition-all`}
             >
               Live {selectedSport} ({liveMatches.length})
             </button>
             <button 
               onClick={() => setActiveTab('upcoming')}
-              className={`${activeTab === 'upcoming' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2 transition-all`}
+              className={`${activeTab === 'upcoming' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2 whitespace-nowrap transition-all`}
             >
               Upcoming ({upcomingMatches.length})
             </button>
           </div>
 
-          {/* Match Cards Container */}
           <div className="grid gap-3">
             {displayMatches.length > 0 ? (
               displayMatches.map((match) => {
                 const home = match.home_team || match.home;
                 const away = match.away_team || match.away;
                 const odds = match.odds || [];
-                // Check if this match has a selection in the slip
                 const currentSelection = slipItems.find(item => item.matchId === match.match_id);
 
                 return (
-                  <div key={match.match_id} className="bg-lucra-card border border-gray-800/50 rounded-xl p-4 group">
+                  <div key={match.match_id} className="bg-lucra-card border border-gray-800/50 rounded-xl p-4 hover:border-gray-500/50 transition-all group">
                     <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                       
                       <div className="flex-1">
@@ -129,9 +129,9 @@ export default function Home({ matches = [] }) {
                           <span className="text-[10px] text-lucra-green font-black uppercase tracking-widest bg-lucra-green/10 px-2 py-0.5 rounded border border-lucra-green/20">
                             {match.competition_name || match.competition_id}
                           </span>
-                          <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold">
+                          <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold" suppressHydrationWarning>
                             <Clock size={10} />
-                            {new Date(match.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {match.start_time ? new Date(match.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
                           </div>
                         </div>
                         
@@ -157,14 +157,15 @@ export default function Home({ matches = [] }) {
               })
             ) : (
               <div className="py-24 text-center bg-lucra-card/30 rounded-3xl border border-dashed border-gray-800 text-gray-500 font-bold">
-                No {activeTab} matches found
+                No {selectedSport} {activeTab} matches found
               </div>
             )}
           </div>
         </main>
 
-        {/* 3. RIGHT SIDEBAR */}
+        {/* RIGHT SIDEBAR */}
         <aside className="hidden lg:col-span-3 lg:block">
+          {/* We still pass items/setItems to the component for internal logic */}
           <Betslip items={slipItems} setItems={setSlipItems} />
         </aside>
 
