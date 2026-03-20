@@ -141,32 +141,40 @@ export default function MatchDetail({ match, odds = [] }) {
   );
 }
 
-// 2. Updated to pull the specific Match and its specific Odds from Supabase
 export async function getServerSideProps({ params }) {
-  try {
-    const { matchId } = params;
+  const { matchId } = params;
 
-    // Fetch the specific match
-    const { data: match } = await supabase
+  try {
+    // 1. Fetch the specific match and its odds
+    const { data: match, error } = await supabase
       .from('matches')
-      .select('*')
+      .select('*, odds(*)')
       .eq('match_id', matchId)
       .single();
 
-    // Fetch only the odds for this specific match
-    const { data: odds } = await supabase
-      .from('odds')
-      .select('*')
-      .eq('match_id', matchId);
+    if (error || !match) {
+      return { notFound: true };
+    }
 
-    return { 
-      props: { 
-        match: match || null, 
-        odds: odds || [] 
-      } 
+    // 2. The "Bridge": Map 'odd_value' to 'value' for this specific match
+    const cleanMatch = {
+      ...match,
+      home_team: String(match.home_team || 'Home'),
+      away_team: String(match.away_team || 'Away'),
+      odds: (match.odds || []).map(o => ({
+        ...o,
+        value: o.odd_value || o.value || 0,
+        label: o.display || o.odd_key || '?'
+      }))
+    };
+
+    return {
+      props: {
+        match: JSON.parse(JSON.stringify(cleanMatch))
+      }
     };
   } catch (err) {
-    console.error("Match Detail Error:", err);
-    return { props: { match: null, odds: [] } };
+    console.error("Detail Page Error:", err);
+    return { notFound: true };
   }
 }
