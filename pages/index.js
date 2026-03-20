@@ -155,12 +155,30 @@ export async function getServerSideProps() {
   try {
     const { data: matches, error } = await supabase
       .from('matches')
-      .select('*, odds(*)') 
+      .select(`
+        *,
+        odds (
+          id,
+          match_id,
+          odd_key,
+          display,
+          value:odd_value  // This is the magic line! It renames 'odd_value' to 'value' on the fly.
+        )
+      `) 
       .order('start_time', { ascending: true });
 
-    if (error) throw error;
-    return { props: { matches: matches || [] } };
+    if (error) {
+      console.error("Supabase Error:", error.message);
+      throw error;
+    }
+
+    return { 
+      props: { 
+        matches: matches || [] 
+      } 
+    };
   } catch (err) {
+    console.error("Server Side Fetch Error:", err);
     return { props: { matches: [] } };
   }
 }
