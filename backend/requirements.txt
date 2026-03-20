@@ -1,5 +1,0 @@
-fastapi
-uvicorn
-psycopg2-binary
-psycopg2  # Keep both or just binary, but binary is safer for Render
-python-multipart
