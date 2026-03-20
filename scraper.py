@@ -2,13 +2,15 @@ import psycopg2
 import requests
 import os
 import sys
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # Configuration
 DB_URL = os.getenv("DATABASE_URL")
-MATCHES_URL = "https://api.betika.com/v1/uo/matches?limit=1000&sport_id=14"
+SPORTS = {"14": "Soccer", "30": "Basketball", "28": "Tennis", "41": "Rugby", "29": "Hockey", "37": "Cricket"}
+BASE_URL = "https://api.betika.com/v1/uo"
 
 if not DB_URL:
     print("❌ ERROR: DATABASE_URL not found.")
@@ -24,80 +26,77 @@ def get_session():
     })
     return session
 
+def fetch_deep_markets(session, parent_id):
+    """Fetches all markets for a specific match."""
+    try:
+        url = f"{BASE_URL}/match?parent_match_id={parent_id}"
+        resp = session.get(url, timeout=10)
+        return resp.json().get("data", [])
+    except:
+        return []
+
 def sync_lucra():
     session = get_session()
+    now = datetime.now()
+    six_hours_from_now = now + timedelta(hours=6)
+    one_minute_ago = now - timedelta(minutes=1)
+
     try:
-        print(f"📡 [{datetime.now().strftime('%H:%M:%S')}] Connecting to Lucra Engine...")
-        resp = session.get(MATCHES_URL, timeout=30)
-        resp.raise_for_status()
-        
-        json_data = resp.json().get("data", [])
-        if not json_data:
-            print("⚠️ No match data found.")
-            return
-
-        print(f"✅ Received {len(json_data)} matches. Syncing to Supabase...")
-
-        # Using a context manager for the connection
         with psycopg2.connect(DB_URL) as conn:
             with conn.cursor() as cur:
-                for match in json_data:
-                    try:
-                        m_id = str(match.get("match_id"))
-                        s_id = str(match.get("sport_id"))
-                        c_id = str(match.get("competition_id"))
+                # --- STEP 1: AUTO-DELETE EXPIRED GAMES ---
+                # Removes games 1 minute after they start to keep the feed fresh
+                print(f"🧹 Cleaning up started matches (Start Time < {one_minute_ago})...")
+                cur.execute("DELETE FROM matches WHERE start_time < %s", (one_minute_ago,))
+                
+                for s_id, s_name in SPORTS.items():
+                    print(f"📡 Syncing {s_name}...")
+                    resp = session.get(f"{BASE_URL}/matches?limit=500&sport_id={s_id}", timeout=30)
+                    matches = resp.json().get("data", [])
 
-                        # 1. Sports
-                        cur.execute("""
-                            INSERT INTO sports (sport_id, sport_name) 
-                            VALUES (%s, %s) ON CONFLICT (sport_id) 
-                            DO UPDATE SET sport_name=EXCLUDED.sport_name
-                        """, (s_id, match.get("sport_name")))
+                    for match in matches:
+                        try:
+                            m_id = str(match.get("match_id"))
+                            start_time_str = match.get("start_time")
+                            start_time_dt = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
 
-                        # 2. Competitions
-                        cur.execute("""
-                            INSERT INTO competitions (competition_id, competition_name, category, sport_id)
-                            VALUES (%s, %s, %s, %s) ON CONFLICT (competition_id) 
-                            DO UPDATE SET competition_name=EXCLUDED.competition_name
-                        """, (c_id, match.get("competition_name"), match.get("category"), s_id))
-
-                        # 3. Matches
-                        cur.execute("""
-                            INSERT INTO matches (match_id, game_id, competition_id, home_team, away_team, start_time)
-                            VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (match_id) 
-                            DO UPDATE SET home_team=EXCLUDED.home_team, away_team=EXCLUDED.away_team, 
-                                          start_time=EXCLUDED.start_time, updated_at=NOW()
-                        """, (m_id, str(match.get("game_id")), c_id, match.get("home_team"), match.get("away_team"), match.get("start_time")))
-
-                        # 4. Markets & Odds
-                        for market in match.get("odds", []):
-                            sub_id = str(market.get("sub_type_id"))
-                            
+                            # 1. Basic Match Sync
                             cur.execute("""
-                                INSERT INTO markets (match_id, sub_type_id, name)
-                                VALUES (%s, %s, %s) ON CONFLICT (match_id, sub_type_id) 
-                                DO UPDATE SET name=EXCLUDED.name
-                            """, (m_id, sub_id, market.get("name")))
+                                INSERT INTO matches (match_id, game_id, competition_id, home_team, away_team, start_time)
+                                VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (match_id) 
+                                DO UPDATE SET start_time=EXCLUDED.start_time, updated_at=NOW()
+                            """, (m_id, str(match.get("game_id")), str(match.get("competition_id")), match.get("home_team"), match.get("away_team"), start_time_str))
 
-                            for outcome in market.get("odds", []):
-                                cur.execute("""
-                                    INSERT INTO odds (match_id, sub_type_id, display, odd_key, odd_value)
-                                    VALUES (%s, %s, %s, %s, %s) ON CONFLICT (match_id, sub_type_id, odd_key)
-                                    DO UPDATE SET odd_value=EXCLUDED.odd_value
-                                """, (m_id, sub_id, outcome.get("display"), str(outcome.get("odd_key")), 
-                                      float(outcome.get("odd_value") or 0)))
+                            # 2. DEEP DIVE: Only for games starting in the next 6 hours
+                            if start_time_dt <= six_hours_from_now:
+                                print(f"   🔍 Deep Dive: {match.get('home_team')} vs {match.get('away_team')}")
+                                deep_markets = fetch_deep_markets(session, m_id)
+                                
+                                for market in deep_markets:
+                                    sub_id = str(market.get("sub_type_id"))
+                                    cur.execute("""
+                                        INSERT INTO markets (match_id, sub_type_id, name)
+                                        VALUES (%s, %s, %s) ON CONFLICT (match_id, sub_type_id) DO UPDATE SET name=EXCLUDED.name
+                                    """, (m_id, sub_id, market.get("name")))
 
-                    except Exception as match_err:
-                        print(f"   ⚠️ Match {match.get('match_id')} skipped: {match_err}")
-                        continue
+                                    for outcome in market.get("odds", []):
+                                        cur.execute("""
+                                            INSERT INTO odds (match_id, sub_type_id, display, odd_key, odd_value)
+                                            VALUES (%s, %s, %s, %s, %s) ON CONFLICT (match_id, sub_type_id, odd_key)
+                                            DO UPDATE SET odd_value=EXCLUDED.odd_value
+                                        """, (m_id, sub_id, outcome.get("display"), str(outcome.get("odd_key")), float(outcome.get("odd_value") or 0)))
+                                
+                                # Respectful delay to avoid IP blocking
+                                time.sleep(0.5)
+
+                        except Exception as e:
+                            continue 
                 
-                # Commit all at once for speed
                 conn.commit()
-                
-        print(f"✨ [{datetime.now().strftime('%H:%M:%S')}] Lucra Data Sync Complete.")
+        print(f"✨ [{datetime.now().strftime('%H:%M:%S')}] Lucra Sync & Clean Complete.")
 
     except Exception as e:
-        print(f"❌ Critical Scraper Error: {e}")
+        print(f"❌ Critical Error: {e}")
 
 if __name__ == "__main__":
     sync_lucra()
