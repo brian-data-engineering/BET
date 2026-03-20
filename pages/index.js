@@ -140,7 +140,7 @@ export default function Home({ matches = [] }) {
                           )}
                         </div>
 
-                        <Link href={`/match/${match.match_id}`} className="block group/link">
+                        <Link href={`/${match.match_id}`} className="block group/link">
                           <div className="space-y-1">
                             <h3 className="text-lg font-black text-gray-100 group-hover/link:text-lucra-green transition-colors tracking-tight">
                               {cleanName(match.home_team)}
