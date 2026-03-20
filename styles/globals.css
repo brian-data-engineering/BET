@@ -41,3 +41,30 @@ body {
   @apply border-lucra-green bg-slate-800 text-lucra-green;
   box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
 }
+
+
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-only, .print-only * {
+    visibility: visible;
+  }
+  .print-only {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  /* Force a small receipt-sized page */
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+}
