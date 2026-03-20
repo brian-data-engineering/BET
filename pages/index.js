@@ -153,7 +153,7 @@ export default function Home({ matches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    // 1. Fetch the raw data exactly as it exists in the DB
+    // 1. Fetch exactly what is in the DB
     const { data: rawMatches, error } = await supabase
       .from('matches')
       .select('*, odds(*)') 
@@ -164,17 +164,22 @@ export async function getServerSideProps() {
       return { props: { matches: [] } };
     }
 
-    // 2. "The Fixer": Manually map 'odd_value' to 'value' so the UI can read it
+    // 2. The "Bridge": This maps the scraper's data to the website's needs
     const cleanMatches = (rawMatches || []).map(match => ({
       ...match,
+      // Ensure team names are strings and not null
+      home_team: String(match.home_team || 'Home Team'),
+      away_team: String(match.away_team || 'Away Team'),
       odds: (match.odds || []).map(o => ({
         ...o,
-        value: o.odd_value || o.value || 0 // Try both names just in case!
+        // This is the fix! It finds 'odd_value' and tells the UI it is 'value'
+        value: o.odd_value || o.value || 0 
       }))
     }));
 
     return { 
       props: { 
+        // We use stringify/parse to ensure the data is "Clean" for Next.js
         matches: JSON.parse(JSON.stringify(cleanMatches)) 
       } 
     };
