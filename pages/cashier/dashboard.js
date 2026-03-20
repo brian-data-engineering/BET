@@ -22,7 +22,13 @@ export default function CashierDashboard() {
     fetchMatches();
   }, []);
 
-  // 1. Load Booking Code Logic
+  // Helper to ensure odds are valid numbers (prevents NaN)
+  const parseOdds = (val) => {
+    const parsed = parseFloat(val);
+    return isNaN(parsed) ? 1.00 : parsed;
+  };
+
+  // 1. Load & Sanitize Booking Code Logic
   const loadBookingCode = async () => {
     if (!bookingInput) return;
     setIsLoadingCode(true);
@@ -33,9 +39,14 @@ export default function CashierDashboard() {
       .eq('code', bookingInput.toUpperCase())
       .single();
 
-    if (data) {
-      // items in booking_codes matches the format expected by the cart
-      setCart(data.selections); 
+    if (data && data.selections) {
+      // Force all odds to be numbers and handle different field names (odd vs odds)
+      const sanitized = data.selections.map(item => ({
+        ...item,
+        odds: parseOdds(item.odds || item.odd) 
+      }));
+      
+      setCart(sanitized); 
       setBookingInput('');
     } else {
       alert("Invalid or Expired Booking Code");
@@ -50,27 +61,33 @@ export default function CashierDashboard() {
       matchId: match.id, 
       matchName: `${match.home_team} vs ${match.away_team}`, 
       selection, 
-      odds: odd 
+      odds: parseOdds(odd) 
     }]);
   };
 
   const removeFromSlip = (id) => setCart(cart.filter(item => item.matchId !== id));
 
-  // 2. Final Print & Save Logic
+  // 2. Final Print & Save Logic with Math Safety
   const handlePrint = async () => {
     if (cart.length === 0) return;
 
     const ticketId = 'LC-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-    const totalOdds = cart.reduce((acc, item) => acc * parseFloat(item.odds), 1).toFixed(2);
-    const payout = (totalOdds * stake).toFixed(2);
+    
+    // Safety math for total odds
+    const calculatedTotalOdds = cart.reduce((acc, item) => acc * parseOdds(item.odds), 1);
+    const finalOdds = calculatedTotalOdds.toFixed(2);
+    
+    // Safety math for payout
+    const numericStake = parseFloat(stake) || 0;
+    const calculatedPayout = (calculatedTotalOdds * numericStake).toFixed(2);
 
     const ticketData = {
       id: ticketId,
       cashier_id: (await supabase.auth.getUser()).data.user.id,
       selections: cart,
-      stake: parseFloat(stake),
-      total_odds: parseFloat(totalOdds),
-      payout: parseFloat(payout),
+      stake: numericStake,
+      total_odds: parseFloat(finalOdds),
+      payout: parseFloat(calculatedPayout),
       status: 'pending'
     };
 
@@ -78,7 +95,6 @@ export default function CashierDashboard() {
 
     if (!error) {
       setCurrentTicket(ticketData);
-      // Trigger browser print
       setTimeout(() => {
         window.print();
         setCart([]);
@@ -105,7 +121,7 @@ export default function CashierDashboard() {
             <div className="flex gap-2 bg-slate-900 p-2 rounded-2xl border border-gray-800 w-72 shadow-xl">
               <input 
                 placeholder="ENTER BOOKING CODE" 
-                className="bg-transparent border-none outline-none text-xs font-black px-2 flex-1 tracking-widest"
+                className="bg-transparent border-none outline-none text-[10px] font-black px-2 flex-1 tracking-widest text-white uppercase"
                 value={bookingInput}
                 onChange={(e) => setBookingInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && loadBookingCode()}
@@ -139,7 +155,6 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* Invisible Printable Component */}
       <PrintableTicket ticket={currentTicket} />
       
     </CashierLayout>
