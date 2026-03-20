@@ -153,38 +153,19 @@ export default function Home({ matches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    // 1. Fetch exactly what is in the DB
-    const { data: rawMatches, error } = await supabase
+    const { data: matches, error } = await supabase
       .from('matches')
       .select('*, odds(*)') 
       .order('start_time', { ascending: true });
 
-    if (error) {
-      console.error("Supabase Error:", error.message);
-      return { props: { matches: [] } };
-    }
-
-    // 2. The "Bridge": Now including the 'display' fix
-    const cleanMatches = (rawMatches || []).map(match => ({
-      ...match,
-      home_team: String(match.home_team || 'Home'),
-      away_team: String(match.away_team || 'Away'),
-      odds: (match.odds || []).map(o => ({
-        ...o,
-        value: o.odd_value || o.value || 0,
-        // Ensure the component knows if it's 1, X, or 2
-        label: o.display || o.odd_key || '?' 
-      }))
-    }));
+    if (error) throw error;
 
     return { 
       props: { 
-        // We use stringify/parse to ensure the data is "Clean" for Next.js
-        matches: JSON.parse(JSON.stringify(cleanMatches)) 
+        matches: JSON.parse(JSON.stringify(matches || [])) 
       } 
     };
   } catch (err) {
-    console.error("Global Fetch Error:", err);
     return { props: { matches: [] } };
   }
 }
