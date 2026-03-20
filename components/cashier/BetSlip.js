@@ -1,4 +1,5 @@
-import { Ticket, Trash2, Printer, AlertCircle } from 'lucide-react';
+// Ensure 'Zap' is in the list of imports at the very top
+import { Ticket, Trash2, Printer, AlertCircle, Zap } from 'lucide-react';
 
 export default function BetSlip({ cart, onRemove, stake, setStake, onPrint }) {
   
