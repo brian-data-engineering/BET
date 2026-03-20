@@ -1,0 +1,31 @@
+name: Lucra Auto-Scraper
+
+on:
+  schedule:
+    # "Cron" is a time language. 
+    # '*/15 * * * *' means: Run every 15 minutes.
+    - cron: '*/15 * * * *' 
+  workflow_dispatch: # This adds a "Run Now" button so you can test it manually.
+
+jobs:
+  scrape-job:
+    runs-on: ubuntu-latest # Tells GitHub to use a fresh Linux machine.
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4 # Copies your code onto the Linux machine.
+
+      - name: Install Python
+        uses: actions/setup-python@v5 # Installs Python 3.x for you.
+        with:
+          python-version: '3.10'
+
+      - name: Install Libraries
+        run: |
+          pip install -r requirements.txt # Installs requests, psycopg2-binary, etc.
+
+      - name: Run the Scraper
+        env:
+          # This connects your Supabase URI (stored safely in GitHub Secrets)
+          DATABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: python scraper.py # Executes your code!
