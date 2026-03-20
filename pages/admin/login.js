@@ -27,21 +27,29 @@ export default function AdminLogin() {
       return;
     }
 
-    // 2. Fetch the role from your custom profiles table
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    // 2. CHECK ROLE (Priority: Metadata Badge)
+    // We verified 'metadata_role' is 'admin' via SQL earlier.
+    const isAdmin = user?.app_metadata?.role === 'admin';
 
-    if (profile?.role === 'admin') {
-      // Success: Proceed to dashboard
+    if (isAdmin) {
+      // SUCCESS: Proceed straight to dashboard
       router.push('/admin/dashboard');
     } else {
-      // Failure: Log them out and show error
-      await supabase.auth.signOut();
-      setErrorMsg("Unauthorized: This terminal is for Admin personnel only.");
-      setLoading(false);
+      // FALLBACK: Double check the profiles table just in case
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.role === 'admin') {
+        router.push('/admin/dashboard');
+      } else {
+        // FAILURE: Log them out if they aren't an admin
+        await supabase.auth.signOut();
+        setErrorMsg("Unauthorized: This terminal is for Admin personnel only.");
+        setLoading(false);
+      }
     }
   };
 
