@@ -4,14 +4,13 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import { ChevronLeft, Clock, Trophy, Activity } from 'lucide-react';
 import Link from 'next/link';
-// 1. Import Supabase
 import { supabase } from '../lib/supabaseClient';
 
-export default function MatchDetail({ match, odds = [] }) {
+export default function MatchDetail({ match }) {
   const router = useRouter();
   const { slipItems, setSlipItems } = useBets();
 
-  // Helper to clean up team names (removes quotes)
+  // Helper to clean up team names
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : '';
 
   if (router.isFallback || !match) {
@@ -22,8 +21,11 @@ export default function MatchDetail({ match, odds = [] }) {
     );
   }
 
-  const groupedOdds = odds.reduce((acc, odd) => {
-    const name = odd.market_name || "Other Markets";
+  // Use match.odds because that's where getServerSideProps put them
+  const matchOdds = match.odds || [];
+
+  const groupedOdds = matchOdds.reduce((acc, odd) => {
+    const name = odd.market_name || "Match Winner"; // Default if market_name is null
     if (!acc[name]) acc[name] = [];
     acc[name].push(odd);
     return acc;
@@ -69,7 +71,7 @@ export default function MatchDetail({ match, odds = [] }) {
               <Trophy size={160} />
             </div>
             
-            <div className="flex justify-between items-center text-center relative z-10">
+            <div className="flex flex-col md:flex-row justify-between items-center text-center relative z-10 gap-8">
               <div className="flex-1">
                 <div className="w-20 h-20 bg-slate-900 rounded-3xl mx-auto mb-4 flex items-center justify-center border border-gray-800 shadow-inner">
                   <span className="text-3xl font-black text-lucra-green">{cleanName(match.home_team)?.[0]}</span>
@@ -82,7 +84,7 @@ export default function MatchDetail({ match, odds = [] }) {
                 <div className="bg-lucra-green text-black px-5 py-1.5 rounded-full font-black text-xs mb-3 shadow-[0_0_20px_rgba(0,255,135,0.2)]">VS</div>
                 <div className="flex items-center justify-center gap-1.5 text-gray-500 text-[10px] font-black uppercase tracking-widest" suppressHydrationWarning>
                    <Clock size={12} className="text-lucra-green" />
-                   {new Date(match.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                   {match.start_time ? new Date(match.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'TBD'}
                 </div>
               </div>
 
@@ -102,34 +104,40 @@ export default function MatchDetail({ match, odds = [] }) {
               Live Betting Markets
             </h3>
 
-            {Object.entries(groupedOdds).map(([marketName, marketOdds]) => (
-              <div key={marketName} className="bg-lucra-card/40 border border-gray-800/60 rounded-2xl p-5 backdrop-blur-sm">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-lucra-green/60 mb-4 px-1">{marketName}</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {marketOdds.map((odd, idx) => {
-                    const isSelected = slipItems.find(item => item.id === `${match.match_id}-${odd.odd_key}`);
-                    return (
-                      <button 
-                        key={idx}
-                        onClick={() => toggleBet(odd)}
-                        className={`flex justify-between items-center p-4 rounded-xl border transition-all duration-200 group ${
-                          isSelected 
-                            ? 'bg-lucra-green border-lucra-green' 
-                            : 'bg-slate-900/60 border-gray-800 hover:border-gray-600'
-                        }`}
-                      >
-                        <span className={`text-xs font-black uppercase ${isSelected ? 'text-black/70' : 'text-gray-400'}`}>
-                          {odd.display}
-                        </span>
-                        <span className={`font-black text-lg ${isSelected ? 'text-black' : 'text-lucra-green'}`}>
-                          {parseFloat(odd.value).toFixed(2)}
-                        </span>
-                      </button>
-                    );
-                  })}
+            {Object.keys(groupedOdds).length > 0 ? (
+              Object.entries(groupedOdds).map(([marketName, marketOdds]) => (
+                <div key={marketName} className="bg-lucra-card/40 border border-gray-800/60 rounded-2xl p-5 backdrop-blur-sm">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-lucra-green/60 mb-4 px-1">{marketName}</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {marketOdds.map((odd, idx) => {
+                      const isSelected = slipItems.find(item => item.id === `${match.match_id}-${odd.odd_key}`);
+                      return (
+                        <button 
+                          key={idx}
+                          onClick={() => toggleBet(odd)}
+                          className={`flex justify-between items-center p-4 rounded-xl border transition-all duration-200 group ${
+                            isSelected 
+                              ? 'bg-lucra-green border-lucra-green' 
+                              : 'bg-slate-900/60 border-gray-800 hover:border-gray-600'
+                          }`}
+                        >
+                          <span className={`text-xs font-black uppercase ${isSelected ? 'text-black/70' : 'text-gray-400'}`}>
+                            {odd.display}
+                          </span>
+                          <span className={`font-black text-lg ${isSelected ? 'text-black' : 'text-lucra-green'}`}>
+                            {odd.value ? parseFloat(odd.value).toFixed(2) : '1.00'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="py-12 text-center border border-dashed border-gray-800 rounded-2xl text-gray-600 font-bold uppercase text-xs tracking-widest">
+                No active markets available for this match
               </div>
-            ))}
+            )}
           </div>
         </main>
 
@@ -145,7 +153,6 @@ export async function getServerSideProps({ params }) {
   const { matchId } = params;
 
   try {
-    // 1. Fetch the specific match and its odds
     const { data: match, error } = await supabase
       .from('matches')
       .select('*, odds(*)')
@@ -156,15 +163,15 @@ export async function getServerSideProps({ params }) {
       return { notFound: true };
     }
 
-    // 2. The "Bridge": Map 'odd_value' to 'value' for this specific match
     const cleanMatch = {
       ...match,
       home_team: String(match.home_team || 'Home'),
       away_team: String(match.away_team || 'Away'),
       odds: (match.odds || []).map(o => ({
         ...o,
+        // The Fix: Use odd_value from scraper if value is missing
         value: o.odd_value || o.value || 0,
-        label: o.display || o.odd_key || '?'
+        display: o.display || o.odd_key || '?'
       }))
     };
 
