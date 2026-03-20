@@ -2,35 +2,40 @@ name: Lucra Auto-Scraper
 
 on:
   schedule:
-    # Runs every 15 minutes to stay safe within GitHub's free 2000-minute limit
     - cron: '*/15 * * * *' 
-  workflow_dispatch: # This allows you to click "Run workflow" manually
+  workflow_dispatch: 
 
 jobs:
   scrape-job:
     runs-on: ubuntu-latest
     
     env:
-      # This removes the yellow "Node.js 20" warning you saw
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # This connects your Supabase URI from GitHub Secrets to your Python script
       DATABASE_URL: ${{ secrets.SUPABASE_URL }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          # This ensures it pulls the absolute latest code from your root
+          fetch-depth: 0 
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          # This caches your libraries so the scraper starts faster each time
-          cache: 'pip' 
+
+      - name: Debug - List Files
+        # This will show us EXACTLY where scraper.py is hiding in the logs
+        run: |
+          echo "Current Directory: $(pwd)"
+          ls -R
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install psycopg2-binary requests httpx; fi
 
       - name: Run Lucra Scraper
-        run: python scraper.py
+        # We use './' to tell Linux "look right here in the folder you just landed in"
+        run: python ./scraper.py
