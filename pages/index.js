@@ -164,16 +164,16 @@ export async function getServerSideProps() {
       return { props: { matches: [] } };
     }
 
-    // 2. The "Bridge": This maps the scraper's data to the website's needs
+    // 2. The "Bridge": Now including the 'display' fix
     const cleanMatches = (rawMatches || []).map(match => ({
       ...match,
-      // Ensure team names are strings and not null
-      home_team: String(match.home_team || 'Home Team'),
-      away_team: String(match.away_team || 'Away Team'),
+      home_team: String(match.home_team || 'Home'),
+      away_team: String(match.away_team || 'Away'),
       odds: (match.odds || []).map(o => ({
         ...o,
-        // This is the fix! It finds 'odd_value' and tells the UI it is 'value'
-        value: o.odd_value || o.value || 0 
+        value: o.odd_value || o.value || 0,
+        // Ensure the component knows if it's 1, X, or 2
+        label: o.display || o.odd_key || '?' 
       }))
     }));
 
