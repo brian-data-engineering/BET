@@ -12,13 +12,7 @@ export default function Home({ matches = [] }) {
   const [selectedSport, setSelectedSport] = useState('Soccer');
   const { slipItems, setSlipItems } = useBets(); 
 
-  // Debugging: This will tell us if matches are even arriving in the browser
-  useEffect(() => {
-    console.log("Matches received from Supabase:", matches.length);
-  }, [matches]);
-
   const now = new Date();
-  
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
 
   const toggleBet = (odd, match) => {
@@ -39,24 +33,30 @@ export default function Home({ matches = [] }) {
     });
   };
 
-  // 1. IMPROVED FILTER: More flexible sport matching
+  // 1. BROAD FILTER: If Soccer is selected, show anything that isn't another specific sport
   const sportFilteredMatches = matches.filter((match) => {
     const comp = (match.competition_name || "").toLowerCase();
     const sport = selectedSport.toLowerCase();
     
     if (sport === 'soccer') {
-      return comp.includes('soccer') || comp.includes('football') || comp.includes('league') || comp.includes('cup');
+      const otherSports = ['basketball', 'tennis', 'cricket', 'rugby', 'hockey', 'ice hockey'];
+      const isOtherSport = otherSports.some(s => comp.includes(s));
+      // Show if it mentions soccer/football OR if it just doesn't mention other sports
+      return comp.includes('soccer') || comp.includes('football') || comp.includes('league') || !isOtherSport;
     }
     return comp.includes(sport);
   });
 
-  // 2. IMPROVED TIME LOGIC: Fallback for different date formats
+  // 2. TIME FILTER: Ensuring matches show up in at least one tab
   const liveMatches = sportFilteredMatches.filter((match) => {
+    if (!match.start_time) return true; // Show in live if time is missing
     const startTime = new Date(match.start_time);
+    // If it started within the last 3 hours or is marked live
     return startTime <= now || match.status === 'live'; 
   });
 
   const upcomingMatches = sportFilteredMatches.filter((match) => {
+    if (!match.start_time) return false;
     const startTime = new Date(match.start_time);
     return startTime > now && match.status !== 'live';
   });
@@ -91,13 +91,13 @@ export default function Home({ matches = [] }) {
           <div className="flex gap-6 mb-6 border-b border-gray-800 pb-2">
             <button 
               onClick={() => setActiveTab('live')}
-              className={`${activeTab === 'live' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2`}
+              className={`${activeTab === 'live' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2 whitespace-nowrap`}
             >
               Live ({liveMatches.length})
             </button>
             <button 
               onClick={() => setActiveTab('upcoming')}
-              className={`${activeTab === 'upcoming' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2`}
+              className={`${activeTab === 'upcoming' ? 'text-lucra-green border-b-2 border-lucra-green' : 'text-gray-500'} pb-2 font-bold px-2 whitespace-nowrap`}
             >
               Upcoming ({upcomingMatches.length})
             </button>
@@ -114,13 +114,13 @@ export default function Home({ matches = [] }) {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-3">
                           <span className="text-[10px] text-lucra-green font-black uppercase tracking-widest bg-lucra-green/10 px-2 py-0.5 rounded border border-lucra-green/20">
-                            {match.competition_name}
+                            {match.competition_name || "Match"}
                           </span>
                         </div>
                         <Link href={`/${match.match_id}`} className="block">
                           <div className="space-y-1">
-                            <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green">{cleanName(match.home_team)}</h3>
-                            <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green">{cleanName(match.away_team)}</h3>
+                            <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green transition-colors">{cleanName(match.home_team)}</h3>
+                            <h3 className="text-md font-bold text-gray-100 group-hover:text-lucra-green transition-colors">{cleanName(match.away_team)}</h3>
                           </div>
                         </Link>
                       </div>
@@ -137,7 +137,7 @@ export default function Home({ matches = [] }) {
               })
             ) : (
               <div className="py-24 text-center bg-lucra-card/30 rounded-3xl border border-dashed border-gray-800 text-gray-500 font-bold">
-                No matches found. (Database count: {matches.length})
+                No {activeTab} matches found. (Total DB: {matches.length})
               </div>
             )}
           </div>
@@ -158,11 +158,7 @@ export async function getServerSideProps() {
       .select('*, odds(*)') 
       .order('start_time', { ascending: true });
 
-    if (error) {
-      console.error("Supabase Error:", error.message);
-      return { props: { matches: [] } };
-    }
-
+    if (error) throw error;
     return { props: { matches: matches || [] } };
   } catch (err) {
     return { props: { matches: [] } };
