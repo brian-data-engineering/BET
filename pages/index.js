@@ -3,23 +3,24 @@ import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import OddsTable from '../components/OddsTable';
-import Sidebar from '../components/Sidebar'; // New dynamic component
+import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
   const [activeTab, setActiveTab] = useState('live');
-  const [selectedLeague, setSelectedLeague] = useState(null); // Drill-down state
+  const [selectedLeague, setSelectedLeague] = useState(null);
   const [matches, setMatches] = useState(initialMatches);
+  const [loading, setLoading] = useState(false);
   const { slipItems, setSlipItems } = useBets(); 
 
   const now = new Date();
 
-  // Clean data: remove quotes as requested to prevent syntax errors
+  // Clean data: remove quotes to prevent syntax errors in the UI
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
 
-  // Fetch matches specifically for the selected league
+  // 1. EFFECT: Fetch matches specifically for the selected league
   useEffect(() => {
     if (selectedLeague) {
       fetchMatchesByLeague(selectedLeague);
@@ -27,6 +28,7 @@ export default function Home({ initialMatches = [] }) {
   }, [selectedLeague]);
 
   const fetchMatchesByLeague = async (leagueId) => {
+    setLoading(true);
     const { data, error } = await supabase
       .from('matches')
       .select('*, odds(*)')
@@ -36,6 +38,13 @@ export default function Home({ initialMatches = [] }) {
     if (!error && data) {
       setMatches(data);
     }
+    setLoading(false);
+  };
+
+  // 2. RESET: Restore initial view when "Clear Filter" is clicked in Sidebar
+  const handleReset = () => {
+    setSelectedLeague(null);
+    setMatches(initialMatches);
   };
 
   const toggleBet = (odd, match) => {
@@ -75,14 +84,18 @@ export default function Home({ initialMatches = [] }) {
       
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
-        {/* LEFT SIDEBAR: Dynamic Drill-Down */}
+        {/* LEFT SIDEBAR: Dynamic Drill-Down + Clear Filter */}
         <aside className="hidden lg:col-span-3 lg:block">
-          <Sidebar onSelectLeague={(id) => setSelectedLeague(id)} />
+          <Sidebar 
+            onSelectLeague={(id) => setSelectedLeague(id)} 
+            onClearFilter={handleReset}
+          />
         </aside>
 
         {/* CENTER: Main Match Feed */}
         <main className="col-span-12 lg:col-span-6 space-y-6">
           
+          {/* Tabs Navigation */}
           <div className="flex gap-8 border-b border-slate-800">
             {[
               { id: 'live', label: 'Live Now', count: liveMatches.length },
@@ -103,8 +116,14 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
+          {/* Match Cards Container */}
           <div className="grid gap-3">
-            {displayMatches.length > 0 ? (
+            {loading ? (
+              <div className="py-32 flex flex-col items-center justify-center text-slate-500">
+                <Loader2 className="animate-spin mb-4" size={32} />
+                <p className="text-xs font-black uppercase tracking-widest">Loading Markets...</p>
+              </div>
+            ) : displayMatches.length > 0 ? (
               displayMatches.map((match) => {
                 const currentSelection = slipItems.find(item => item.matchId === match.match_id);
 
@@ -116,14 +135,19 @@ export default function Home({ initialMatches = [] }) {
                           <span className="text-[9px] text-emerald-500 font-black uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/10">
                             {match.start_time ? new Date(match.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"}
                           </span>
+                          {match.status === 'live' && (
+                            <span className="flex items-center gap-1 text-[9px] text-red-500 font-black uppercase animate-pulse">
+                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> Live
+                            </span>
+                          )}
                         </div>
 
                         <Link href={`/${match.match_id}`} className="block">
                           <div className="space-y-1">
-                            <h3 className="text-lg font-black text-slate-100 hover:text-emerald-500 transition-colors">
+                            <h3 className="text-lg font-black text-slate-100 group-hover:text-emerald-500 transition-colors tracking-tight">
                               {cleanName(match.home_team)}
                             </h3>
-                            <h3 className="text-lg font-black text-slate-100 hover:text-emerald-500 transition-colors">
+                            <h3 className="text-lg font-black text-slate-100 group-hover:text-emerald-500 transition-colors tracking-tight">
                               {cleanName(match.away_team)}
                             </h3>
                           </div>
@@ -144,7 +168,9 @@ export default function Home({ initialMatches = [] }) {
             ) : (
               <div className="py-32 text-center bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-800">
                 <Search size={40} className="mx-auto text-slate-700 mb-4" />
-                <p className="text-slate-500 font-black uppercase text-xs tracking-widest">Select a league to see matches</p>
+                <p className="text-slate-500 font-black uppercase text-xs tracking-widest">
+                  {selectedLeague ? "No matches in this league" : "Select a league to see matches"}
+                </p>
               </div>
             )}
           </div>
@@ -166,7 +192,7 @@ export async function getServerSideProps() {
       .from('matches')
       .select('*, odds(*)') 
       .order('start_time', { ascending: true })
-      .limit(50); // Initial load limit for performance
+      .limit(50); 
 
     if (error) throw error;
 
@@ -176,6 +202,7 @@ export async function getServerSideProps() {
       } 
     };
   } catch (err) {
+    console.error("SSR Error:", err);
     return { props: { initialMatches: [] } };
   }
 }
