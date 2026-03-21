@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
@@ -13,6 +13,7 @@ export default function Home({ initialMatches = [] }) {
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [matches, setMatches] = useState(initialMatches);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(''); // Global search state
   const { slipItems, setSlipItems } = useBets(); 
 
   const now = new Date();
@@ -41,10 +42,11 @@ export default function Home({ initialMatches = [] }) {
     setLoading(false);
   };
 
-  // 2. RESET: Restore initial view when "Clear Filter" is clicked in Sidebar
+  // 2. RESET: Restore initial view
   const handleReset = () => {
     setSelectedLeague(null);
     setMatches(initialMatches);
+    setSearchQuery('');
   };
 
   const toggleBet = (odd, match) => {
@@ -65,26 +67,37 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
-  // Filter based on Live vs Upcoming
-  const liveMatches = matches.filter((m) => {
-    const startTime = new Date(m.start_time);
-    return startTime <= now || m.status === 'live'; 
-  });
+  // 3. FILTERING LOGIC: Tab Filter + Search Filter
+  const displayMatches = useMemo(() => {
+    // First, filter by Live vs Upcoming
+    const tabFiltered = matches.filter((m) => {
+      const startTime = new Date(m.start_time);
+      const isLive = startTime <= now || m.status === 'live';
+      return activeTab === 'live' ? isLive : !isLive;
+    });
 
-  const upcomingMatches = matches.filter((m) => {
-    const startTime = new Date(m.start_time);
-    return startTime > now && m.status !== 'live';
-  });
+    // Then, filter by Search Query (Teams or League names)
+    if (!searchQuery) return tabFiltered;
+    
+    const query = searchQuery.toLowerCase();
+    return tabFiltered.filter(m => 
+      m.home_team?.toLowerCase().includes(query) || 
+      m.away_team?.toLowerCase().includes(query) ||
+      m.competition_name?.toLowerCase().includes(query)
+    );
+  }, [matches, activeTab, searchQuery, now]);
 
-  const displayMatches = activeTab === 'live' ? liveMatches : upcomingMatches;
+  // Separate counts for the tabs (always based on current match set)
+  const liveCount = matches.filter(m => new Date(m.start_time) <= now || m.status === 'live').length;
+  const upcomingCount = matches.length - liveCount;
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white font-sans selection:bg-emerald-500 selection:text-black">
-      <Navbar />
+      {/* Navbar now controls the searchQuery state */}
+      <Navbar onSearch={(val) => setSearchQuery(val)} />
       
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
-        {/* LEFT SIDEBAR: Dynamic Drill-Down + Clear Filter */}
         <aside className="hidden lg:col-span-3 lg:block">
           <Sidebar 
             onSelectLeague={(id) => setSelectedLeague(id)} 
@@ -92,14 +105,12 @@ export default function Home({ initialMatches = [] }) {
           />
         </aside>
 
-        {/* CENTER: Main Match Feed */}
         <main className="col-span-12 lg:col-span-6 space-y-6">
           
-          {/* Tabs Navigation */}
           <div className="flex gap-8 border-b border-slate-800">
             {[
-              { id: 'live', label: 'Live Now', count: liveMatches.length },
-              { id: 'upcoming', label: 'Upcoming', count: upcomingMatches.length }
+              { id: 'live', label: 'Live Now', count: liveCount },
+              { id: 'upcoming', label: 'Upcoming', count: upcomingCount }
             ].map(tab => (
               <button 
                 key={tab.id}
@@ -116,12 +127,11 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* Match Cards Container */}
           <div className="grid gap-3">
             {loading ? (
               <div className="py-32 flex flex-col items-center justify-center text-slate-500">
                 <Loader2 className="animate-spin mb-4" size={32} />
-                <p className="text-xs font-black uppercase tracking-widest">Loading Markets...</p>
+                <p className="text-xs font-black uppercase tracking-widest">Finding Matches...</p>
               </div>
             ) : displayMatches.length > 0 ? (
               displayMatches.map((match) => {
@@ -135,11 +145,6 @@ export default function Home({ initialMatches = [] }) {
                           <span className="text-[9px] text-emerald-500 font-black uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/10">
                             {match.start_time ? new Date(match.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"}
                           </span>
-                          {match.status === 'live' && (
-                            <span className="flex items-center gap-1 text-[9px] text-red-500 font-black uppercase animate-pulse">
-                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> Live
-                            </span>
-                          )}
                         </div>
 
                         <Link href={`/${match.match_id}`} className="block">
@@ -169,14 +174,13 @@ export default function Home({ initialMatches = [] }) {
               <div className="py-32 text-center bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-800">
                 <Search size={40} className="mx-auto text-slate-700 mb-4" />
                 <p className="text-slate-500 font-black uppercase text-xs tracking-widest">
-                  {selectedLeague ? "No matches in this league" : "Select a league to see matches"}
+                  {searchQuery ? `No matches found for "${searchQuery}"` : "Select a league to see matches"}
                 </p>
               </div>
             )}
           </div>
         </main>
 
-        {/* RIGHT SIDEBAR: The Betslip */}
         <aside className="hidden lg:col-span-3 lg:block">
           <Betslip items={slipItems} setItems={setSlipItems} />
         </aside>
@@ -202,7 +206,6 @@ export async function getServerSideProps() {
       } 
     };
   } catch (err) {
-    console.error("SSR Error:", err);
     return { props: { initialMatches: [] } };
   }
 }
