@@ -13,15 +13,15 @@ export default function Home({ initialMatches = [] }) {
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [matches, setMatches] = useState(initialMatches);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(''); // Global search state
+  const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
 
   const now = new Date();
 
-  // Clean data: remove quotes to prevent syntax errors in the UI
+  // Clean data: remove quotes as requested to prevent syntax errors
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
 
-  // 1. EFFECT: Fetch matches specifically for the selected league
+  // 1. FETCH: Load matches when a specific league is selected in Sidebar
   useEffect(() => {
     if (selectedLeague) {
       fetchMatchesByLeague(selectedLeague);
@@ -42,7 +42,7 @@ export default function Home({ initialMatches = [] }) {
     setLoading(false);
   };
 
-  // 2. RESET: Restore initial view
+  // 2. RESET: Logic for the Sidebar "Clear Filter" button
   const handleReset = () => {
     setSelectedLeague(null);
     setMatches(initialMatches);
@@ -67,37 +67,43 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
-  // 3. FILTERING LOGIC: Tab Filter + Search Filter
+  // 3. PERFECT FILTERING: Handles specific scraped data (Soccer, Hockey, MHL, etc.)
   const displayMatches = useMemo(() => {
-    // First, filter by Live vs Upcoming
-    const tabFiltered = matches.filter((m) => {
+    let filtered = matches;
+
+    // Filter by Tab (Live vs Upcoming)
+    filtered = filtered.filter((m) => {
+      if (!m.start_time) return activeTab === 'live'; // Scraped items without dates default to live
       const startTime = new Date(m.start_time);
       const isLive = startTime <= now || m.status === 'live';
       return activeTab === 'live' ? isLive : !isLive;
     });
 
-    // Then, filter by Search Query (Teams or League names)
-    if (!searchQuery) return tabFiltered;
-    
-    const query = searchQuery.toLowerCase();
-    return tabFiltered.filter(m => 
-      m.home_team?.toLowerCase().includes(query) || 
-      m.away_team?.toLowerCase().includes(query) ||
-      m.competition_name?.toLowerCase().includes(query)
-    );
+    // Global Search (Teams, Competition Name, or Category/Country)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(m => 
+        m.home_team?.toLowerCase().includes(query) || 
+        m.away_team?.toLowerCase().includes(query) ||
+        m.competition_name?.toLowerCase().includes(query) ||
+        m.category?.toLowerCase().includes(query) // Crucial for finding "Spain" or "Russia"
+      );
+    }
+
+    return filtered;
   }, [matches, activeTab, searchQuery, now]);
 
-  // Separate counts for the tabs (always based on current match set)
-  const liveCount = matches.filter(m => new Date(m.start_time) <= now || m.status === 'live').length;
+  // Dynamic counts based on the current visible match set
+  const liveCount = matches.filter(m => !m.start_time || new Date(m.start_time) <= now || m.status === 'live').length;
   const upcomingCount = matches.length - liveCount;
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white font-sans selection:bg-emerald-500 selection:text-black">
-      {/* Navbar now controls the searchQuery state */}
       <Navbar onSearch={(val) => setSearchQuery(val)} />
       
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
+        {/* Sidebar Navigation */}
         <aside className="hidden lg:col-span-3 lg:block">
           <Sidebar 
             onSelectLeague={(id) => setSelectedLeague(id)} 
@@ -105,6 +111,7 @@ export default function Home({ initialMatches = [] }) {
           />
         </aside>
 
+        {/* Main Feed */}
         <main className="col-span-12 lg:col-span-6 space-y-6">
           
           <div className="flex gap-8 border-b border-slate-800">
@@ -131,7 +138,7 @@ export default function Home({ initialMatches = [] }) {
             {loading ? (
               <div className="py-32 flex flex-col items-center justify-center text-slate-500">
                 <Loader2 className="animate-spin mb-4" size={32} />
-                <p className="text-xs font-black uppercase tracking-widest">Finding Matches...</p>
+                <p className="text-xs font-black uppercase tracking-widest">Updating Odds...</p>
               </div>
             ) : displayMatches.length > 0 ? (
               displayMatches.map((match) => {
@@ -144,6 +151,9 @@ export default function Home({ initialMatches = [] }) {
                         <div className="flex items-center gap-3 mb-4">
                           <span className="text-[9px] text-emerald-500 font-black uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/10">
                             {match.start_time ? new Date(match.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">
+                            {match.competition_name}
                           </span>
                         </div>
 
@@ -174,7 +184,7 @@ export default function Home({ initialMatches = [] }) {
               <div className="py-32 text-center bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-800">
                 <Search size={40} className="mx-auto text-slate-700 mb-4" />
                 <p className="text-slate-500 font-black uppercase text-xs tracking-widest">
-                  {searchQuery ? `No matches found for "${searchQuery}"` : "Select a league to see matches"}
+                  {searchQuery ? `No results for "${searchQuery}"` : "No matches found"}
                 </p>
               </div>
             )}
