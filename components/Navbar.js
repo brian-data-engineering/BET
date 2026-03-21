@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Bell, User } from 'lucide-react';
+import { Search, Bell, LogIn } from 'lucide-react';
 
 const Navbar = ({ onSearch }) => {
   return (
@@ -7,14 +7,19 @@ const Navbar = ({ onSearch }) => {
       <div className="max-w-[1440px] mx-auto flex items-center justify-between gap-8">
         
         {/* Logo */}
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center font-black text-black">L</div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center font-black text-black">
+            L
+          </div>
           <span className="text-xl font-black tracking-tighter text-white">LUCRA</span>
         </div>
 
         {/* 🔍 Global Search Bar */}
         <div className="flex-1 max-w-xl relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-500 transition-colors" size={18} />
+          <Search 
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-500 transition-colors" 
+            size={18} 
+          />
           <input 
             type="text"
             onChange={(e) => onSearch(e.target.value)}
@@ -23,21 +28,27 @@ const Navbar = ({ onSearch }) => {
           />
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-4">
-          <button className="p-2 text-slate-400 hover:text-white transition-colors">
+        {/* Auth Actions */}
+        <div className="flex items-center gap-3">
+          {/* Notifications - kept for UI balance */}
+          <button className="hidden sm:block p-2 text-slate-400 hover:text-white transition-colors mr-2">
             <Bell size={20} />
           </button>
+
           <div className="flex items-center gap-3 pl-4 border-l border-slate-800">
-            <div className="text-right hidden md:block">
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Balance</p>
-              <p className="text-sm font-black text-emerald-500">KSH 2,450.00</p>
-            </div>
-            <button className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-slate-300 border border-slate-700 hover:border-emerald-500 transition-all">
-              <User size={20} />
+            {/* Login Button */}
+            <button className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all px-4 py-2 flex items-center gap-2">
+              <LogIn size={16} className="text-emerald-500" />
+              Login
+            </button>
+
+            {/* Sign Up / Join Button */}
+            <button className="bg-emerald-500 hover:bg-emerald-400 text-black text-[11px] font-black uppercase tracking-widest px-6 py-2.5 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] active:scale-95">
+              Join Now
             </button>
           </div>
         </div>
+
       </div>
     </nav>
   );
