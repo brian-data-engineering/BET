@@ -3,102 +3,87 @@ import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import OddsTable from '../components/OddsTable';
+import Sidebar from '../components/Sidebar'; // New dynamic component
 import { useBets } from '../context/BetContext'; 
-import { Trophy, Clock, Search, Activity } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
-export default function Home({ matches = [] }) {
+export default function Home({ initialMatches = [] }) {
   const [activeTab, setActiveTab] = useState('live');
-  const [selectedSport, setSelectedSport] = useState('Soccer');
+  const [selectedLeague, setSelectedLeague] = useState(null); // Drill-down state
+  const [matches, setMatches] = useState(initialMatches);
   const { slipItems, setSlipItems } = useBets(); 
 
   const now = new Date();
 
-  // Clean scrapped data: remove quotes and handle nulls
+  // Clean data: remove quotes as requested to prevent syntax errors
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
 
+  // Fetch matches specifically for the selected league
+  useEffect(() => {
+    if (selectedLeague) {
+      fetchMatchesByLeague(selectedLeague);
+    }
+  }, [selectedLeague]);
+
+  const fetchMatchesByLeague = async (leagueId) => {
+    const { data, error } = await supabase
+      .from('matches')
+      .select('*, odds(*)')
+      .eq('competition_id', leagueId)
+      .order('start_time', { ascending: true });
+
+    if (!error && data) {
+      setMatches(data);
+    }
+  };
+
   const toggleBet = (odd, match) => {
-    // Unique ID for the selection
     const betId = `${match.match_id}-${odd.odd_key}`;
-    
     setSlipItems(prev => {
-      // If already in slip, remove it
       if (prev.find(item => item.id === betId)) {
         return prev.filter(item => item.id !== betId);
       }
-
-      // Lucra Rule: Only one selection allowed per match
       const otherMatches = prev.filter(item => item.matchId !== match.match_id);
-      
       return [...otherMatches, {
         id: betId,
         oddKey: odd.odd_key,
         matchId: match.match_id,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         selection: odd.display,
-        odds: odd.value
+        odds: odd.odd_value
       }];
     });
   };
 
-  // 1. SPORT FILTERING
-  const sportFilteredMatches = matches.filter((match) => {
-    const comp = (match.competition_name || "").toLowerCase();
-    const sport = selectedSport.toLowerCase();
-    
-    if (sport === 'soccer') {
-      const otherSports = ['basketball', 'tennis', 'cricket', 'rugby', 'hockey'];
-      const isOtherSport = otherSports.some(s => comp.includes(s));
-      return comp.includes('soccer') || comp.includes('football') || comp.includes('league') || !isOtherSport;
-    }
-    return comp.includes(sport);
+  // Filter based on Live vs Upcoming
+  const liveMatches = matches.filter((m) => {
+    const startTime = new Date(m.start_time);
+    return startTime <= now || m.status === 'live'; 
   });
 
-  // 2. LIVE VS UPCOMING LOGIC
-  const liveMatches = sportFilteredMatches.filter((match) => {
-    if (!match.start_time) return true;
-    const startTime = new Date(match.start_time);
-    return startTime <= now || match.status === 'live'; 
-  });
-
-  const upcomingMatches = sportFilteredMatches.filter((match) => {
-    if (!match.start_time) return false;
-    const startTime = new Date(match.start_time);
-    return startTime > now && match.status !== 'live';
+  const upcomingMatches = matches.filter((m) => {
+    const startTime = new Date(m.start_time);
+    return startTime > now && m.status !== 'live';
   });
 
   const displayMatches = activeTab === 'live' ? liveMatches : upcomingMatches;
 
   return (
-    <div className="min-h-screen bg-lucra-dark text-white font-sans selection:bg-lucra-green selection:text-black">
+    <div className="min-h-screen bg-[#0f172a] text-white font-sans selection:bg-emerald-500 selection:text-black">
       <Navbar />
       
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-6 p-4 lg:p-6">
         
-        {/* LEFT SIDEBAR: Sports Navigation */}
-        <aside className="hidden lg:col-span-2 lg:block space-y-1">
-          <p className="text-[10px] font-black uppercase text-gray-500 px-3 mb-4 tracking-widest">Sports Menu</p>
-          {['Soccer', 'Basketball', 'Tennis', 'Cricket', 'Rugby', 'Hockey'].map((sport) => (
-            <button 
-              key={sport} 
-              onClick={() => setSelectedSport(sport)}
-              className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all text-sm border ${
-                selectedSport === sport 
-                ? 'text-lucra-green bg-lucra-green/5 border-lucra-green/10 font-black' 
-                : 'text-gray-500 border-transparent hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {sport === 'Soccer' ? <Trophy size={16} /> : <Activity size={16} className="opacity-40" />}
-              {sport}
-            </button>
-          ))}
+        {/* LEFT SIDEBAR: Dynamic Drill-Down */}
+        <aside className="hidden lg:col-span-3 lg:block">
+          <Sidebar onSelectLeague={(id) => setSelectedLeague(id)} />
         </aside>
 
         {/* CENTER: Main Match Feed */}
-        <main className="col-span-12 lg:col-span-7 space-y-6">
+        <main className="col-span-12 lg:col-span-6 space-y-6">
           
-          {/* Tabs Navigation */}
-          <div className="flex gap-8 border-b border-gray-800/50">
+          <div className="flex gap-8 border-b border-slate-800">
             {[
               { id: 'live', label: 'Live Now', count: liveMatches.length },
               { id: 'upcoming', label: 'Upcoming', count: upcomingMatches.length }
@@ -107,57 +92,49 @@ export default function Home({ matches = [] }) {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`pb-4 text-xs font-black uppercase tracking-widest transition-all relative ${
-                  activeTab === tab.id ? 'text-lucra-green' : 'text-gray-500 hover:text-gray-300'
+                  activeTab === tab.id ? 'text-emerald-500' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
                 {tab.label} <span className="ml-1 opacity-40">({tab.count})</span>
                 {activeTab === tab.id && (
-                  <div className="absolute bottom-0 left-0 w-full h-0.5 bg-lucra-green shadow-[0_0_10px_rgba(0,255,135,0.5)]" />
+                  <div className="absolute bottom-0 left-0 w-full h-0.5 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
                 )}
               </button>
             ))}
           </div>
 
-          {/* Match Cards Container */}
           <div className="grid gap-3">
             {displayMatches.length > 0 ? (
               displayMatches.map((match) => {
                 const currentSelection = slipItems.find(item => item.matchId === match.match_id);
 
                 return (
-                  <div key={match.match_id} className="bg-lucra-card border border-white/5 rounded-2xl p-5 hover:border-white/10 transition-all group">
+                  <div key={match.match_id} className="bg-[#1e293b] border border-white/5 rounded-2xl p-5 hover:border-emerald-500/30 transition-all group">
                     <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
-                      
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-4">
-                          <span className="text-[9px] text-lucra-green font-black uppercase tracking-[0.15em] bg-lucra-green/10 px-2 py-1 rounded border border-lucra-green/10">
-                            {match.competition_name || "International"}
+                          <span className="text-[9px] text-emerald-500 font-black uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/10">
+                            {match.start_time ? new Date(match.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"}
                           </span>
-                          {match.status === 'live' && (
-                            <span className="flex items-center gap-1 text-[9px] text-red-500 font-black uppercase animate-pulse">
-                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> Live
-                            </span>
-                          )}
                         </div>
 
-                        <Link href={`/${match.match_id}`} className="block group/link">
+                        <Link href={`/${match.match_id}`} className="block">
                           <div className="space-y-1">
-                            <h3 className="text-lg font-black text-gray-100 group-hover/link:text-lucra-green transition-colors tracking-tight">
+                            <h3 className="text-lg font-black text-slate-100 hover:text-emerald-500 transition-colors">
                               {cleanName(match.home_team)}
                             </h3>
-                            <h3 className="text-lg font-black text-gray-100 group-hover/link:text-lucra-green transition-colors tracking-tight">
+                            <h3 className="text-lg font-black text-slate-100 hover:text-emerald-500 transition-colors">
                               {cleanName(match.away_team)}
                             </h3>
                           </div>
                         </Link>
                       </div>
 
-                      {/* Odds Selection Table */}
                       <div className="md:w-80">
                         <OddsTable 
                           odds={match.odds || []} 
                           onSelect={(odd) => toggleBet(odd, match)}
-                          selectedId={currentSelection?.id} // Check against specific selection ID
+                          selectedId={currentSelection?.id}
                         />
                       </div>
                     </div>
@@ -165,9 +142,9 @@ export default function Home({ matches = [] }) {
                 );
               })
             ) : (
-              <div className="py-32 text-center bg-white/[0.02] rounded-[2.5rem] border-2 border-dashed border-white/5">
-                <Search size={40} className="mx-auto text-gray-800 mb-4" />
-                <p className="text-gray-500 font-black uppercase text-xs tracking-widest">No {activeTab} matches available</p>
+              <div className="py-32 text-center bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-800">
+                <Search size={40} className="mx-auto text-slate-700 mb-4" />
+                <p className="text-slate-500 font-black uppercase text-xs tracking-widest">Select a league to see matches</p>
               </div>
             )}
           </div>
@@ -188,18 +165,17 @@ export async function getServerSideProps() {
     const { data: matches, error } = await supabase
       .from('matches')
       .select('*, odds(*)') 
-      .order('start_time', { ascending: true });
+      .order('start_time', { ascending: true })
+      .limit(50); // Initial load limit for performance
 
     if (error) throw error;
 
-    // Deep stringify to handle potential date object issues with Next.js serialization
     return { 
       props: { 
-        matches: JSON.parse(JSON.stringify(matches || [])) 
+        initialMatches: JSON.parse(JSON.stringify(matches || [])) 
       } 
     };
   } catch (err) {
-    console.error("SSR Fetch Error:", err);
-    return { props: { matches: [] } };
+    return { props: { initialMatches: [] } };
   }
 }
