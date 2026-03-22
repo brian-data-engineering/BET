@@ -1,64 +1,66 @@
 import os
-import json
 import requests
-import time
-from upstash_redis import Redis
+from supabase import create_client
 
-redis = Redis(
-    url=os.environ.get("UPSTASH_REDIS_REST_URL"), 
-    token=os.environ.get("UPSTASH_REDIS_REST_TOKEN"),
-    rest_encoding="utf-8"
-)
+# 1. Setup Connection (Using GitHub Secrets)
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") # Use Service Role for Write access
+api_key = os.environ.get("ODDS_API_KEY")
 
-# Reduced limit to 100 (more stable) and added more browser-like headers
-LIVE_URL = "https://live.betika.com/v1/uo/matches?page=1&limit=100"
+supabase = create_client(url, key)
 
-def sync_live():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-        "Referer": "https://www.betika.com/en-ke/live",
-        "Accept-Language": "en-US,en;q=0.9",
+def sync_lucra_odds():
+    # 2. The "Batch" URL - Gets upcoming games across multiple sports
+    # Using v4/sports/upcoming/odds to maximize your 100-req limit
+    api_url = f"https://api.the-odds-api.com/v4/sports/upcoming/odds"
+    
+    params = {
+        'apiKey': api_key,
+        'regions': 'uk', # Change to 'us' or 'eu' depending on your bookmaker
+        'markets': 'h2h', # Stick to Head-to-Head for now to keep it simple
+        'oddsFormat': 'decimal'
     }
 
-    print("📡 Attempting to fetch Live Data...")
-    
-    # Retry loop: Try 3 times before giving up
-    for attempt in range(3):
-        try:
-            resp = requests.get(LIVE_URL, headers=headers, timeout=(10, 60))
-            
-            if resp.status_code == 502:
-                print(f"⚠️ Attempt {attempt+1}: 502 Bad Gateway. Betika is busy, retrying in 5s...")
-                time.sleep(5)
-                continue
-                
-            resp.raise_for_status()
-            data = resp.json().get("data", [])
-            
-            live_blob = []
-            for m in data:
-                live_blob.append({
-                    "id": m.get("parent_match_id") or m.get("match_id"),
-                    "home": m.get("home_team"),
-                    "away": m.get("away_team"),
-                    "score": m.get("current_score", "0:0"),
-                    "time": m.get("match_time"),
-                    "status": m.get("event_status"),
-                    "active": m.get("market_active"), 
-                    "odds": {o.get("display"): o.get("odd_value") for market in m.get("odds", []) if str(market.get("sub_type_id")) == "1" for o in market.get("odds", [])}
-                })
+    try:
+        response = requests.get(api_url, params=params)
+        data = response.json()
 
-            # PUSH TO REDIS (1 hour expiry for testing)
-            redis.set("lucra:live_matches", json.dumps(live_blob), ex=3600)
-            print(f"✅ Success! Sent {len(live_blob)} live matches to Upstash.")
-            return # Exit function on success
+        for game in data:
+            # 3. Upsert into api_events (The Match Info)
+            event_entry = {
+                "id": game['id'],
+                "sport_key": game['sport_key'],
+                "home_team": game['home_team'],
+                "away_team": game['away_team'],
+                "commence_time": game['commence_time']
+            }
+            supabase.table("api_events").upsert(event_entry).execute()
 
-        except Exception as e:
-            print(f"❌ Attempt {attempt+1} failed: {e}")
-            time.sleep(5)
+            # 4. Insert into api_odds_history (The Price Data)
+            # We grab the first bookmaker available in the response
+            if game['bookmakers']:
+                bookie = game['bookmakers'][0]
+                market = bookie['markets'][0]
+                outcomes = market['outcomes']
 
-    print("🚫 All 3 attempts failed. Betika is currently blocking or down.")
+                # Logic to handle Home/Away/Draw prices
+                home_p = next((o['price'] for o in outcomes if o['name'] == game['home_team']), None)
+                away_p = next((o['price'] for o in outcomes if o['name'] == game['away_team']), None)
+                draw_p = next((o['price'] for o in outcomes if o['name'] == 'Draw'), None)
+
+                odds_entry = {
+                    "event_id": game['id'],
+                    "bookmaker": bookie['title'],
+                    "home_price": home_p,
+                    "away_price": away_p,
+                    "draw_price": draw_p
+                }
+                supabase.table("api_odds_history").insert(odds_entry).execute()
+
+        print(f"Successfully synced {len(data)} games to Lucra API tables.")
+
+    except Exception as e:
+        print(f"Error during sync: {e}")
 
 if __name__ == "__main__":
-    sync_live()
+    sync_lucra_odds()
