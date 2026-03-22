@@ -3,3 +3,4 @@ requests
 httpx
 supabase
 python-dotenv
+upstash-redis
