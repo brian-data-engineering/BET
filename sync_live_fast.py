@@ -4,29 +4,38 @@ from supabase import create_client
 
 # 1. Setup Connection (Using GitHub Secrets)
 url = os.environ.get("SUPABASE_URL")
-key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") # Use Service Role for Write access
+key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 api_key = os.environ.get("ODDS_API_KEY")
 
+# --- SAFETY CHECK ---
+if not url or not url.startswith("https"):
+    print(f"CRITICAL ERROR: SUPABASE_URL is invalid or missing. Value: {url}")
+    exit(1)
+if not key:
+    print("CRITICAL ERROR: SUPABASE_SERVICE_ROLE_KEY is missing.")
+    exit(1)
+
+# Initialize client only after checking variables
 supabase = create_client(url, key)
 
 def sync_lucra_odds():
-    # 2. The "Batch" URL - Gets upcoming games across multiple sports
-    # Using v4/sports/upcoming/odds to maximize your 100-req limit
-    api_url = f"https://api.the-odds-api.com/v4/sports/upcoming/odds"
+    # 2. The "Batch" URL - v4 is the standard for 100-req limits
+    api_url = "https://api.the-odds-api.com/v4/sports/upcoming/odds"
     
     params = {
         'apiKey': api_key,
-        'regions': 'uk', # Change to 'us' or 'eu' depending on your bookmaker
-        'markets': 'h2h', # Stick to Head-to-Head for now to keep it simple
+        'regions': 'uk', 
+        'markets': 'h2h',
         'oddsFormat': 'decimal'
     }
 
     try:
         response = requests.get(api_url, params=params)
+        response.raise_for_status() # Check for API errors
         data = response.json()
 
         for game in data:
-            # 3. Upsert into api_events (The Match Info)
+            # 3. Upsert into api_events
             event_entry = {
                 "id": game['id'],
                 "sport_key": game['sport_key'],
@@ -36,17 +45,15 @@ def sync_lucra_odds():
             }
             supabase.table("api_events").upsert(event_entry).execute()
 
-            # 4. Insert into api_odds_history (The Price Data)
-            # We grab the first bookmaker available in the response
+            # 4. Insert into api_odds_history
             if game['bookmakers']:
                 bookie = game['bookmakers'][0]
                 market = bookie['markets'][0]
                 outcomes = market['outcomes']
 
-                # Logic to handle Home/Away/Draw prices
                 home_p = next((o['price'] for o in outcomes if o['name'] == game['home_team']), None)
                 away_p = next((o['price'] for o in outcomes if o['name'] == game['away_team']), None)
-                draw_p = next((o['price'] for o in outcomes if o['name'] == 'Draw'), None)
+                draw_p = next((o['price'] for o in outcomes if o['name'].lower() == 'draw'), None)
 
                 odds_entry = {
                     "event_id": game['id'],
