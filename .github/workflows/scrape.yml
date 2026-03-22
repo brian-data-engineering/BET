@@ -2,7 +2,7 @@ name: Lucra Auto-Scraper
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Runs every 5 minutes (GitHub Free Limit)
+    - cron: '*/15 * * * *' # Changed to 15m to safely stay under your 100-req/hr limit
   workflow_dispatch: # Allows you to run it manually for testing
 
 jobs:
@@ -20,17 +20,23 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install psycopg2-binary requests upstash-redis
+          pip install supabase requests upstash-redis
 
       - name: Run Lucra Scrapers
         env:
-          # Supabase Secret
-          DATABASE_URL: ${{ secrets.SUPABASE_URL }}
-          # Upstash Redis Secrets
+          # Supabase Secrets (For the new Parallel Tables)
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          
+          # Odds API Secret
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          
+          # Upstash Redis Secrets (Keep these for your existing speed logic)
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
         run: |
-          # Run the Live scraper first (Speed is priority)
+          # 1. Sync Odds to the new api_ tables (The 100-req/hr part)
           python sync_live_fast.py
-          # Then run the Prematch scraper
+          
+          # 2. Run your existing Prematch scraper
           python scraper.py
