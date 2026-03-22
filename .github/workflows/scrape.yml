@@ -2,8 +2,8 @@ name: Lucra Auto-Scraper
 
 on:
   schedule:
-    - cron: '*/15 * * * *' 
-  workflow_dispatch: 
+    - cron: '*/5 * * * *' # Runs every 5 minutes (GitHub Free Limit)
+  workflow_dispatch: # Allows you to run it manually for testing
 
 jobs:
   scrape-job:
@@ -20,9 +20,17 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install psycopg2-binary requests
+          pip install psycopg2-binary requests upstash-redis
 
-      - name: Run Lucra Scraper
+      - name: Run Lucra Scrapers
         env:
+          # Supabase Secret
           DATABASE_URL: ${{ secrets.SUPABASE_URL }}
-        run: python scraper.py
+          # Upstash Redis Secrets
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: |
+          # Run the Live scraper first (Speed is priority)
+          python sync_live_fast.py
+          # Then run the Prematch scraper
+          python scraper.py
