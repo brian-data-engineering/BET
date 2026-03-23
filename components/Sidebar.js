@@ -40,7 +40,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
       const newTree = {};
       data.forEach(item => {
         const sId = String(item.sport_id);
-        const country = item.category || "International";
+        const country = (item.category || "International").replace(/['"]+/g, '').trim();
         
         if (!newTree[sId]) newTree[sId] = {};
         if (!newTree[sId][country]) newTree[sId][country] = [];
@@ -53,10 +53,10 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
     setLoading(false);
   };
 
-  const handleLeagueClick = (fullName) => {
-    // If name is "Russia - KHL", we extract "KHL"
-    const nameOnly = fullName.includes(' - ') ? fullName.split(' - ')[1] : fullName;
-    onSelectLeague(nameOnly.replace(/['"]+/g, '').trim());
+  const handleLeagueClick = (name) => {
+    // We pass the competition_name exactly as it appears.
+    // Our scraper now saves this exact string in the league_name column.
+    onSelectLeague(name.replace(/['"]+/g, '').trim());
   };
 
   return (
@@ -99,7 +99,6 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                     <div className="bg-[#0b0f1a]/50">
                       {Object.keys(tree[sportId]).map(country => {
                         const isCountryExpanded = expandedCountry === country;
-                        const cleanCountry = country.replace(/['"]+/g, '');
                         
                         return (
                           <div key={country} className="flex flex-col">
@@ -109,7 +108,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                             >
                               <div className="flex items-center gap-2">
                                 <Globe size={12} className="text-slate-600" />
-                                <span className="text-[10px] font-black uppercase italic text-slate-400">{cleanCountry}</span>
+                                <span className="text-[10px] font-black uppercase italic text-slate-400">{country}</span>
                               </div>
                               {isCountryExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} className="opacity-20" />}
                             </button>
