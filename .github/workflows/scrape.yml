@@ -2,34 +2,30 @@ name: Lucra Auto-Scraper
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Every 15 mins
-  workflow_dispatch: # Allows you to click "Run workflow" manually
+    # This runs every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allows you to run it manually from GitHub UI
 
 jobs:
-  scrape-job:
+  build:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
-          pip install supabase requests
+          python -m pip install --upgrade pip
+          pip install requests supabase
 
-      - name: Run Lucra API Sync
+      - name: Run Scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: |
-          # 1. Update the 34 categories (No key needed)
-          python sync_live_fast.py
-          
-          # 2. Update the deep events for your 12 chosen sports (Uses key)
-          python sync_events.py
+        run: python sync_events.py  # <-- Change this to your actual filename
