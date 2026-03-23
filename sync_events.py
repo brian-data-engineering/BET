@@ -1,6 +1,5 @@
 import os
 import requests
-from datetime import datetime
 from supabase import create_client
 
 # 1. Setup
@@ -9,7 +8,6 @@ key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 api_key = os.environ.get("ODDS_API_KEY", "").strip()
 supabase = create_client(url, key)
 
-# YOUR SELECTED SPORTS LIST
 LUCRA_SPORTS = [
     "football", "basketball", "tennis", "ice-hockey", 
     "boxing", "handball", "volleyball", "table-tennis", 
@@ -36,7 +34,6 @@ def sync_lucra_events():
 
             events = response.json()
             
-            # Check if we actually got a list of events
             if not isinstance(events, list):
                 print(f"⚠️ Unexpected response for {sport}: {events}")
                 continue
@@ -44,7 +41,6 @@ def sync_lucra_events():
             print(f"📦 Found {len(events)} matches. Updating api_events table...")
 
             for match in events:
-                # Mapping API data to your api_events columns
                 event_data = {
                     "id": str(match.get('id')),
                     "sport_key": sport,
@@ -54,8 +50,11 @@ def sync_lucra_events():
                     "status": match.get('status', 'upcoming')
                 }
                 
-                # Upsert into Supabase
-                supabase.table("api_events").upsert(event_data).execute()
+                # FIX: Explicitly use on_conflict="id" to prevent duplicate key errors
+                supabase.table("api_events").upsert(
+                    event_data, 
+                    on_conflict="id"
+                ).execute()
 
             print(f"✅ {sport.upper()} sync finished.")
 
