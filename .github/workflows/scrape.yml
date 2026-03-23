@@ -20,11 +20,12 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install supabase requests upstash-redis
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
+          pip install supabase requests upstash-redis psycopg2-binary websockets
 
       - name: Run Lucra Scrapers
         env:
-          # Ensure these EXACT names are in your GitHub Secrets
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
