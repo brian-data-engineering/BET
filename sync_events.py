@@ -9,23 +9,23 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# The 12 Sports for Lucra
 LUCRA_SPORTS = [
     "football", "basketball", "tennis", "ice-hockey", 
     "boxing", "handball", "volleyball", "table-tennis", 
     "rugby", "cricket", "beach-volleyball", "badminton"
 ]
 
-# Keywords to identify low-quality leagues we want to flag or skip
+# Filtering Keywords
 SKIP_KEYWORDS = ['Reserve', 'U19', 'U21', 'U23', 'Amateur', 'Youth']
+TOP_TIER_LEAGUES = ['Premier League', 'NBA', 'Champions League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1']
 
 def fetch_and_sync():
-    print(f"🚀 Starting Lucra High-Speed Sync (with League & Odds support)...")
+    print(f"🚀 Starting Lucra Smart-Sync Engine...")
     total_synced = 0
 
     for sport in LUCRA_SPORTS:
         try:
-            # V3 URL - fetching events with bookmaker data to get initial odds
+            # Fetching from V3
             url = f"https://api.odds-api.io/v3/events?apiKey={API_KEY}&sport={sport}&limit=1000"
             
             print(f"📡 Fetching {sport.upper()}...")
@@ -37,27 +37,34 @@ def fetch_and_sync():
 
             data = response.json()
             if not data or not isinstance(data, list):
-                print(f"⚠️ No matches found for {sport}.")
                 continue
 
             sport_batch = []
             for item in data:
-                league_name = item.get('league', {}).get('name', 'Unknown League')
+                # --- WATERFALL LEAGUE EXTRACTION ---
+                # Check for specific league name, then title, then sport key
+                raw_league = item.get('league', {}).get('name')
+                sport_title = item.get('sport_title')
                 
-                # Check for low-quality leagues
-                is_low_priority = any(word in league_name for word in SKIP_KEYWORDS)
-                
-                # Extract Scores (nested in V3)
-                scores = item.get('scores', {})
-                
-                # Extract 1xBet Odds if available in the initial event fetch
-                # Note: V3 sometimes includes main line odds in the events list
+                if raw_league and raw_league not in ["Football", "Soccer"]:
+                    league_name = raw_league
+                elif sport_title:
+                    league_name = sport_title
+                else:
+                    league_name = sport.replace('-', ' ').title()
+
+                # --- PRIORITY TAGGING ---
+                priority = 2 # Standard
+                if any(word in league_name for word in SKIP_KEYWORDS):
+                    priority = 3 # Low
+                if any(top in league_name for top in TOP_TIER_LEAGUES):
+                    priority = 1 # High
+
+                # Odds Extraction (1xBet)
                 bookmakers = item.get('bookmakers', {})
                 one_x_bet = bookmakers.get('1xbet', [])
-                
                 h_odds, d_odds, a_odds = None, None, None
                 
-                # Try to find 'ML' (Match Winner) in the first bookmaker entry
                 if one_x_bet:
                     for market in one_x_bet:
                         if market.get('name') == 'ML':
@@ -69,22 +76,21 @@ def fetch_and_sync():
                 sport_batch.append({
                     "id": str(item.get('id')),
                     "sport_key": sport,
-                    "league_name": league_name, # NEW: Added League Name
+                    "league_name": league_name,
                     "home_team": item.get('home'),
                     "away_team": item.get('away'),
                     "commence_time": item.get('date'),
                     "status": item.get('status', 'pending'),
-                    "home_score": scores.get('home'),
-                    "away_score": scores.get('away'),
-                    "home_odds": h_odds,        # NEW: Added Odds support
+                    "home_score": item.get('scores', {}).get('home'),
+                    "away_score": item.get('scores', {}).get('away'),
+                    "home_odds": h_odds,
                     "draw_odds": d_odds,
                     "away_odds": a_odds,
-                    "priority_level": 3 if is_low_priority else 2 # NEW: Auto-tagging
+                    "priority_level": priority
                 })
 
             if sport_batch:
-                print(f"📦 Upserting {len(sport_batch)} {sport} matches...")
-                # Bulk Upsert to api_events
+                print(f"📦 Upserting {len(sport_batch)} {sport} matches with Smart Leagues...")
                 supabase.table("api_events").upsert(sport_batch, on_conflict="id").execute()
                 total_synced += len(sport_batch)
 
