@@ -1,5 +1,6 @@
 import os
 import requests
+from datetime import datetime
 from supabase import create_client
 
 # 1. Setup
@@ -14,31 +15,30 @@ LUCRA_SPORTS = [
     "rugby", "cricket", "beach-volleyball", "badminton"
 ]
 
-def sync_lucra_events():
+def sync_upcoming_only():
+    # Get current time in ISO format for the API filter
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    
     for sport in LUCRA_SPORTS:
         try:
-            print(f"🛰️ Fetching matches for: {sport.upper()}...")
+            print(f"📅 Fetching UPCOMING matches for: {sport.upper()}...")
             
             api_url = 'https://api.odds-api.io/v3/events'
             params = {
                 'apiKey': api_key,
                 'sport': sport,
+                'status': 'upcoming', # Strictly upcoming
+                'commence_time_from': now_iso, # Starting from right now
                 'limit': 50
             }
             
             response = requests.get(api_url, params=params)
-            
-            if response.status_code == 401:
-                print("❌ 401: API Key rejected. Check your GitHub Secret!")
-                return
-
             events = response.json()
             
             if not isinstance(events, list):
-                print(f"⚠️ Unexpected response for {sport}: {events}")
                 continue
 
-            print(f"📦 Found {len(events)} matches. Updating api_events table...")
+            print(f"📦 Found {len(events)} future matches for {sport}.")
 
             for match in events:
                 event_data = {
@@ -47,19 +47,16 @@ def sync_lucra_events():
                     "home_team": match.get('home'),
                     "away_team": match.get('away'),
                     "commence_time": match.get('date'),
-                    "status": match.get('status', 'upcoming')
+                    "status": "upcoming" # Force status to upcoming
                 }
                 
-                # FIX: Explicitly use on_conflict="id" to prevent duplicate key errors
                 supabase.table("api_events").upsert(
                     event_data, 
                     on_conflict="id"
                 ).execute()
 
-            print(f"✅ {sport.upper()} sync finished.")
-
         except Exception as e:
-            print(f"❌ Error syncing {sport}: {e}")
+            print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
-    sync_lucra_events()
+    sync_upcoming_only()
