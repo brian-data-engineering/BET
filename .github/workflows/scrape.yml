@@ -2,8 +2,8 @@ name: Lucra Auto-Scraper
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Every 15 mins (Safety first for 100/hr limit)
-  workflow_dispatch: 
+    - cron: '*/15 * * * *' # Every 15 mins (Safely under 100/hr limit)
+  workflow_dispatch: # Allows manual testing
 
 jobs:
   scrape-job:
@@ -22,9 +22,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libpq-dev
+          # Note: Keeping psycopg2-binary just in case, but websockets is added
           pip install supabase requests upstash-redis psycopg2-binary websockets
 
-      - name: Run Lucra Scrapers
+      - name: Run Lucra Scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -32,7 +33,5 @@ jobs:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
         run: |
-          # Priority 1: New API Sync
+          # Only running the new, clean API sync
           python sync_live_fast.py
-          # Priority 2: Old Scraper
-          python scraper.py
