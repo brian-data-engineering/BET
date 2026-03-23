@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import Link from 'next/link'; // Added Link for navigation
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
@@ -14,9 +15,8 @@ export default function Home({ initialMatches = [] }) {
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
 
-  // logic to add/remove bets from the global context
   const toggleBet = (selection, value, match) => {
-    const matchId = match.id; // Using 'id' from your api_events schema
+    const matchId = match.id; 
     const betId = `${matchId}-${selection}`;
     
     setSlipItems(prev => {
@@ -36,11 +36,9 @@ export default function Home({ initialMatches = [] }) {
 
   const displayMatches = useMemo(() => {
     let filtered = initialMatches;
-    
     if (selectedLeague) {
         filtered = filtered.filter(m => m.league_name === selectedLeague);
     }
-
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
@@ -57,7 +55,7 @@ export default function Home({ initialMatches = [] }) {
       <Navbar onSearch={setSearchQuery} />
       
       {/* Promo Banner */}
-      <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block">
+      <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
         <div className="max-w-[1440px] mx-auto h-[160px] relative">
             <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
                 <div className="max-w-md">
@@ -77,7 +75,7 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* Sub-Tabs */}
+          {/* Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar">
             {['Highlights', 'Upcoming', 'Leagues'].map((tab) => (
               <button 
@@ -92,7 +90,6 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* Table Header */}
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
             <div className="col-span-7">Event Details</div>
             <div className="col-span-5 grid grid-cols-3 text-center">
@@ -100,26 +97,30 @@ export default function Home({ initialMatches = [] }) {
             </div>
           </div>
 
-          {/* List of matches */}
           <div className="divide-y divide-white/5">
             {displayMatches.map((match) => {
               const currentSelection = slipItems.find(item => item.matchId === match.id);
               
               return (
                 <div key={match.id} className="grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors">
-                  <div className="col-span-7 pr-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
-                        ⚽ {match.league_name}
-                      </span>
-                      <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
-                        <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.home_team)}</span>
-                      <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.away_team)}</span>
-                    </div>
+                  {/* Wrap Team Section in Link */}
+                  <div className="col-span-7 pr-4 group">
+                    <Link href={`/${match.id}`}>
+                      <div className="cursor-pointer">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
+                            ⚽ {match.league_name}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                            <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.home_team)}</span>
+                          <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.away_team)}</span>
+                        </div>
+                      </div>
+                    </Link>
                     <div className="mt-2 flex items-center gap-3 text-[10px] font-bold text-slate-500">
                        <span className="flex items-center gap-1 cursor-pointer hover:text-[#10b981] italic">
                           <BarChart2 size={12} /> Stats
@@ -129,7 +130,6 @@ export default function Home({ initialMatches = [] }) {
                     </div>
                   </div>
 
-                  {/* Manual Odds Grid based on your Schema */}
                   <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
                     {[
                         { label: '1', val: match.home_odds },
