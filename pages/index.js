@@ -34,17 +34,13 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
-  // FUZZY FILTERING LOGIC
+  // CLEANED FILTERING LOGIC
   const displayMatches = useMemo(() => {
     let filtered = initialMatches;
 
     if (selectedLeague) {
-      filtered = filtered.filter(m => {
-        const dbLeague = (m.league_name || "").replace(/['"]+/g, '').toLowerCase();
-        const sidebarLeague = selectedLeague.replace(/['"]+/g, '').toLowerCase();
-        // Uses .includes() so "KHL" matches "Russia - KHL"
-        return dbLeague.includes(sidebarLeague) || sidebarLeague.includes(dbLeague);
-      });
+      // Direct Match using the new league_name column
+      filtered = filtered.filter(m => m.league_name === selectedLeague);
     }
 
     if (searchQuery) {
@@ -52,16 +48,11 @@ export default function Home({ initialMatches = [] }) {
       filtered = filtered.filter(m => 
         m.home_team?.toLowerCase().includes(q) || 
         m.away_team?.toLowerCase().includes(q) ||
-        m.league_name?.toLowerCase().includes(q)
+        m.display_league?.toLowerCase().includes(q) // Search against the full name
       );
     }
     return filtered;
   }, [initialMatches, selectedLeague, searchQuery]);
-
-  const handleLeagueSelect = (leagueName) => {
-    setSelectedLeague(leagueName);
-    window.scrollTo({ top: 160, behavior: 'smooth' });
-  };
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
@@ -85,7 +76,7 @@ export default function Home({ initialMatches = [] }) {
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-0">
         <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
           <Sidebar 
-            onSelectLeague={handleLeagueSelect} 
+            onSelectLeague={setSelectedLeague} 
             onClearFilter={() => setSelectedLeague(null)} 
           />
         </aside>
@@ -110,7 +101,7 @@ export default function Home({ initialMatches = [] }) {
               Event Details 
               {selectedLeague && (
                 <span className="bg-[#10b981]/10 text-[#10b981] px-2 py-0.5 rounded border border-[#10b981]/20 ml-2">
-                  • {cleanName(selectedLeague)}
+                  • {selectedLeague}
                 </span>
               )}
             </div>
@@ -131,7 +122,8 @@ export default function Home({ initialMatches = [] }) {
                         <div className="cursor-pointer">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
-                              {cleanName(match.league_name)}
+                              {/* Using the new display_league column */}
+                              {match.display_league || match.league_name}
                             </span>
                             <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
                               <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
