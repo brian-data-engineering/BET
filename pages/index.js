@@ -34,15 +34,16 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
-  // Improved filtering logic to handle Sidebar selection vs DB data
+  // FUZZY FILTERING LOGIC
   const displayMatches = useMemo(() => {
     let filtered = initialMatches;
 
     if (selectedLeague) {
       filtered = filtered.filter(m => {
-        const dbLeague = m.league_name?.replace(/['"]+/g, '').trim().toLowerCase();
-        const sidebarLeague = selectedLeague.replace(/['"]+/g, '').trim().toLowerCase();
-        return dbLeague === sidebarLeague;
+        const dbLeague = (m.league_name || "").replace(/['"]+/g, '').toLowerCase();
+        const sidebarLeague = selectedLeague.replace(/['"]+/g, '').toLowerCase();
+        // Uses .includes() so "KHL" matches "Russia - KHL"
+        return dbLeague.includes(sidebarLeague) || sidebarLeague.includes(dbLeague);
       });
     }
 
@@ -57,7 +58,6 @@ export default function Home({ initialMatches = [] }) {
     return filtered;
   }, [initialMatches, selectedLeague, searchQuery]);
 
-  // Handle sidebar selection with auto-scroll
   const handleLeagueSelect = (leagueName) => {
     setSelectedLeague(leagueName);
     window.scrollTo({ top: 160, behavior: 'smooth' });
@@ -83,7 +83,6 @@ export default function Home({ initialMatches = [] }) {
       </div>
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-0">
-        {/* SIDEBAR */}
         <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
           <Sidebar 
             onSelectLeague={handleLeagueSelect} 
@@ -91,9 +90,7 @@ export default function Home({ initialMatches = [] }) {
           />
         </aside>
 
-        {/* MAIN FEED */}
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {['Highlights', 'Upcoming', 'Leagues'].map((tab) => (
               <button 
@@ -108,15 +105,20 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* Table Header */}
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
-            <div className="col-span-7">Event Details {selectedLeague && <span className="text-[#10b981] ml-2">• {cleanName(selectedLeague)}</span>}</div>
+            <div className="col-span-7 flex items-center gap-2">
+              Event Details 
+              {selectedLeague && (
+                <span className="bg-[#10b981]/10 text-[#10b981] px-2 py-0.5 rounded border border-[#10b981]/20 ml-2">
+                  • {cleanName(selectedLeague)}
+                </span>
+              )}
+            </div>
             <div className="col-span-5 grid grid-cols-3 text-center">
               <span>1</span><span>X</span><span>2</span>
             </div>
           </div>
 
-          {/* Match List */}
           <div className="divide-y divide-white/5">
             {displayMatches.length > 0 ? (
               displayMatches.map((match) => {
@@ -129,7 +131,7 @@ export default function Home({ initialMatches = [] }) {
                         <div className="cursor-pointer">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
-                              ⚽ {cleanName(match.league_name)}
+                              {cleanName(match.league_name)}
                             </span>
                             <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
                               <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -181,7 +183,6 @@ export default function Home({ initialMatches = [] }) {
           </div>
         </main>
 
-        {/* BETSLIP ASIDE */}
         <aside className="hidden lg:col-span-3 lg:block p-4 space-y-4">
           <Betslip items={slipItems} setItems={setSlipItems} />
           <div className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 shadow-xl">
