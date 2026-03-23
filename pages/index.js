@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
-import Link from 'next/link'; // Added Link for navigation
+import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Clock, BarChart2 } from 'lucide-react';
+import { Clock, BarChart2, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -13,7 +13,7 @@ export default function Home({ initialMatches = [] }) {
   const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
 
-  const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
+  const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
   const toggleBet = (selection, value, match) => {
     const matchId = match.id; 
@@ -34,11 +34,18 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
+  // Improved filtering logic to handle Sidebar selection vs DB data
   const displayMatches = useMemo(() => {
     let filtered = initialMatches;
+
     if (selectedLeague) {
-        filtered = filtered.filter(m => m.league_name === selectedLeague);
+      filtered = filtered.filter(m => {
+        const dbLeague = m.league_name?.replace(/['"]+/g, '').trim().toLowerCase();
+        const sidebarLeague = selectedLeague.replace(/['"]+/g, '').trim().toLowerCase();
+        return dbLeague === sidebarLeague;
+      });
     }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
@@ -49,6 +56,12 @@ export default function Home({ initialMatches = [] }) {
     }
     return filtered;
   }, [initialMatches, selectedLeague, searchQuery]);
+
+  // Handle sidebar selection with auto-scroll
+  const handleLeagueSelect = (leagueName) => {
+    setSelectedLeague(leagueName);
+    window.scrollTo({ top: 160, behavior: 'smooth' });
+  };
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
@@ -70,13 +83,18 @@ export default function Home({ initialMatches = [] }) {
       </div>
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-0">
+        {/* SIDEBAR */}
         <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
-          <Sidebar onSelectLeague={setSelectedLeague} onClearFilter={() => setSelectedLeague(null)} />
+          <Sidebar 
+            onSelectLeague={handleLeagueSelect} 
+            onClearFilter={() => setSelectedLeague(null)} 
+          />
         </aside>
 
+        {/* MAIN FEED */}
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
           {/* Tabs */}
-          <div className="bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar">
+          <div className="bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {['Highlights', 'Upcoming', 'Leagues'].map((tab) => (
               <button 
                 key={tab}
@@ -90,77 +108,92 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
+          {/* Table Header */}
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
-            <div className="col-span-7">Event Details</div>
+            <div className="col-span-7">Event Details {selectedLeague && <span className="text-[#10b981] ml-2">• {cleanName(selectedLeague)}</span>}</div>
             <div className="col-span-5 grid grid-cols-3 text-center">
               <span>1</span><span>X</span><span>2</span>
             </div>
           </div>
 
+          {/* Match List */}
           <div className="divide-y divide-white/5">
-            {displayMatches.map((match) => {
-              const currentSelection = slipItems.find(item => item.matchId === match.id);
-              
-              return (
-                <div key={match.id} className="grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors">
-                  {/* Wrap Team Section in Link */}
-                  <div className="col-span-7 pr-4 group">
-                    <Link href={`/${match.id}`}>
-                      <div className="cursor-pointer">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
-                            ⚽ {match.league_name}
-                          </span>
-                          <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
-                            <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+            {displayMatches.length > 0 ? (
+              displayMatches.map((match) => {
+                const currentSelection = slipItems.find(item => item.matchId === match.id);
+                
+                return (
+                  <div key={match.id} className="grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors">
+                    <div className="col-span-7 pr-4 group">
+                      <Link href={`/${match.id}`}>
+                        <div className="cursor-pointer">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
+                              ⚽ {cleanName(match.league_name)}
+                            </span>
+                            <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                              <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.home_team)}</span>
+                            <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.away_team)}</span>
+                          </div>
                         </div>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.home_team)}</span>
-                          <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.away_team)}</span>
-                        </div>
+                      </Link>
+                      <div className="mt-2 flex items-center gap-3 text-[10px] font-bold text-slate-500">
+                         <span className="flex items-center gap-1 cursor-pointer hover:text-[#10b981] italic">
+                            <BarChart2 size={12} /> Stats
+                         </span>
+                         <span className="text-slate-800">|</span>
+                         <span className="cursor-pointer hover:text-white italic">+ 45 Markets</span>
                       </div>
-                    </Link>
-                    <div className="mt-2 flex items-center gap-3 text-[10px] font-bold text-slate-500">
-                       <span className="flex items-center gap-1 cursor-pointer hover:text-[#10b981] italic">
-                          <BarChart2 size={12} /> Stats
-                       </span>
-                       <span className="text-slate-800">|</span>
-                       <span className="cursor-pointer hover:text-white italic">+ 45 Markets</span>
+                    </div>
+
+                    <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
+                      {[
+                          { label: '1', val: match.home_odds },
+                          { label: 'X', val: match.draw_odds },
+                          { label: '2', val: match.away_odds }
+                      ].map((odd) => (
+                        <button
+                          key={odd.label}
+                          onClick={() => toggleBet(odd.label, odd.val, match)}
+                          className={`rounded-md flex items-center justify-center font-black text-xs italic transition-all border ${
+                            currentSelection?.selection === odd.label
+                              ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                              : 'bg-[#1c2636] border-white/5 text-slate-300 hover:bg-[#253247]'
+                          }`}
+                        >
+                          {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
+                        </button>
+                      ))}
                     </div>
                   </div>
-
-                  <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
-                    {[
-                        { label: '1', val: match.home_odds },
-                        { label: 'X', val: match.draw_odds },
-                        { label: '2', val: match.away_odds }
-                    ].map((odd) => (
-                      <button
-                        key={odd.label}
-                        onClick={() => toggleBet(odd.label, odd.val, match)}
-                        className={`rounded-md flex items-center justify-center font-black text-xs italic transition-all border ${
-                          currentSelection?.selection === odd.label
-                            ? 'bg-[#10b981] border-[#10b981] text-white'
-                            : 'bg-[#1c2636] border-white/5 text-slate-300 hover:bg-[#253247]'
-                        }`}
-                      >
-                        {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="py-20 text-center opacity-20 flex flex-col items-center">
+                <Zap size={48} className="mb-4" />
+                <p className="font-black uppercase italic tracking-widest text-sm">No matches found for this selection</p>
+              </div>
+            )}
           </div>
         </main>
 
+        {/* BETSLIP ASIDE */}
         <aside className="hidden lg:col-span-3 lg:block p-4 space-y-4">
           <Betslip items={slipItems} setItems={setSlipItems} />
-          <div className="bg-[#1c2636] rounded-xl p-4 border border-white/5">
-              <p className="text-[10px] font-black text-slate-400 uppercase mb-3 italic">Shared betslip code?</p>
-              <input type="text" placeholder="Enter Code" className="w-full bg-[#0b0f1a] border border-white/10 rounded-lg p-2.5 text-xs text-white mb-2 focus:border-[#10b981] outline-none" />
-              <button className="w-full bg-[#334155] py-2 rounded-lg text-[10px] font-black uppercase text-white hover:bg-slate-600 transition-colors">Load Bet</button>
+          <div className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 shadow-xl">
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-3 italic tracking-widest">Load Booking Code</p>
+              <input 
+                type="text" 
+                placeholder="E.g. B7X9LP" 
+                className="w-full bg-[#0b0f1a] border border-white/10 rounded-xl p-3 text-xs text-white mb-2 focus:border-[#10b981] outline-none transition-all font-bold uppercase" 
+              />
+              <button className="w-full bg-[#10b981]/10 text-[#10b981] py-3 rounded-xl text-[10px] font-black uppercase italic hover:bg-[#10b981] hover:text-white transition-all border border-[#10b981]/20">
+                Retrieve Bet
+              </button>
           </div>
         </aside>
       </div>
@@ -174,7 +207,7 @@ export async function getServerSideProps() {
       .from('api_events')
       .select('*')
       .order('commence_time', { ascending: true })
-      .limit(50);
+      .limit(100);
 
     return { 
       props: { 
@@ -182,6 +215,7 @@ export async function getServerSideProps() {
       } 
     };
   } catch (err) {
+    console.error("Fetch error:", err);
     return { props: { initialMatches: [] } };
   }
 }
