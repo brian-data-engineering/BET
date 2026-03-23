@@ -15,14 +15,18 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
   const [expandedCountry, setExpandedCountry] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Updated to match the string sport_keys from your database
   const sportMapping = {
-    "14": { name: "soccer", icon: "⚽" },
-    "30": { name: "basketball", icon: "🏀" },
-    "28": { name: "tennis", icon: "🎾" },
-    "29": { name: "ice hockey", icon: "🏒" },
-    "37": { name: "cricket", icon: "🏏" },
-    "41": { name: "rugby", icon: "🏉" },
-    "default": { name: "other", icon: "🏆" }
+    "soccer": { name: "Soccer", icon: "⚽" },
+    "basketball": { name: "Basketball", icon: "🏀" },
+    "tennis": { name: "Tennis", icon: "🎾" },
+    "ice hockey": { name: "Ice Hockey", icon: "🏒" },
+    "table tennis": { name: "Table Tennis", icon: "🏓" },
+    "volleyball": { name: "Volleyball", icon: "🏐" },
+    "rugby": { name: "Rugby", icon: "🏉" },
+    "esoccer": { name: "E-Soccer", icon: "🎮" },
+    "esport counter-strike": { name: "CS:GO", icon: "🔫" },
+    "default": { name: "Other", icon: "🏆" }
   };
 
   useEffect(() => {
@@ -31,32 +35,47 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
 
   const fetchHierarchy = async () => {
     setLoading(true);
+    const now = new Date().toISOString();
+
+    // DYNAMIC FETCH: Build menu only from active games in api_events
     const { data } = await supabase
-      .from('competitions')
-      .select('competition_id, competition_name, category, sport_id')
-      .order('category', { ascending: true });
+      .from('api_events')
+      .select('sport_key, country, league_name')
+      .gt('commence_time', now) // Only games starting in the future
+      .order('country', { ascending: true });
 
     if (data) {
       const newTree = {};
+      
       data.forEach(item => {
-        const sId = String(item.sport_id);
-        const country = (item.category || "International").replace(/['"]+/g, '').trim();
+        const sport = item.sport_key || "soccer";
+        const country = (item.country || "International").replace(/['"]+/g, '').trim();
+        const league = (item.league_name || "").replace(/['"]+/g, '').trim();
         
-        if (!newTree[sId]) newTree[sId] = {};
-        if (!newTree[sId][country]) newTree[sId][country] = [];
+        if (!newTree[sport]) newTree[sport] = {};
+        if (!newTree[sport][country]) newTree[sport][country] = new Set();
         
-        newTree[sId][country].push(item);
+        // Using a Set inside the loop avoids duplicate league entries
+        newTree[sport][country].add(league);
       });
-      setTree(newTree);
-      setSports(Object.keys(newTree));
+
+      // Convert Sets back to Arrays for the UI mapping
+      const finalTree = {};
+      Object.keys(newTree).forEach(s => {
+        finalTree[s] = {};
+        Object.keys(newTree[s]).forEach(c => {
+          finalTree[s][c] = Array.from(newTree[s][c]);
+        });
+      });
+
+      setTree(finalTree);
+      setSports(Object.keys(finalTree));
     }
     setLoading(false);
   };
 
   const handleLeagueClick = (name) => {
-    // We pass the competition_name exactly as it appears.
-    // Our scraper now saves this exact string in the league_name column.
-    onSelectLeague(name.replace(/['"]+/g, '').trim());
+    onSelectLeague(name);
   };
 
   return (
@@ -78,14 +97,14 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
           </div>
         ) : (
           <div className="flex flex-col">
-            {sports.map(sportId => {
-              const meta = sportMapping[sportId] || sportMapping.default;
-              const isSportExpanded = expandedSport === sportId;
+            {sports.map(sportKey => {
+              const meta = sportMapping[sportKey] || sportMapping.default;
+              const isSportExpanded = expandedSport === sportKey;
 
               return (
-                <div key={sportId} className="flex flex-col">
+                <div key={sportKey} className="flex flex-col">
                   <button 
-                    onClick={() => setExpandedSport(isSportExpanded ? null : sportId)}
+                    onClick={() => setExpandedSport(isSportExpanded ? null : sportKey)}
                     className={`flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors group ${isSportExpanded ? 'bg-white/5 text-white' : ''}`}
                   >
                     <div className="flex items-center gap-3">
@@ -95,9 +114,9 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                     {isSportExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} className="opacity-30" />}
                   </button>
 
-                  {isSportExpanded && tree[sportId] && (
+                  {isSportExpanded && tree[sportKey] && (
                     <div className="bg-[#0b0f1a]/50">
-                      {Object.keys(tree[sportId]).map(country => {
+                      {Object.keys(tree[sportKey]).map(country => {
                         const isCountryExpanded = expandedCountry === country;
                         
                         return (
@@ -115,13 +134,13 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
 
                             {isCountryExpanded && (
                               <div className="bg-[#0b0f1a] ml-8 mb-1 border-l border-white/5">
-                                {tree[sportId][country].map(league => (
+                                {tree[sportKey][country].map(league => (
                                   <button
-                                    key={league.competition_id}
-                                    onClick={() => handleLeagueClick(league.competition_name)}
+                                    key={league}
+                                    onClick={() => handleLeagueClick(league)}
                                     className="w-full text-left px-4 py-2 text-[10px] font-bold text-slate-500 hover:text-[#10b981] hover:bg-white/5 transition-all truncate uppercase italic"
                                   >
-                                    {league.competition_name.replace(/['"]+/g, '')}
+                                    {league}
                                   </button>
                                 ))}
                               </div>
