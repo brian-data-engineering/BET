@@ -1,25 +1,22 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Search, Activity, ChevronRight, BarChart2 } from 'lucide-react';
+import { Clock, BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
-import { Redis } from '@upstash/redis';
 
-export default function Home({ initialMatches = [], initialLiveMatches = [] }) {
-  const [activeTab, setActiveTab] = useState('highlights'); // Matches screenshot tabs
+export default function Home({ initialMatches = [] }) {
+  const [activeTab, setActiveTab] = useState('highlights');
   const [selectedLeague, setSelectedLeague] = useState(null);
-  const [matches, setMatches] = useState(initialMatches);
-  const [liveMatches, setLiveMatches] = useState(initialLiveMatches);
   const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
 
-  // Toggle Bet Logic standardized for Row Layout
-  const toggleBet = (selection, value, match, isLive = false) => {
-    const matchId = isLive ? match.id : match.match_id;
+  // logic to add/remove bets from the global context
+  const toggleBet = (selection, value, match) => {
+    const matchId = match.id; // Using 'id' from your api_events schema
     const betId = `${matchId}-${selection}`;
     
     setSlipItems(prev => {
@@ -30,7 +27,7 @@ export default function Home({ initialMatches = [], initialLiveMatches = [] }) {
       return [...otherMatches, {
         id: betId,
         matchId: matchId,
-        matchName: isLive ? `${match.home} vs ${match.away}` : `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
+        matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         selection: selection,
         odds: value
       }];
@@ -38,47 +35,51 @@ export default function Home({ initialMatches = [], initialLiveMatches = [] }) {
   };
 
   const displayMatches = useMemo(() => {
-    let base = activeTab === 'live' ? liveMatches : matches;
+    let filtered = initialMatches;
+    
+    if (selectedLeague) {
+        filtered = filtered.filter(m => m.league_name === selectedLeague);
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return base.filter(m => 
-        (m.home_team || m.home)?.toLowerCase().includes(q) || 
-        (m.away_team || m.away)?.toLowerCase().includes(q)
+      filtered = filtered.filter(m => 
+        m.home_team?.toLowerCase().includes(q) || 
+        m.away_team?.toLowerCase().includes(q) ||
+        m.league_name?.toLowerCase().includes(q)
       );
     }
-    return base;
-  }, [matches, liveMatches, activeTab, searchQuery]);
+    return filtered;
+  }, [initialMatches, selectedLeague, searchQuery]);
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
-      {/* Banner Section (Image 4) */}
+      {/* Promo Banner */}
       <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block">
-        <div className="max-w-[1440px] mx-auto h-[180px] relative">
-            <img src="/banner_placeholder.png" alt="Promo" className="w-full h-full object-cover opacity-80" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] to-transparent flex items-center px-12">
+        <div className="max-w-[1440px] mx-auto h-[160px] relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
                 <div className="max-w-md">
-                    <h2 className="text-3xl font-black italic uppercase leading-none text-white">Get <span className="text-[#f59e0b]">5% Cashback</span></h2>
-                    <p className="text-sm font-bold text-white/80 mt-2 italic">on your Weekly Losses</p>
+                    <h2 className="text-4xl font-black italic uppercase leading-none text-white tracking-tighter">
+                        Get <span className="text-[#f59e0b]">5% Cashback</span>
+                    </h2>
+                    <p className="text-sm font-bold text-white/80 mt-2 italic uppercase tracking-wider">On all weekly losses</p>
                 </div>
             </div>
+            <img src="https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=1000" alt="Promo" className="w-full h-full object-cover opacity-30 object-center" />
         </div>
       </div>
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-0">
-        
-        {/* Left Sidebar */}
         <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
           <Sidebar onSelectLeague={setSelectedLeague} onClearFilter={() => setSelectedLeague(null)} />
         </aside>
 
-        {/* Main Feed */}
-        <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen">
-          
-          {/* Sub-Tabs (Image 1 top) */}
+        <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
+          {/* Sub-Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar">
-            {['Highlights', 'Top Leagues', 'Upcoming', 'Countries'].map((tab) => (
+            {['Highlights', 'Upcoming', 'Leagues'].map((tab) => (
               <button 
                 key={tab}
                 onClick={() => setActiveTab(tab.toLowerCase())}
@@ -91,73 +92,60 @@ export default function Home({ initialMatches = [], initialLiveMatches = [] }) {
             ))}
           </div>
 
-          {/* Market Selectors (Image 1) */}
-          <div className="p-3 flex gap-2 overflow-x-auto no-scrollbar bg-[#0b0f1a]/50">
-            {['1x2/Winner', 'Double Chance', 'Both Teams to Score', 'UN/OV 2.5'].map((m) => (
-              <button key={m} className={`px-4 py-1.5 rounded-full text-[10px] font-bold border transition-all whitespace-nowrap ${
-                m === '1x2/Winner' ? 'bg-[#10b981]/20 border-[#10b981] text-[#10b981]' : 'bg-[#1e293b] border-white/5 text-slate-400'
-              }`}>
-                {m}
-              </button>
-            ))}
-          </div>
-
           {/* Table Header */}
-          <div className="grid grid-cols-12 px-4 py-2 text-[10px] font-black text-slate-500 uppercase italic">
-            <div className="col-span-7">Teams</div>
+          <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
+            <div className="col-span-7">Event Details</div>
             <div className="col-span-5 grid grid-cols-3 text-center">
               <span>1</span><span>X</span><span>2</span>
             </div>
           </div>
 
-          {/* Match Rows (Image 1 style) */}
+          {/* List of matches */}
           <div className="divide-y divide-white/5">
             {displayMatches.map((match) => {
-              const mId = match.id || match.match_id;
-              const currentSelection = slipItems.find(item => item.matchId === mId);
+              const currentSelection = slipItems.find(item => item.matchId === match.id);
               
               return (
-                <div key={mId} className="grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors">
-                  {/* Left: Info */}
+                <div key={match.id} className="grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors">
                   <div className="col-span-7 pr-4">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase truncate">
-                        ⚽ {match.competition_name || "Premier League"}
+                      <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
+                        ⚽ {match.league_name}
                       </span>
-                      <span className="text-[9px] text-[#f59e0b] font-black italic">
-                        Starts {new Date(match.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                        <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.home_team || match.home)}</span>
-                      <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.away_team || match.away)}</span>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.home_team)}</span>
+                      <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.away_team)}</span>
                     </div>
-                    <div className="mt-2 flex items-center gap-3 text-[10px] font-bold text-[#10b981]">
-                       <span className="flex items-center gap-1 cursor-pointer hover:underline italic">
+                    <div className="mt-2 flex items-center gap-3 text-[10px] font-bold text-slate-500">
+                       <span className="flex items-center gap-1 cursor-pointer hover:text-[#10b981] italic">
                           <BarChart2 size={12} /> Stats
                        </span>
-                       <span className="text-slate-600">|</span>
-                       <span className="cursor-pointer hover:underline italic">+ 93 Markets</span>
+                       <span className="text-slate-800">|</span>
+                       <span className="cursor-pointer hover:text-white italic">+ 45 Markets</span>
                     </div>
                   </div>
 
-                  {/* Right: Odds Buttons */}
-                  <div className="col-span-5 grid grid-cols-3 gap-2 h-12">
+                  {/* Manual Odds Grid based on your Schema */}
+                  <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
                     {[
-                        { label: '1', val: match.odds?.[0]?.odd_value || 1.00 },
-                        { label: 'X', val: match.odds?.[1]?.odd_value || 1.00 },
-                        { label: '2', val: match.odds?.[2]?.odd_value || 1.00 }
+                        { label: '1', val: match.home_odds },
+                        { label: 'X', val: match.draw_odds },
+                        { label: '2', val: match.away_odds }
                     ].map((odd) => (
                       <button
                         key={odd.label}
                         onClick={() => toggleBet(odd.label, odd.val, match)}
-                        className={`rounded-md flex flex-col items-center justify-center transition-all ${
+                        className={`rounded-md flex items-center justify-center font-black text-xs italic transition-all border ${
                           currentSelection?.selection === odd.label
-                            ? 'bg-[#10b981] text-white shadow-lg'
-                            : 'bg-[#1c2636] text-slate-300 hover:bg-[#253247]'
+                            ? 'bg-[#10b981] border-[#10b981] text-white'
+                            : 'bg-[#1c2636] border-white/5 text-slate-300 hover:bg-[#253247]'
                         }`}
                       >
-                        <span className="text-xs font-black">{odd.val.toFixed(2)}</span>
+                        {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
                       </button>
                     ))}
                   </div>
@@ -167,27 +155,33 @@ export default function Home({ initialMatches = [], initialLiveMatches = [] }) {
           </div>
         </main>
 
-        {/* Right Sidebar: Betslip & Contacts (Image 1 Right) */}
         <aside className="hidden lg:col-span-3 lg:block p-4 space-y-4">
           <Betslip items={slipItems} setItems={setSlipItems} />
-          
-          {/* Shared Code Section */}
           <div className="bg-[#1c2636] rounded-xl p-4 border border-white/5">
-              <p className="text-[10px] font-black text-slate-400 uppercase mb-3">Do you have a shared betslip code?</p>
-              <input type="text" placeholder="Enter Code Here" className="w-full bg-[#0b0f1a] border border-white/10 rounded-lg p-3 text-xs text-white mb-2" />
-              <button className="w-full bg-[#334155] py-2.5 rounded-lg text-[10px] font-black uppercase text-white hover:bg-slate-600">Load Betslip</button>
-          </div>
-
-          {/* Contacts Section */}
-          <div className="bg-[#1c2636] rounded-xl p-4 border border-white/5">
-              <p className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Our Contacts</p>
-              <div className="flex items-center gap-3 text-xs font-bold text-slate-300">
-                  <div className="w-8 h-8 rounded-full bg-[#0b0f1a] flex items-center justify-center">📧</div>
-                  <span>info@bonusbet.co.ke</span>
-              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-3 italic">Shared betslip code?</p>
+              <input type="text" placeholder="Enter Code" className="w-full bg-[#0b0f1a] border border-white/10 rounded-lg p-2.5 text-xs text-white mb-2 focus:border-[#10b981] outline-none" />
+              <button className="w-full bg-[#334155] py-2 rounded-lg text-[10px] font-black uppercase text-white hover:bg-slate-600 transition-colors">Load Bet</button>
           </div>
         </aside>
       </div>
     </div>
   );
+}
+
+export async function getServerSideProps() {
+  try {
+    const { data } = await supabase
+      .from('api_events')
+      .select('*')
+      .order('commence_time', { ascending: true })
+      .limit(50);
+
+    return { 
+      props: { 
+        initialMatches: JSON.parse(JSON.stringify(data || [])) 
+      } 
+    };
+  } catch (err) {
+    return { props: { initialMatches: [] } };
+  }
 }
