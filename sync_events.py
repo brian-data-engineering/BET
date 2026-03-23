@@ -1,6 +1,7 @@
 import os
 import requests
 from supabase import create_client
+from datetime import datetime
 
 # --- CONFIGURATION ---
 BETIKA_URL = "https://api.betika.com/v1/uo/matches?limit=100&tab=upcoming"
@@ -29,11 +30,12 @@ def sync_betika_only():
             return
 
         batch_to_upsert = []
+        synced_ids = [] # Keep track of what's currently "Live/Upcoming"
 
         for item in data:
             event_id = str(item.get('match_id'))
+            synced_ids.append(event_id)
             
-            # --- 1. ODDS HANDLING ---
             try:
                 h_odd = float(item.get('home_odd') or 0)
                 d_odd = float(item.get('neutral_odd') or 0)
@@ -44,22 +46,14 @@ def sync_betika_only():
             if h_odd <= 1.01:
                 continue
 
-            # --- 2. DATA CLEANING (THE NEW PART) ---
-            # Betika provides 'category' (usually Country) and 'competition_name' (the League)
-            raw_country = item.get('category', 'International')
-            raw_league = item.get('competition_name', 'Other')
-
-            # We strip quotes here so the DB stores clean strings
-            clean_country = raw_country.replace('"', '').replace("'", "").strip()
-            clean_league = raw_league.replace('"', '').replace("'", "").strip()
+            clean_country = item.get('category', 'International').replace('"', '').replace("'", "").strip()
+            clean_league = item.get('competition_name', 'Other').replace('"', '').replace("'", "").strip()
 
             batch_to_upsert.append({
                 "id": event_id,
                 "sport_key": item.get('sport_name', 'Soccer').lower(),
-                # We store them separately for perfect filtering
                 "country": clean_country, 
                 "league_name": clean_league,
-                # We keep the display name for the UI label if needed
                 "display_league": f"{clean_country} - {clean_league}",
                 "home_team": item.get('home_team'),
                 "away_team": item.get('away_team'),
@@ -71,11 +65,28 @@ def sync_betika_only():
                 "raw_data": item 
             })
 
-        # 3. PUSH TO SUPABASE
+        # 1. UPSERT NEW DATA
         if batch_to_upsert:
-            # Ensure your table has 'country' and 'league_name' columns!
             supabase.table("api_events").upsert(batch_to_upsert, on_conflict="id").execute()
-            print(f"✅ Success! {len(batch_to_upsert)} matches synced with separate Country/League columns.")
+            print(f"✅ Success! {len(batch_to_upsert)} matches updated.")
+
+            # 2. CLEANUP GHOST MATCHES
+            # We delete matches that are:
+            # - Marked as 'pending'
+            # - NOT in the fresh list of 100 IDs we just got from the API
+            # - Or started more than 3 hours ago
+            try:
+                # Delete matches not in the current feed
+                supabase.table("api_events") \
+                    .delete() \
+                    .eq("status", "pending") \
+                    .not_.in_("id", synced_ids) \
+                    .execute()
+                
+                print(f"🧹 Cleanup: Removed stale/finished matches from Database.")
+            except Exception as clean_err:
+                print(f"⚠️ Cleanup error: {clean_err}")
+
         else:
             print("⚠️ No valid matches found.")
 
