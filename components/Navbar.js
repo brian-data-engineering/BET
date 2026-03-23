@@ -13,7 +13,7 @@ const Navbar = ({ onSearch }) => {
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-2xl font-black tracking-tighter text-white uppercase italic">
-              bonus<span className="text-[#f59e0b]">bet</span>
+              brian<span className="text-[#f59e0b]">bet</span>
             </span>
             <span className="text-[10px] font-bold text-[#f59e0b] ml-auto">.co.ke</span>
           </div>
