@@ -13,7 +13,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # We only need Python and the basic API libraries now
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
@@ -25,10 +24,12 @@ jobs:
 
       - name: Run Lucra API Sync
         env:
-          # These must match the names in your GitHub Settings > Secrets
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: |
-          # We are ONLY running the new API logic
+          # 1. Update the 34 categories (No key needed)
           python sync_live_fast.py
+          
+          # 2. Update the deep events for your 12 chosen sports (Uses key)
+          python sync_events.py
