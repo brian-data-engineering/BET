@@ -10,79 +10,88 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def sync_football():
-    # 1. Create a dynamic 'from' timestamp to skip the past
-    # This ensures we get 1,000 UPCOMING matches, not 1,000 old ones.
-    now_iso = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-    
-    print(f"🚀 Starting Football Sync from: {now_iso}")
+def fetch_batch_odds(event_ids):
+    """Fetch high-fidelity odds for a batch of up to 10 IDs"""
+    ids_str = ",".join(event_ids)
+    url = f"https://api.odds-api.io/v3/odds?apiKey={API_KEY}&eventId={ids_str}&bookmakers=Bet365,1xbet"
     
     try:
-        # V3 Events endpoint with the 'from' parameter
-        url = f"https://api.odds-api.io/v3/events?apiKey={API_KEY}&sport=football&limit=1000&from={now_iso}"
-        
-        print(f"📡 Requesting data from API...")
-        response = requests.get(url, timeout=30)
+        res = requests.get(url, timeout=20)
+        return res.json() if res.status_code == 200 else []
+    except Exception as e:
+        print(f"⚠️ Batch odds fetch failed: {e}")
+        return []
+
+def sync_football_batches():
+    now_iso = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    print(f"🚀 Launching Batch Sync starting from: {now_iso}")
+    
+    try:
+        # 1. Get the list of future events
+        events_url = f"https://api.odds-api.io/v3/events?apiKey={API_KEY}&sport=football&limit=1000&from={now_iso}"
+        response = requests.get(events_url, timeout=30)
         
         if response.status_code != 200:
             print(f"❌ API Error: {response.status_code}")
             return
 
-        data = response.json()
-        if not data or not isinstance(data, list):
-            print("⚠️ No future football data returned.")
+        all_events = response.json()
+        if not all_events:
+            print("⚠️ No matches found.")
             return
 
-        batch = []
-        for item in data:
-            # League Extraction
-            league = item.get('league', {})
-            league_name = league.get('name') or item.get('sport_title', 'Unknown League')
+        # 2. Process in batches of 10 to get detailed odds
+        event_ids = [str(e['id']) for e in all_events]
+        total_synced = 0
 
-            # Score Extraction
-            scores = item.get('scores', {})
-            h_score = scores.get('home')
-            a_score = scores.get('away')
-
-            # Odds Extraction (Targeting 1xBet ML markets)
-            bookmakers = item.get('bookmakers', {})
-            one_x_bet = bookmakers.get('1xbet', [])
-            h_odds, d_odds, a_odds = None, None, None
+        for i in range(0, len(event_ids), 10):
+            current_batch_ids = event_ids[i:i+10]
+            print(f"📡 Processing batch {i//10 + 1} ({len(current_batch_ids)} matches)...")
             
-            if one_x_bet:
-                for market in one_x_bet:
-                    if market.get('name') == 'ML':
-                        odds_list = market.get('odds', [])
-                        if odds_list:
-                            o = odds_list[0]
-                            h_odds = o.get('home')
-                            d_odds = o.get('draw')
-                            a_odds = o.get('away')
+            # Fetch the deep odds for this batch
+            detailed_odds = fetch_batch_odds(current_batch_ids)
+            
+            batch_to_upsert = []
+            for item in detailed_odds:
+                bookies = item.get('bookmakers', {})
+                
+                # Priority: 1xBet -> Bet365 -> Any other
+                source = bookies.get('1xbet') or bookies.get('Bet365')
+                
+                h_odds, d_odds, a_odds = None, None, None
+                if source:
+                    # Target the Moneyline (ML) market
+                    ml = next((m for m in source if m.get('name') == 'ML'), None)
+                    if ml and ml.get('odds'):
+                        o = ml['odds'][0]
+                        h_odds, d_odds, a_odds = o.get('home'), o.get('draw'), o.get('away')
 
-            # Map to your Database Schema
-            batch.append({
-                "id": str(item.get('id')),
-                "sport_key": "football",
-                "league_name": league_name,
-                "home_team": item.get('home'),
-                "away_team": item.get('away'),
-                "commence_time": item.get('date'),
-                "status": item.get('status', 'pending'),
-                "home_score": h_score if h_score is not None else 0,
-                "away_score": a_score if a_score is not None else 0,
-                "home_odds": h_odds,
-                "draw_odds": d_odds,
-                "away_odds": a_odds,
-                "priority_level": 1 
-            })
+                # Build the row
+                batch_to_upsert.append({
+                    "id": str(item.get('id')),
+                    "sport_key": "football",
+                    "league_name": item.get('league', {}).get('name') or "Unknown League",
+                    "home_team": item.get('home'),
+                    "away_team": item.get('away'),
+                    "commence_time": item.get('date'),
+                    "status": item.get('status', 'pending'),
+                    "home_score": item.get('scores', {}).get('home', 0),
+                    "away_score": item.get('scores', {}).get('away', 0),
+                    "home_odds": h_odds,
+                    "draw_odds": d_odds,
+                    "away_odds": a_odds,
+                    "priority_level": 1,
+                    "raw_data": item # Storing full JSON for audit
+                })
 
-        if batch:
-            print(f"📦 Upserting {len(batch)} FUTURE football records to Supabase...")
-            supabase.table("api_events").upsert(batch, on_conflict="id").execute()
-            print(f"✅ Sync Complete. {len(batch)} upcoming matches processed.")
+            if batch_to_upsert:
+                supabase.table("api_events").upsert(batch_to_upsert, on_conflict="id").execute()
+                total_synced += len(batch_to_upsert)
+
+        print(f"✅ Sync Complete. Total records updated: {total_synced}")
 
     except Exception as e:
         print(f"🚨 Critical Failure: {str(e)}")
 
 if __name__ == "__main__":
-    sync_football()
+    sync_football_batches()
