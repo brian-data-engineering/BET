@@ -1,5 +1,6 @@
 import os
 import requests
+import datetime
 from supabase import create_client
 
 # --- CONFIGURATION ---
@@ -10,11 +11,15 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def sync_football():
-    print(f"🚀 Starting Football-Only Sync...")
+    # 1. Create a dynamic 'from' timestamp to skip the past
+    # This ensures we get 1,000 UPCOMING matches, not 1,000 old ones.
+    now_iso = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    
+    print(f"🚀 Starting Football Sync from: {now_iso}")
     
     try:
-        # V3 Events endpoint specifically for Football
-        url = f"https://api.odds-api.io/v3/events?apiKey={API_KEY}&sport=football&limit=1000"
+        # V3 Events endpoint with the 'from' parameter
+        url = f"https://api.odds-api.io/v3/events?apiKey={API_KEY}&sport=football&limit=1000&from={now_iso}"
         
         print(f"📡 Requesting data from API...")
         response = requests.get(url, timeout=30)
@@ -25,21 +30,21 @@ def sync_football():
 
         data = response.json()
         if not data or not isinstance(data, list):
-            print("⚠️ No football data returned.")
+            print("⚠️ No future football data returned.")
             return
 
         batch = []
         for item in data:
-            # 1. League Extraction (Handles those U21 and Amateur leagues nicely)
+            # League Extraction
             league = item.get('league', {})
             league_name = league.get('name') or item.get('sport_title', 'Unknown League')
 
-            # 2. Score Extraction (Safe navigation)
+            # Score Extraction
             scores = item.get('scores', {})
             h_score = scores.get('home')
             a_score = scores.get('away')
 
-            # 3. Odds Extraction (Targeting 1xBet ML markets)
+            # Odds Extraction (Targeting 1xBet ML markets)
             bookmakers = item.get('bookmakers', {})
             one_x_bet = bookmakers.get('1xbet', [])
             h_odds, d_odds, a_odds = None, None, None
@@ -54,7 +59,7 @@ def sync_football():
                             d_odds = o.get('draw')
                             a_odds = o.get('away')
 
-            # 4. Map to your Database Schema
+            # Map to your Database Schema
             batch.append({
                 "id": str(item.get('id')),
                 "sport_key": "football",
@@ -63,19 +68,18 @@ def sync_football():
                 "away_team": item.get('away'),
                 "commence_time": item.get('date'),
                 "status": item.get('status', 'pending'),
-                "home_score": h_score,
-                "away_score": a_score,
+                "home_score": h_score if h_score is not None else 0,
+                "away_score": a_score if a_score is not None else 0,
                 "home_odds": h_odds,
                 "draw_odds": d_odds,
                 "away_odds": a_odds,
-                "priority_level": 1  # High priority for immediate visibility
+                "priority_level": 1 
             })
 
         if batch:
-            print(f"📦 Upserting {len(batch)} football records to Supabase...")
-            # .upsert() uses the 'id' column to decide between INSERT or UPDATE
+            print(f"📦 Upserting {len(batch)} FUTURE football records to Supabase...")
             supabase.table("api_events").upsert(batch, on_conflict="id").execute()
-            print(f"✅ Sync Complete. {len(batch)} matches processed.")
+            print(f"✅ Sync Complete. {len(batch)} upcoming matches processed.")
 
     except Exception as e:
         print(f"🚨 Critical Failure: {str(e)}")
