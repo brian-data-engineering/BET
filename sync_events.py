@@ -4,7 +4,7 @@ from supabase import create_client
 from datetime import datetime
 
 # --- CONFIGURATION ---
-BETIKA_URL = "https://api.betika.com/v1/uo/matches?limit=100&tab=upcoming"
+BETIKA_URL = "https://api.betika.com/v1/uo/matches?page=1&limit=1000"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
