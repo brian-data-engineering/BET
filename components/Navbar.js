@@ -30,17 +30,18 @@ const Navbar = ({ onSearch }) => {
     e.preventDefault();
     setLoading(true);
     
-    // Ensure we are sending the phone number exactly as stored in DB
+    // Formatting number for Kenyan standard (2547...)
     const cleanPhone = `254${phoneNumber}`;
 
     try {
       if (modalMode === 'register') {
+        // REGISTER LOGIC
         const { data, error } = await supabase
           .from('profiles')
           .insert([
             { 
               phone: cleanPhone, 
-              password: password, 
+              password: password, // Now strictly lowercase 'password' to match your DB fix
               balance: 0.00 
             }
           ])
@@ -48,13 +49,13 @@ const Navbar = ({ onSearch }) => {
           .single();
 
         if (error) {
-          console.error("Registration Error Details:", error);
           if (error.code === '23505') throw new Error("This number is already registered.");
-          throw new Error(error.message || "Could not register.");
+          throw error;
         }
         
         loginUser(data);
       } else {
+        // LOGIN LOGIC
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -63,13 +64,13 @@ const Navbar = ({ onSearch }) => {
           .single();
 
         if (error || !data) {
-          console.error("Login Error Details:", error);
           throw new Error("Invalid phone or password.");
         }
         
         loginUser(data);
       }
     } catch (err) {
+      console.error("Auth Error:", err.message);
       alert(err.message);
     } finally {
       setLoading(false);
@@ -82,7 +83,7 @@ const Navbar = ({ onSearch }) => {
     setShowAuthModal(false);
     setPhoneNumber('');
     setPassword('');
-    alert(modalMode === 'register' ? "Welcome to BrianBet!" : "Welcome back!");
+    // No confirmation code needed anymore!
   };
 
   const handleLogout = () => {
@@ -98,7 +99,7 @@ const Navbar = ({ onSearch }) => {
           <div className="bg-[#0b0f1a] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#004d3d]">
               <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">
-                {modalMode === 'login' ? 'Login' : 'Join BrianBet'}
+                {modalMode === 'login' ? 'Welcome Back' : 'Join BrianBet'}
               </h2>
               <button onClick={() => setShowAuthModal(false)} className="text-white/50 hover:text-white transition-colors">
                 <X size={24}/>
@@ -142,7 +143,7 @@ const Navbar = ({ onSearch }) => {
                 disabled={loading} 
                 className="w-full bg-[#10b981] hover:bg-[#0da371] text-white font-black py-4 rounded-xl shadow-lg uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
               >
-                {loading ? "Checking..." : modalMode === 'login' ? "Login" : "Register"}
+                {loading ? "Verifying..." : modalMode === 'login' ? "Login" : "Register Account"}
               </button>
               
               <button 
@@ -150,7 +151,7 @@ const Navbar = ({ onSearch }) => {
                 onClick={() => setModalMode(modalMode === 'login' ? 'register' : 'login')} 
                 className="w-full text-xs font-bold text-slate-400 hover:text-[#10b981] transition-colors uppercase"
               >
-                {modalMode === 'login' ? "Create a new account" : "Back to Login"}
+                {modalMode === 'login' ? "New here? Register now" : "Already have an account? Login"}
               </button>
             </form>
           </div>
@@ -173,7 +174,7 @@ const Navbar = ({ onSearch }) => {
           {user ? (
             <div className="flex items-center gap-4">
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Balance</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">My Balance</span>
                 <span className="text-sm font-black text-[#10b981]">
                   Ksh {Number(user.balance || 0).toFixed(2)}
                 </span>
@@ -204,7 +205,7 @@ const Navbar = ({ onSearch }) => {
         </div>
       </div>
 
-      {/* --- QUICK LINKS --- */}
+      {/* --- QUICK LINKS & SEARCH --- */}
       <div className="bg-[#003d30] px-4 py-2 border-t border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-6 text-[11px] font-bold text-slate-400 uppercase italic">
           <button className="hover:text-white flex items-center gap-1.5"><Activity size={14} /> Live Score</button>
