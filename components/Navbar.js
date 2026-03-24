@@ -1,16 +1,136 @@
-import React from 'react';
-import { Search, User, Globe, Smartphone, Trophy, Activity, Rocket, Zap, Gift } from 'lucide-react';
+import React, { useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { 
+  Search, 
+  Trophy, 
+  Activity, 
+  Rocket, 
+  Zap, 
+  Gift, 
+  Smartphone, 
+  X, 
+  Lock, 
+  Phone,
+  LogIn
+} from 'lucide-react';
 
 const Navbar = ({ onSearch }) => {
+  // Modal States
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [modalMode, setModalMode] = useState('login'); // 'login' or 'register'
+  
+  // Form States
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const fullPhone = `+254${phoneNumber}`;
+
+    if (modalMode === 'register') {
+      const { error } = await supabase.auth.signUp({
+        phone: fullPhone,
+        password: password,
+      });
+      if (error) alert(error.message);
+      else {
+        alert("Account created!");
+        setShowAuthModal(false);
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({
+        phone: fullPhone,
+        password: password,
+      });
+      if (error) alert(error.message);
+      else {
+        alert("Welcome back!");
+        setShowAuthModal(false);
+      }
+    }
+    setLoading(false);
+  };
+
+  const openModal = (mode) => {
+    setModalMode(mode);
+    setShowAuthModal(true);
+  };
+
   return (
     <nav className="sticky top-0 z-50">
-      {/* --- TOP BAR: Logo & Auth --- */}
-      <div className="bg-[#0b0f1a] px-4 py-3 flex items-center justify-between">
-        {/* Logo Section */}
-        <div className="flex items-center gap-1 cursor-pointer">
-          <div className="w-9 h-9 border-2 border-[#10b981] rounded-full flex items-center justify-center font-black text-[#10b981] text-lg">
-            bb
+      {/* --- AUTH MODAL (Login & Register) --- */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className="bg-[#0b0f1a] border border-white/10 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#004d3d]">
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">
+                {modalMode === 'login' ? 'Welcome Back' : 'Create Account'}
+              </h2>
+              <button onClick={() => setShowAuthModal(false)} className="text-white/50 hover:text-white">
+                <X size={24}/>
+              </button>
+            </div>
+
+            <form onSubmit={handleAuth} className="p-8 space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                  <Phone size={10} /> Phone Number
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-[#10b981]">+254</span>
+                  <input 
+                    type="tel" 
+                    placeholder="712345678"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g,''))}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-14 pr-4 text-white font-bold focus:border-[#10b981] outline-none transition-all"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                  <Lock size={10} /> Password
+                </label>
+                <input 
+                  type="password" 
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-4 text-white font-bold focus:border-[#10b981] outline-none transition-all"
+                  required
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-[#10b981] hover:bg-[#0da371] text-white font-black py-4 rounded-xl shadow-lg uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                {loading ? "Please wait..." : modalMode === 'login' ? "Login" : "Register Now"}
+              </button>
+
+              <div className="text-center">
+                <button 
+                  type="button"
+                  onClick={() => setModalMode(modalMode === 'login' ? 'register' : 'login')}
+                  className="text-xs font-bold text-slate-400 hover:text-[#10b981] transition-colors"
+                >
+                  {modalMode === 'login' ? "Don't have an account? Register" : "Already have an account? Login"}
+                </button>
+              </div>
+            </form>
           </div>
+        </div>
+      )}
+
+      {/* --- TOP BAR --- */}
+      <div className="bg-[#0b0f1a] px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-1 cursor-pointer">
+          <div className="w-9 h-9 border-2 border-[#10b981] rounded-full flex items-center justify-center font-black text-[#10b981] text-lg">bb</div>
           <div className="flex flex-col leading-none">
             <span className="text-2xl font-black tracking-tighter text-white uppercase italic">
               brian<span className="text-[#f59e0b]">bet</span>
@@ -19,44 +139,41 @@ const Navbar = ({ onSearch }) => {
           </div>
         </div>
 
-        {/* Auth Buttons */}
         <div className="flex items-center gap-4">
-          <button className="text-sm font-bold text-[#10b981] hover:text-white transition-colors">
+          <button 
+            onClick={() => openModal('login')}
+            className="text-sm font-bold text-[#10b981] hover:text-white transition-colors"
+          >
             Login
           </button>
-          <button className="bg-[#10b981] hover:bg-[#059669] text-white text-sm font-bold px-5 py-2 rounded shadow-lg transition-all active:scale-95">
+          <button 
+            onClick={() => openModal('register')}
+            className="bg-[#10b981] hover:bg-[#059669] text-white text-sm font-bold px-6 py-2.5 rounded shadow-lg transition-all active:scale-95"
+          >
             Register
           </button>
         </div>
       </div>
 
-      {/* --- MIDDLE BAR: Features Menu (Dark Green) --- */}
+      {/* --- FEATURE BAR --- */}
       <div className="bg-[#004d3d] border-t border-white/5 px-4 overflow-x-auto no-scrollbar">
         <div className="max-w-[1440px] mx-auto flex items-center gap-6 py-2.5 whitespace-nowrap">
           <NavItem icon={<Trophy size={16} />} label="Sports" active />
           <NavItem icon={<Activity size={16} />} label="Live" />
           <NavItem icon={<Rocket size={16} />} label="Aviator" isNew />
           <NavItem icon={<Zap size={16} />} label="Crash" />
-          <NavItem icon={<Gift size={16} />} label="Promotions" />
+          <NavItem icon={<Gift size={16} />} label="Promos" />
           <NavItem icon={<Smartphone size={16} />} label="Virtuals" />
         </div>
       </div>
 
-      {/* --- BOTTOM BAR: Quick Links & Search --- */}
+      {/* --- QUICK LINKS & SEARCH --- */}
       <div className="bg-[#003d30] px-4 py-2 border-t border-white/5 flex items-center justify-between">
-        <div className="flex items-center gap-6 text-[11px] font-bold text-slate-300 uppercase">
-          <button className="hover:text-white flex items-center gap-1.5 italic">
-            <Activity size={14} /> Live Score
-          </button>
-          <button className="hover:text-white flex items-center gap-1.5 italic">
-            <Trophy size={14} /> Results
-          </button>
-          <button className="hover:text-white flex items-center gap-1.5 italic text-[#f59e0b]">
-            <Smartphone size={14} /> BonusBet App
-          </button>
+        <div className="flex items-center gap-6 text-[11px] font-bold text-slate-400 uppercase">
+          <button className="hover:text-white flex items-center gap-1.5 italic"><Activity size={14} /> Live Score</button>
+          <button className="hover:text-white flex items-center gap-1.5 italic"><Trophy size={14} /> Results</button>
+          <button className="hover:text-white flex items-center gap-1.5 italic text-[#f59e0b]"><Smartphone size={14} /> App</button>
         </div>
-
-        {/* Search Toggle */}
         <div className="flex items-center gap-2 text-white/70 hover:text-white cursor-pointer group">
           <Search size={18} className="group-hover:scale-110 transition-transform" />
           <span className="text-sm font-bold uppercase tracking-tight">Search</span>
@@ -66,16 +183,11 @@ const Navbar = ({ onSearch }) => {
   );
 };
 
-// Sub-component for Menu Items
 const NavItem = ({ icon, label, active = false, isNew = false }) => (
   <button className={`flex items-center gap-1.5 px-1 py-1 transition-all relative ${active ? 'text-white border-b-2 border-white' : 'text-white/70 hover:text-white'}`}>
     {icon}
     <span className="text-xs font-black uppercase tracking-tight">{label}</span>
-    {isNew && (
-      <span className="bg-red-600 text-[8px] font-black px-1 rounded absolute -top-1 -right-4 animate-bounce">
-        NEW!
-      </span>
-    )}
+    {isNew && <span className="bg-red-600 text-[8px] font-black px-1 rounded absolute -top-1 -right-4 animate-bounce">NEW</span>}
   </button>
 );
 
