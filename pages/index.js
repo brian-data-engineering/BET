@@ -200,7 +200,7 @@ export async function getServerSideProps() {
       .from('api_events')
       .select('*')
       .order('commence_time', { ascending: true })
-      .limit(100);
+      .limit(1000); // Changed from 100 to 1000
 
     return { 
       props: { 
