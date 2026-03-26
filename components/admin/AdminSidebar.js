@@ -7,38 +7,57 @@ import { supabase } from '../../lib/supabaseClient';
 export default function AdminSidebar() {
   const router = useRouter();
   const [role, setRole] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const getRole = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      // This pulls 'super_admin' or 'operator' from the metadata badge
-      setRole(user?.app_metadata?.role || 'operator');
+      if (user) {
+        // We check app_metadata first, then user_metadata as fallback
+        const currentRole = user?.app_metadata?.role || user?.user_metadata?.role || 'operator';
+        setRole(currentRole);
+      }
+      setLoading(false);
     };
     getRole();
   }, []);
 
-  // 1. Menu for the SUPER ADMIN (The Boss)
+  // 1. Logic-only Menus
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'Operators', path: '/admin/operators', icon: <ShieldCheck size={20} /> },
     { name: 'Funding', path: '/admin/funding', icon: <Wallet size={20} /> },
   ];
 
-  // 2. Menu for the OPERATOR (The Shop Owner)
   const operatorMenu = [
     { name: 'Shop Dashboard', path: '/operator/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'My Cashiers', path: '/operator/staff', icon: <Monitor size={20} /> },
     { name: 'Shop Wallet', path: '/operator/wallet', icon: <Wallet size={20} /> },
   ];
 
-  // 3. Switch based on role
+  // 2. Prevent Rendering until role is known
+  if (loading) {
+    return (
+      <div className="w-64 bg-slate-900 border-r border-gray-800 flex items-center justify-center h-screen">
+        <div className="w-6 h-6 border-2 border-[#10b981]/20 border-t-[#10b981] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   const activeMenu = role === 'super_admin' ? adminMenu : operatorMenu;
+  const label = role === 'super_admin' ? 'LUCRA ADMIN' : 'SHOP OPERATOR';
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    // Redirect based on who is logging out
+    router.push(role === 'super_admin' ? '/admin/login' : '/operator/login');
+  };
 
   return (
     <div className="w-64 bg-slate-900 border-r border-gray-800 flex flex-col h-screen sticky top-0">
       <div className="p-6 border-b border-gray-800">
         <h2 className="text-[#10b981] font-black tracking-tighter text-xl italic uppercase">
-          {role === 'super_admin' ? 'LUCRA ADMIN' : 'SHOP OPERATOR'}
+          {label}
         </h2>
       </div>
 
@@ -51,7 +70,7 @@ export default function AdminSidebar() {
               href={item.path}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
                 isActive 
-                  ? 'bg-[#10b981] text-black' 
+                  ? 'bg-[#10b981] text-black shadow-[0_0_20px_rgba(16,185,129,0.3)]' 
                   : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
@@ -64,10 +83,7 @@ export default function AdminSidebar() {
 
       <div className="p-4 border-t border-gray-800">
         <button 
-          onClick={async () => {
-            await supabase.auth.signOut();
-            router.push('/admin/login');
-          }}
+          onClick={handleLogout}
           className="flex items-center gap-3 w-full px-4 py-3 text-red-400 font-bold text-sm hover:bg-red-400/10 rounded-xl transition-all"
         >
           <LogOut size={20} />
