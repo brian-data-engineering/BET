@@ -15,6 +15,7 @@ export default function AdminLogin() {
     setLoading(true);
     setErrorMsg(null);
 
+    // 1. Authenticate with Supabase Auth
     const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({ 
       email, 
       password 
@@ -26,6 +27,7 @@ export default function AdminLogin() {
       return;
     }
 
+    // 2. Fetch the Role from your Public Profiles table
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role, username')
@@ -34,19 +36,27 @@ export default function AdminLogin() {
 
     if (profileError || !profile) {
       await supabase.auth.signOut();
-      setErrorMsg("Account profile not found.");
+      setErrorMsg("Account configuration error. Profile not found.");
       setLoading(false);
       return;
     }
 
-    const allowedRoles = ['super_admin', 'operator', 'cashier'];
-    
-    if (allowedRoles.includes(profile.role)) {
-      router.push('/admin/dashboard');
-    } else {
-      await supabase.auth.signOut();
-      setErrorMsg("Access Denied: Unauthorized Personnel.");
-      setLoading(false);
+    // 3. SMART REDIRECT ENGINE
+    // This sends the user to their specific folder based on their DB role
+    switch (profile.role) {
+      case 'super_admin':
+        router.push('/admin/dashboard');
+        break;
+      case 'operator':
+        router.push('/operator/dashboard');
+        break;
+      case 'cashier':
+        router.push('/terminal'); // Direct to the Betting Terminal
+        break;
+      default:
+        await supabase.auth.signOut();
+        setErrorMsg("Access Denied: Unauthorized Personnel.");
+        setLoading(false);
     }
   };
 
@@ -54,6 +64,7 @@ export default function AdminLogin() {
     <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center p-6 font-sans">
       <div className="w-full max-w-md bg-[#111926] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden">
         
+        {/* Decorative background glow */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#10b981]/10 blur-[80px] rounded-full" />
         
         <form onSubmit={handleLogin} className="relative z-10 space-y-6">
