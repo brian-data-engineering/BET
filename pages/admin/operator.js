@@ -9,15 +9,18 @@ export default function ManageOperators() {
   const [form, setForm] = useState({ email: '', password: '', username: '' });
   const [loading, setLoading] = useState(false);
 
-  // 1. Fetch all Operators (linked to Super Admin)
-  const fetchOperators = async (id) => {
-    const { data } = await supabase
+  // 1. Fetch ALL Operators in the system
+  const fetchOperators = async () => {
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('parent_id', id)
-      .eq('role', 'operator')
+      .eq('role', 'operator') // We only filter by role 'operator' to see everyone
       .order('created_at', { ascending: false });
     
+    if (error) {
+      console.error("Fetch error:", error.message);
+      return;
+    }
     setOperators(data || []);
   };
 
@@ -26,7 +29,7 @@ export default function ManageOperators() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setAdminId(user.id);
-        fetchOperators(user.id);
+        fetchOperators(); // No longer need to pass ID here
       }
     };
     getSession();
@@ -36,36 +39,29 @@ export default function ManageOperators() {
     e.preventDefault();
     setLoading(true);
     
-    // 2. Register Operator in Auth with Metadata for the Trigger
+    // 2. Register Operator in Auth
+    // The Database Trigger we created handles the 'Email Confirmation' and 'Profile Creation'
     const { data, error } = await supabase.auth.signUp({ 
       email: form.email, 
       password: form.password,
       options: {
         data: { 
           username: form.username,
-          role: 'operator',      // Tells trigger to set profile role
-          parent_id: adminId     // Links to you (Super Admin)
+          role: 'operator',      
+          parent_id: adminId     
         }
       }
     });
     
     if (error) {
-      alert(error.message);
+      alert("Error: " + error.message);
       setLoading(false);
       return;
     }
 
-    // Note: The Trigger handles the profiles insert automatically now.
-    // If you don't have the trigger yet, keep the manual insert below:
-    /*
-    await supabase.from('profiles').insert([
-      { id: data.user.id, username: form.username, role: 'operator', parent_id: adminId, balance: 0 }
-    ]);
-    */
-    
-    alert(`Operator ${form.username} Activated!`);
+    alert(`Operator ${form.username} is now ACTIVE and VERIFIED.`);
     setForm({ email: '', password: '', username: '' });
-    fetchOperators(adminId);
+    fetchOperators();
     setLoading(false);
   };
 
@@ -136,7 +132,7 @@ export default function ManageOperators() {
                           </div>
                           <div className="flex flex-col">
                             <span className="font-black text-white uppercase italic tracking-tighter">{op.username}</span>
-                            <span className="text-[10px] text-slate-500 font-bold tracking-tight">ID: {op.id.slice(0,8)}...</span>
+                            <span className="text-[10px] text-slate-500 font-bold tracking-tight italic uppercase">{op.role}</span>
                           </div>
                         </div>
                       </td>
@@ -156,7 +152,7 @@ export default function ManageOperators() {
               </table>
               {operators.length === 0 && (
                 <div className="p-20 text-center text-slate-700 font-black uppercase text-xs tracking-widest italic opacity-20">
-                  No Operators Registered in the System
+                  No Operators Found in Database
                 </div>
               )}
             </div>
