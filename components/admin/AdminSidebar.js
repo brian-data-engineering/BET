@@ -8,7 +8,7 @@ export default function AdminSidebar() {
 
   const menuItems = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={20} /> },
-    { name: 'Cashiers', path: '/admin/cashiers', icon: <Users size={20} /> },
+    { name: 'Cashiers', path: '/admin/operator', icon: <Users size={20} /> },
     { name: 'Funding', path: '/admin/funding', icon: <Wallet size={20} /> },
     { name: 'Reports', path: '/admin/reports', icon: <FileText size={20} /> },
   ];
