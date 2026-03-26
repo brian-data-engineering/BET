@@ -25,7 +25,7 @@ export default function AdminSidebar() {
   // 1. Logic-only Menus
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={20} /> },
-    { name: 'Operators', path: '/admin/operators', icon: <ShieldCheck size={20} /> },
+    { name: 'Operators', path: '/admin/operator', icon: <ShieldCheck size={20} /> },
     { name: 'Funding', path: '/admin/funding', icon: <Wallet size={20} /> },
   ];
 
