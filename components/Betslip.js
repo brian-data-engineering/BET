@@ -1,4 +1,4 @@
-import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle, Lock } from 'lucide-react';
+import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle, Lock, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -11,28 +11,35 @@ export default function Betslip({ items = [], setItems }) {
 
   const MAX_GAMES = 20;
 
-  // Refresh clock every 30 seconds to catch kick-offs accurately
+  // Sync clock every 30 seconds
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
 
+  // --- TIMEZONE STRIP LOGIC ---
+  const isExpired = (startTime) => {
+    if (!startTime) return false;
+    // Strip +00/Z because scraper data is already local Kenyan Time
+    const cleanTime = startTime.replace('+00', '').replace('Z', '').replace(' ', 'T');
+    const matchDate = new Date(cleanTime);
+    return currentTime >= matchDate;
+  };
+
+  const expiredGames = items.filter(item => isExpired(item.startTime));
+  const hasExpired = expiredGames.length > 0;
+
   const removeItem = (id) => setItems(items.filter(item => item.id !== id));
   
+  const removeExpired = () => {
+    setItems(items.filter(item => !isExpired(item.startTime)));
+  };
+
   const clearAll = () => {
     setItems([]);
     setBookingCode(null);
     setCopied(false);
   };
-
-  // Logic: Check if a game has already started
-  const isExpired = (startTime) => {
-    if (!startTime) return false;
-    return currentTime > new Date(startTime);
-  };
-
-  const expiredGames = items.filter(item => isExpired(item.startTime));
-  const hasExpired = expiredGames.length > 0;
 
   const totalOdds = items.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1).toFixed(2);
   const potentialWinnings = (totalOdds * stake).toFixed(2);
@@ -101,13 +108,21 @@ export default function Betslip({ items = [], setItems }) {
           </h4>
         </div>
         {items.length > 0 && !bookingCode && (
-          <button onClick={clearAll} className="text-slate-500 hover:text-red-400 transition-colors">
-            <Trash2 size={16} />
-          </button>
+          <div className="flex gap-3">
+             {hasExpired && (
+                <button onClick={removeExpired} className="text-red-500 hover:text-red-400 transition-colors flex items-center gap-1">
+                   <RefreshCw size={14} className="animate-spin-slow" />
+                   <span className="text-[9px] font-black uppercase">Clear Started</span>
+                </button>
+             )}
+            <button onClick={clearAll} className="text-slate-500 hover:text-red-400 transition-colors">
+              <Trash2 size={16} />
+            </button>
+          </div>
         )}
       </div>
 
-      {/* BODY - SCROLLABLE */}
+      {/* BODY */}
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
         {items.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
@@ -165,22 +180,19 @@ export default function Betslip({ items = [], setItems }) {
         )}
       </div>
 
-      {/* FOOTER - FIXED AT BOTTOM */}
+      {/* FOOTER */}
       {items.length > 0 && !bookingCode && (
         <div className="p-4 bg-[#0b0f1a] border-t border-white/5 space-y-3 shrink-0">
           
-          {/* Warnings (Limit or Expiry) */}
-          {items.length >= MAX_GAMES && !hasExpired && (
-            <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-              <AlertTriangle size={14} />
-              <span className="text-[9px] font-black uppercase italic">Max limit of {MAX_GAMES} games reached</span>
-            </div>
-          )}
-
-          {hasExpired && (
+          {hasExpired ? (
             <div className="flex items-center gap-2 text-red-500 bg-red-500/10 p-2 rounded-lg border border-red-500/20">
               <Lock size={14} />
               <span className="text-[9px] font-black uppercase italic">Remove started games to continue</span>
+            </div>
+          ) : items.length >= MAX_GAMES && (
+            <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+              <AlertTriangle size={14} />
+              <span className="text-[9px] font-black uppercase italic">Max limit of {MAX_GAMES} games reached</span>
             </div>
           )}
 
@@ -204,7 +216,7 @@ export default function Betslip({ items = [], setItems }) {
             disabled={isBooking || items.length > MAX_GAMES || hasExpired} 
             className={`w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-[0_0_20px_rgba(245,158,11,0.1)] 
               ${hasExpired 
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5' 
                 : 'bg-[#f59e0b] text-[#0b0f1a] hover:bg-[#fbbf24] disabled:opacity-50'}`}
           >
             {hasExpired ? <Lock size={18} /> : <Zap size={18} className={`${isBooking ? 'animate-pulse' : 'fill-current'}`} />}
@@ -222,6 +234,13 @@ export default function Betslip({ items = [], setItems }) {
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1c2636; border-radius: 10px; }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+          animation: spin-slow 3s linear infinite;
+        }
       `}</style>
     </div>
   );
