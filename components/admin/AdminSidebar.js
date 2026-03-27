@@ -19,7 +19,7 @@ export default function AdminSidebar() {
           setRole(currentRole);
         } else {
           // If no user session found, redirect to login
-          router.push('/login');
+          router.push('/admin/login');
         }
       } catch (err) {
         console.error("Auth error:", err);
@@ -55,7 +55,7 @@ export default function AdminSidebar() {
     
     // Unified redirect to your shared login page
     // Using window.location.href ensures a clean slate and no 404s
-    window.location.href = '/login'; 
+    window.location.href = '/admin/login'; 
   };
 
   if (loading) {
