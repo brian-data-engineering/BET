@@ -1,52 +1,119 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { Wallet, Users, LayoutDashboard, ArrowUpRight } from 'lucide-react';
+import ProtectedRoute from '../../components/auth/ProtectedRoute';
+import { Wallet, Users, LayoutDashboard, ArrowUpRight, TrendingUp, Activity } from 'lucide-react';
 
 export default function OperatorDashboard() {
   const [stats, setStats] = useState({ balance: 0, staffCount: 0, totalBets: 0 });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Get Operator Balance
-      const { data: profile } = await supabase.from('profiles').select('balance').eq('id', user.id).single();
-      
-      // Count Cashiers owned by this Operator
-      const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
-        .eq('parent_id', user.id).eq('role', 'cashier');
+      if (user) {
+        // 1. Fetch Operator Profile for Balance
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', user.id)
+          .single();
+        
+        // 2. Count Cashiers owned by this Operator (Parent Link)
+        const { count } = await supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('parent_id', user.id)
+          .eq('role', 'cashier');
 
-      setStats({
-        balance: profile?.balance || 0,
-        staffCount: count || 0,
-        totalBets: 0 // Logic for bets table goes here later
-      });
+        setStats({
+          balance: profile?.balance || 0,
+          staffCount: count || 0,
+          totalBets: 0 // We will link this to the 'bets' table once data scraping is live
+        });
+      }
+      setLoading(false);
     };
     fetchStats();
   }, []);
 
   return (
-    <AdminLayout>
-      <div className="p-8 space-y-6 bg-[#0b0f1a] min-h-screen text-white">
-        <h1 className="text-2xl font-black uppercase italic tracking-tighter">Shop Command Center</h1>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard title="Current Float" value={`KES ${stats.balance}`} icon={<Wallet className="text-[#10b981]" />} color="border-[#10b981]/20" />
-          <StatCard title="Active Terminals" value={stats.staffCount} icon={<Users className="text-blue-500" />} color="border-blue-500/20" />
-          <StatCard title="Today's Bets" value={stats.totalBets} icon={<ArrowUpRight className="text-purple-500" />} color="border-purple-500/20" />
+    <ProtectedRoute allowedRoles={['operator']}>
+      <AdminLayout>
+        <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
+          
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div className="flex flex-col">
+              <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">Shop Command Center</h1>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 italic">Real-time Terminal Overview</p>
+            </div>
+            <div className="bg-[#111926] p-2 rounded-2xl border border-white/5 flex items-center gap-3 px-4">
+               <div className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse" />
+               <span className="text-[10px] font-black uppercase italic text-slate-400 tracking-widest">System Live</span>
+            </div>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <StatCard 
+              title="Available Shop Float" 
+              value={`KES ${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} 
+              subtitle="Ready for Distribution"
+              icon={<Wallet size={24} className="text-[#10b981]" />} 
+              color="border-[#10b981]/10" 
+              bg="bg-[#10b981]/5"
+            />
+            <StatCard 
+              title="Active Terminals" 
+              value={stats.staffCount} 
+              subtitle="Provisioned Cashier Nodes"
+              icon={<Users size={24} className="text-blue-500" />} 
+              color="border-blue-500/10" 
+              bg="bg-blue-500/5"
+            />
+            <StatCard 
+              title="Daily Volume" 
+              value={stats.totalBets} 
+              subtitle="Bets Processed Today"
+              icon={<Activity size={24} className="text-purple-500" />} 
+              color="border-purple-500/10" 
+              bg="bg-purple-500/5"
+            />
+          </div>
+
+          {/* Activity Placeholder */}
+          <div className="bg-[#111926] rounded-[2.5rem] border border-white/5 p-12 flex flex-col items-center justify-center text-center">
+              <TrendingUp size={48} className="text-slate-800 mb-4 opacity-30" />
+              <h3 className="text-slate-700 font-black uppercase text-xs tracking-[0.3em] italic">Live Market Feed Initializing...</h3>
+              <p className="text-[10px] text-slate-800 font-bold uppercase mt-2 italic tracking-widest">Connect Scraper to begin data visualization</p>
+          </div>
+
         </div>
-      </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   );
 }
 
-function StatCard({ title, value, icon, color }) {
+function StatCard({ title, value, subtitle, icon, color, bg }) {
   return (
-    <div className={`bg-[#111926] p-6 rounded-[2rem] border ${color} shadow-xl`}>
-      <div className="flex justify-between items-start mb-4">{icon}</div>
-      <p className="text-[10px] font-black text-slate-500 uppercase italic">{title}</p>
-      <h3 className="text-2xl font-black italic">{value}</h3>
+    <div className={`relative overflow-hidden bg-[#111926] p-8 rounded-[2.5rem] border ${color} shadow-2xl transition-transform hover:scale-[1.02] duration-300`}>
+      <div className={`absolute top-0 right-0 w-32 h-32 ${bg} rounded-full -mr-16 -mt-16 blur-3xl opacity-50`} />
+      
+      <div className="relative z-10">
+        <div className="flex justify-between items-start mb-6">
+          <div className="p-3 bg-[#0b0f1a] rounded-2xl border border-white/5">
+            {icon}
+          </div>
+        </div>
+        
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-slate-500 uppercase italic tracking-widest">{title}</p>
+          <h3 className="text-3xl font-black italic tracking-tighter text-white">{value}</h3>
+          <p className="text-[9px] font-bold text-slate-600 uppercase italic mt-2">{subtitle}</p>
+        </div>
+      </div>
     </div>
   );
 }
