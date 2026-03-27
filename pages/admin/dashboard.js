@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { Ticket, Users, Wallet, TrendingUp, Activity, PlusCircle } from 'lucide-react';
+import ProtectedRoute from '../../components/auth/ProtectedRoute';
+import { 
+  Ticket, 
+  Users, 
+  Wallet, 
+  TrendingUp, 
+  Activity, 
+  PlusCircle, 
+  ShieldCheck 
+} from 'lucide-react';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ 
@@ -18,8 +27,9 @@ export default function AdminDashboard() {
     const fetchDashboardData = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
         
-        // 1. Get the current user's profile and role
+        // 1. Fetch User Profile
         const { data: profile } = await supabase
           .from('profiles')
           .select('role, id, balance')
@@ -28,27 +38,31 @@ export default function AdminDashboard() {
 
         const isSuper = profile.role === 'super_admin';
 
-        // 2. Query based on Hierarchy
-        // Super Admin sees everything. Operator sees only their children (parent_id = id)
-        let cashierQuery = supabase.from('profiles').select('balance', { count: 'exact' });
+        // 2. Configure Queries based on Hierarchy
+        // Super Admin: Sees all profiles. Operator: Sees only their children.
+        let profilesQuery = supabase.from('profiles').select('role, balance', { count: 'exact' });
         let betsQuery = supabase.from('booked_bets').select('*', { count: 'exact' });
 
         if (!isSuper) {
-          cashierQuery = cashierQuery.eq('parent_id', profile.id);
-          // Assuming booked_bets has a 'created_by' or similar link to your cashier/operator
-          // If not, we can filter by the specific cashier IDs under this operator
+          profilesQuery = profilesQuery.eq('parent_id', profile.id).eq('role', 'cashier');
+          // Filter bets if your schema supports ownership (e.g., via cashier_id)
+        } else {
+          profilesQuery = profilesQuery.eq('role', 'operator');
         }
 
-        const { data: managedProfiles, count: accountsCount } = await cashierQuery;
-        const { count: betsCount } = await betsQuery;
+        const [{ data: managedProfiles, count: accountsCount }, { count: betsCount }] = await Promise.all([
+          profilesQuery,
+          betsQuery
+        ]);
 
-        // 3. Get Recent Activity
+        // 3. Get Recent Activity (Top 8 for a fuller feed)
         const { data: recent } = await supabase
           .from('booked_bets')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(8);
 
+        // Calculate Volume (Total float deployed in the network/shop)
         const volume = managedProfiles?.reduce((acc, c) => acc + parseFloat(c.balance || 0), 0) || 0;
 
         setStats({ 
@@ -57,10 +71,10 @@ export default function AdminDashboard() {
           managedAccounts: accountsCount || 0,
           recentBets: recent || [],
           role: profile.role,
-          myBalance: profile.balance
+          myBalance: profile.balance || 0
         });
       } catch (err) {
-        console.error("Dashboard Fetch Error:", err);
+        console.error("Dashboard Intelligence Error:", err);
       } finally {
         setLoading(false);
       }
@@ -70,105 +84,160 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <AdminLayout>
-      <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen">
-        {/* Header Section */}
-        <div className="flex justify-between items-end">
-          <div>
-            <h1 className="text-3xl font-black uppercase tracking-tighter text-white italic">
-              {stats.role === 'super_admin' ? 'Global Control' : 'Shop Terminal'}
-            </h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 italic">
-              Status: {stats.role?.replace('_', ' ')} active
-            </p>
-          </div>
+    <ProtectedRoute allowedRoles={['super_admin', 'operator']}>
+      <AdminLayout>
+        <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
           
-          <div className="flex gap-4">
-            {stats.role === 'operator' && (
-              <button className="flex items-center gap-2 bg-[#10b981] text-black px-4 py-2 rounded-xl font-black text-[10px] uppercase italic hover:bg-white transition-all">
-                <PlusCircle size={14} /> Create Cashier
-              </button>
-            )}
-            <div className="flex items-center gap-2 bg-[#10b981]/10 px-4 py-2 rounded-xl border border-[#10b981]/20">
-              <Activity size={14} className="text-[#10b981] animate-pulse" />
-              <span className="text-[10px] font-black text-[#10b981] uppercase italic">System Live</span>
+          {/* Header Section */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2 mb-1">
+                {stats.role === 'super_admin' ? (
+                  <ShieldCheck size={16} className="text-[#10b981]" />
+                ) : (
+                  <Activity size={16} className="text-blue-500" />
+                )}
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">
+                  Network Intelligence
+                </span>
+              </div>
+              <h1 className="text-4xl font-black uppercase tracking-tighter italic">
+                {stats.role === 'super_admin' ? 'Global Control' : 'Shop Command'}
+              </h1>
+            </div>
+            
+            <div className="flex gap-4">
+              <div className="flex items-center gap-2 bg-[#10b981]/5 px-5 py-3 rounded-2xl border border-[#10b981]/10 shadow-xl shadow-[#10b981]/5">
+                <div className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse" />
+                <span className="text-[10px] font-black text-[#10b981] uppercase italic tracking-widest">
+                  {stats.role?.replace('_', ' ')} System Online
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <StatCard 
-            title="My Float" 
-            value={parseFloat(stats.myBalance).toLocaleString()} 
-            icon={<Wallet className="text-[#10b981]" />} 
-            isMoney 
-          />
-          <StatCard 
-            title={stats.role === 'super_admin' ? "Global Volume" : "Staff Float Total"} 
-            value={stats.totalVolume.toLocaleString()} 
-            icon={<TrendingUp className="text-[#10b981]" />} 
-            isMoney 
-          />
-          <StatCard 
-            title="Total Bookings" 
-            value={stats.totalBets} 
-            icon={<Ticket className="text-[#10b981]" />} 
-          />
-          <StatCard 
-            title={stats.role === 'super_admin' ? "Total Operators" : "Active Cashiers"} 
-            value={stats.managedAccounts} 
-            icon={<Users className="text-[#10b981]" />} 
-          />
-        </div>
+          {/* Master Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard 
+              title="Liquidity Reserved" 
+              value={stats.myBalance.toLocaleString()} 
+              icon={<Wallet />} 
+              isMoney 
+              color="text-white"
+            />
+            <StatCard 
+              title={stats.role === 'super_admin' ? "Network Volume" : "Deployed Float"} 
+              value={stats.totalVolume.toLocaleString()} 
+              icon={<TrendingUp />} 
+              isMoney 
+              color="text-[#10b981]"
+            />
+            <StatCard 
+              title="Global Bookings" 
+              value={stats.totalBets} 
+              icon={<Ticket />} 
+            />
+            <StatCard 
+              title={stats.role === 'super_admin' ? "Active Operators" : "Managed Terminals"} 
+              value={stats.managedAccounts} 
+              icon={<Users />} 
+            />
+          </div>
 
-        {/* Recent Activity */}
-        <div className="bg-[#111926] border border-white/5 rounded-3xl overflow-hidden shadow-2xl">
-          <div className="p-6 border-b border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <TrendingUp size={20} className="text-slate-500" />
-              <h2 className="text-xs font-black uppercase tracking-widest text-slate-200 italic">Live Booking Feed</h2>
+          {/* Dashboard Body */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            
+            {/* Live Booking Feed */}
+            <div className="xl:col-span-2 bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
+              <div className="p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+                <div className="flex items-center gap-3">
+                  <Activity size={20} className="text-[#10b981]" />
+                  <h2 className="text-sm font-black uppercase tracking-[0.2em] italic">Live Transmission</h2>
+                </div>
+                <button className="text-[9px] font-black text-slate-500 hover:text-white transition-colors uppercase italic tracking-widest">View All Activity</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-[#0b0f1a]/50 text-slate-600 text-[9px] font-black uppercase tracking-widest italic">
+                    <tr>
+                      <th className="p-6">Protocol ID</th>
+                      <th className="p-6">Markets</th>
+                      <th className="p-6">Coefficient</th>
+                      <th className="p-6 text-right">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {stats.recentBets.map((bet) => (
+                      <tr key={bet.id} className="hover:bg-white/[0.02] transition-colors group cursor-default">
+                        <td className="p-6 font-black text-[#10b981] tracking-tighter uppercase italic text-sm">{bet.booking_code}</td>
+                        <td className="p-6 text-slate-400 font-bold uppercase text-[11px] italic">
+                          {Array.isArray(bet.items) ? `${bet.items.length} Match Events` : 'Single Event'}
+                        </td>
+                        <td className="p-6 font-mono text-white font-black text-sm">
+                          <span className="text-slate-600 mr-1 text-[10px]">@</span>
+                          {parseFloat(bet.total_odds || 0).toFixed(2)}
+                        </td>
+                        <td className="p-6 text-right text-slate-500 text-[10px] font-black uppercase italic tracking-widest">
+                          {new Date(bet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </td>
+                      </tr>
+                    ))}
+                    {stats.recentBets.length === 0 && (
+                      <tr>
+                        <td colSpan="4" className="p-20 text-center opacity-20 italic font-black text-[10px] uppercase tracking-[0.5em]">
+                          No Active Bookings Detected
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[#0b0f1a]/50 text-slate-500 text-[10px] font-black uppercase tracking-widest italic">
-                <tr>
-                  <th className="p-4">Ref Code</th>
-                  <th className="p-4">Market</th>
-                  <th className="p-4">Odds</th>
-                  <th className="p-4 text-right">Time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {stats.recentBets.map((bet) => (
-                  <tr key={bet.id} className="hover:bg-white/[0.02] transition-colors group">
-                    <td className="p-4 font-black text-[#10b981] tracking-widest uppercase italic">{bet.booking_code}</td>
-                    <td className="p-4 text-slate-300 font-bold uppercase text-xs">{bet.items?.length || 0} Events</td>
-                    <td className="p-4 font-mono text-slate-400">@{parseFloat(bet.total_odds || 0).toFixed(2)}</td>
-                    <td className="p-4 text-right text-slate-500 text-[10px] font-bold">
-                      {new Date(bet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+            {/* Side Action Panel */}
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-[#10b981] to-[#059669] p-8 rounded-[2.5rem] text-black relative overflow-hidden group">
+                 <div className="absolute top-0 right-0 p-4 opacity-20">
+                   <PlusCircle size={80} className="rotate-12 group-hover:rotate-45 transition-transform duration-500" />
+                 </div>
+                 <h3 className="text-xl font-black uppercase italic tracking-tighter mb-2 relative z-10">Quick Action</h3>
+                 <p className="text-[10px] font-bold uppercase leading-relaxed mb-6 opacity-80 relative z-10 italic">
+                   Provision new accounts or manage network nodes instantly.
+                 </p>
+                 <button className="w-full bg-white text-black font-black py-4 rounded-2xl text-xs uppercase italic tracking-widest hover:shadow-2xl transition-all active:scale-95 relative z-10">
+                   {stats.role === 'super_admin' ? 'Create Operator' : 'Add Terminal'}
+                 </button>
+              </div>
+
+              <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 space-y-4">
+                 <div className="flex items-center gap-3 mb-2">
+                    <TrendingUp size={16} className="text-blue-500" />
+                    <span className="text-[10px] font-black uppercase italic tracking-widest">Network Load</span>
+                 </div>
+                 <div className="h-1 w-full bg-[#0b0f1a] rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 w-[65%] rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                 </div>
+                 <p className="text-[9px] font-bold text-slate-500 uppercase italic tracking-widest">System Efficiency: 99.4%</p>
+              </div>
+            </div>
+
           </div>
         </div>
-      </div>
-    </AdminLayout>
+      </AdminLayout>
+    </ProtectedRoute>
   );
 }
 
-function StatCard({ title, value, icon, isMoney }) {
+function StatCard({ title, value, icon, isMoney, color = "text-white" }) {
   return (
-    <div className="bg-[#111926] p-6 rounded-3xl border border-white/5 relative overflow-hidden group hover:border-[#10b981]/30 transition-all">
-      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+    <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group hover:border-white/10 transition-all shadow-xl">
+      <div className="absolute -top-4 -right-4 p-8 text-white opacity-[0.03] group-hover:opacity-[0.08] transition-opacity scale-150 rotate-12">
         {icon}
       </div>
-      <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.2em] mb-2 italic">{title}</p>
-      <p className={`text-3xl font-black tracking-tighter italic ${isMoney ? 'text-[#10b981]' : 'text-white'}`}>
-        {isMoney && <span className="text-sm mr-1">KES</span>}{value}
+      <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.2em] mb-3 italic">{title}</p>
+      <p className={`text-3xl font-black tracking-tighter italic ${color}`}>
+        {isMoney && <span className="text-sm mr-2 opacity-50 not-italic">KES</span>}
+        {value}
       </p>
     </div>
   );
