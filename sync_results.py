@@ -1,12 +1,20 @@
 import os
+import sys
 import requests
 from supabase import create_client, Client
 
-# These will be set in your GitHub Actions secrets
-url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
+# These pull from your GitHub Actions Secrets (mapped in your YAML)
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_KEY")
+
+# Safety check to stop the script if secrets are missing
+if not url or not key:
+    print("❌ ERROR: SUPABASE_URL or SUPABASE_KEY is missing.")
+    sys.exit(1)
+
 supabase: Client = create_client(url, key)
 
+# Hardcoded Odds API Key in the URL
 API_URL = "https://api.odds-api.io/v3/events?apiKey=394691c0a855a9c21e847bd3600eb8059fc7c57dcfd181c225176ad85973c187&sport=football&limit=1000"
 
 def sync_results():
@@ -15,7 +23,7 @@ def sync_results():
         events = response.json()
 
         if not isinstance(events, list):
-            print("Invalid response from API")
+            print("❌ Invalid response from API (Expected a list).")
             return
 
         formatted_data = []
@@ -41,9 +49,13 @@ def sync_results():
                 "half_time_away": p1.get('away')
             })
 
-        # Upsert into Supabase
+        if not formatted_data:
+            print("⚠️ No data to sync.")
+            return
+
+        # Upsert into Supabase (Updates existing IDs, inserts new ones)
         result = supabase.table("results").upsert(formatted_data).execute()
-        print(f"✅ Successfully synced {len(formatted_data)} results.")
+        print(f"✅ Successfully synced {len(formatted_data)} results to 'results' table.")
 
     except Exception as e:
         print(f"❌ Error during sync: {e}")
