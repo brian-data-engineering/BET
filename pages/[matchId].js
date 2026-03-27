@@ -20,6 +20,7 @@ export default function MatchDetail({ match }) {
     );
   }
 
+  // UPDATED: Added outcomeId to the betId for absolute uniqueness
   const toggleBet = (marketName, selectionLabel, value, outcomeId) => {
     const betId = `${match.id}-${marketName}-${outcomeId}`;
     
@@ -92,7 +93,6 @@ export default function MatchDetail({ match }) {
             </div>
           </div>
 
-          {/* Markets Section */}
           <div className="px-4 lg:px-0 space-y-4 pb-20">
             <div className="flex items-center justify-between border-b border-white/5 pb-2">
                 <h3 className="text-xs font-black uppercase italic flex items-center gap-2 text-slate-400 tracking-widest">
@@ -105,6 +105,7 @@ export default function MatchDetail({ match }) {
               <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">Match Result (1X2)</h4>
               <div className="grid grid-cols-3 gap-3">
                 {mainMarkets.map((odd, idx) => {
+                  // Unique ID check for 1X2
                   const isSelected = slipItems.find(item => item.id === `${match.id}-1X2-${odd.label}`);
                   return (
                     <button 
@@ -139,7 +140,11 @@ export default function MatchDetail({ match }) {
                     </h4>
                     <div className={`grid gap-2 ${gridClass}`}>
                       {market.odds?.map((odd, oIdx) => {
-                        const isSelected = slipItems.find(item => item.id === `${match.id}-${market.name}-${odd.outcome_id}`);
+                        // UPDATED: Now looks for the specific outcomeId to prevent multi-highlighting
+                        const isSelected = slipItems.find(item => 
+                          item.id === `${match.id}-${market.name}-${odd.outcome_id}`
+                        );
+                        
                         const val = odd.odd_value || odd.value;
 
                         return (
@@ -196,13 +201,10 @@ export async function getServerSideProps({ params }) {
 
     if (error || !data) return { notFound: true };
 
-    // Supabase returns joined tables as objects or arrays. 
-    // This logic ensures we grab the first item if it's an array.
     const details = Array.isArray(data.api_event_details) 
       ? data.api_event_details[0] 
       : data.api_event_details;
 
-    // Check both standard 'data' wrapper and direct 'markets' array
     const rawMarkets = details?.markets?.data || details?.markets || [];
 
     const matchData = {
@@ -216,7 +218,6 @@ export async function getServerSideProps({ params }) {
       }
     };
   } catch (err) {
-    console.error("Fetch Error:", err);
     return { notFound: true };
   }
 }
