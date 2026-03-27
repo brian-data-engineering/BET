@@ -21,12 +21,16 @@ export default function Home({ initialMatches = [] }) {
     { id: 'table-tennis', name: 'Table Tennis', icon: '🏓' },
   ];
 
-  // Since Betika data is already EAT, we just extract the HH:mm from the string directly
+  /**
+   * ZERO-CONVERSION TIME HELPER
+   * Bypasses timezones. Simply extracts HH:mm from strings like "2026-03-27 19:00:00+00"
+   */
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    // Splits "2026-03-27 19:30:00" and takes "19:30:00", then slices to "19:30"
-    const timePart = dateString.includes(' ') ? dateString.split(' ')[1] : dateString;
-    return timePart ? timePart.slice(0, 5) : 'TBD';
+    
+    // Look for the HH:mm pattern (e.g., 19:00)
+    const timeMatch = dateString.match(/(\d{2}:\d{2})/);
+    return timeMatch ? timeMatch[0] : 'TBD';
   };
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
@@ -90,6 +94,7 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
+      {/* Hero Banner */}
       <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
         <div className="max-w-[1440px] mx-auto h-[160px] relative">
             <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
