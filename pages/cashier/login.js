@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
-import { Ticket, Lock, AlertCircle } from 'lucide-react';
+import { Ticket, Lock, AlertCircle, ShieldCheck, Cpu } from 'lucide-react';
 
 export default function CashierLogin() {
   const [email, setEmail] = useState('');
@@ -16,7 +16,7 @@ export default function CashierLogin() {
     setErrorMsg(null);
 
     // 1. Authenticate with Supabase
-    const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({ 
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ 
       email, 
       password 
     });
@@ -27,77 +27,99 @@ export default function CashierLogin() {
       return;
     }
 
-    // 2. Identify Role from Metadata Badge
+    // 2. Identify Role from Metadata
+    const user = data?.user;
     const role = user?.app_metadata?.role;
 
-    if (role === 'cashier') {
-      router.push('/cashier/dashboard');
-    } else if (role === 'admin') {
-      // Optional: Allow admins to access cashier terminal too
+    // Allow both Cashiers and Admins to access the terminal
+    if (role === 'cashier' || role === 'super_admin' || role === 'operator') {
       router.push('/cashier/dashboard');
     } else {
       await supabase.auth.signOut();
-      setErrorMsg("Access Denied: You do not have a Cashier Access Key.");
+      setErrorMsg("PROTOCOL ERROR: Your credentials lack Terminal Authorization.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-gray-800 rounded-[2rem] p-8 shadow-xl">
-        
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-lucra-green/20 rounded-xl flex items-center justify-center mx-auto mb-4 border border-lucra-green/30">
-            <Ticket className="text-lucra-green" size={28} />
+    <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center p-6 font-sans">
+      {/* Background Decorative Element */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-[#10b981]/5 rounded-full blur-[120px]" />
+        <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[120px]" />
+      </div>
+
+      <div className="w-full max-w-[440px] z-10">
+        <div className="bg-[#111926] border border-white/5 rounded-[3rem] p-10 shadow-2xl backdrop-blur-sm">
+          
+          <div className="text-center mb-10">
+            <div className="w-16 h-16 bg-[#10b981] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-[#10b981]/20 rotate-3 group-hover:rotate-0 transition-transform">
+              <Ticket className="text-black" size={32} />
+            </div>
+            <h1 className="text-3xl font-black uppercase italic tracking-tighter italic">Lucra Terminal</h1>
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.4em] mt-2 italic">Authentication Protocol</p>
           </div>
-          <h1 className="text-xl font-bold uppercase tracking-tight">Lucra Cashier</h1>
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Point of Sale Terminal</p>
+
+          {errorMsg && (
+            <div className="mb-8 bg-red-500/10 border border-red-500/20 p-5 rounded-2xl flex items-start gap-4 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="text-red-500 shrink-0" size={20} />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-red-500 uppercase italic">System Alert</span>
+                <p className="text-xs font-bold text-red-200/80 leading-relaxed">{errorMsg}</p>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[9px] font-black text-slate-500 uppercase ml-4 italic tracking-widest">Operator Identity</label>
+              <div className="relative">
+                <input 
+                  type="email" 
+                  placeholder="ID@LUCRA.NETWORK" 
+                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold uppercase placeholder:text-slate-800" 
+                  onChange={e => setEmail(e.target.value)} 
+                  required
+                />
+                <Cpu className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[9px] font-black text-slate-500 uppercase ml-4 italic tracking-widest">Access Key</label>
+              <div className="relative">
+                <input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold placeholder:text-slate-800" 
+                  onChange={e => setPassword(e.target.value)} 
+                  required
+                />
+                <ShieldCheck className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+              </div>
+            </div>
+
+            <button 
+              disabled={loading} 
+              className="w-full bg-[#10b981] text-black font-black py-6 rounded-2xl hover:bg-white active:scale-[0.97] transition-all flex items-center justify-center gap-3 mt-4 italic shadow-xl shadow-[#10b981]/10 disabled:opacity-30"
+            >
+              {loading ? (
+                <div className="w-6 h-6 border-4 border-black/20 border-t-black rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Lock size={18} />
+                  <span className="text-sm uppercase tracking-widest">Initialize Terminal</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-10 pt-8 border-t border-white/5 text-center">
+             <p className="text-[8px] font-black text-slate-700 uppercase tracking-[0.5em] italic">
+               SECURED BY LUCRA ENCRYPTION MESH
+             </p>
+          </div>
         </div>
-
-        {errorMsg && (
-          <div className="mb-6 bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-3">
-            <AlertCircle className="text-red-500 shrink-0" size={18} />
-            <p className="text-xs font-bold text-red-400">{errorMsg}</p>
-          </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-[10px] text-gray-500 font-bold uppercase ml-1">Cashier ID (Email)</label>
-            <input 
-              type="email" 
-              placeholder="cashier@lucra.bet" 
-              className="w-full bg-black border border-gray-800 p-4 rounded-xl outline-none focus:border-lucra-green transition-all text-sm" 
-              onChange={e => setEmail(e.target.value)} 
-              required
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] text-gray-500 font-bold uppercase ml-1">Access Key</label>
-            <input 
-              type="password" 
-              placeholder="••••••••" 
-              className="w-full bg-black border border-gray-800 p-4 rounded-xl outline-none focus:border-lucra-green transition-all text-sm" 
-              onChange={e => setPassword(e.target.value)} 
-              required
-            />
-          </div>
-
-          <button 
-            disabled={loading} 
-            className="w-full bg-lucra-green text-black font-black py-4 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
-          >
-            {loading ? (
-              <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-            ) : (
-              <>
-                <Lock size={18} />
-                OPEN TERMINAL
-              </>
-            )}
-          </button>
-        </form>
       </div>
     </div>
   );
