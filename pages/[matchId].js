@@ -75,7 +75,7 @@ export default function MatchDetail({ match }) {
             {/* Background Image Container */}
             <div 
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40"
-                style={{ backgroundImage: `url('/c7bf5e222eda7591bd59189676d3e7e7.webp')` }}
+                style={{ backgroundImage: `url('https://v3.traincdn.com/genfiles/cms/desktop/media_asset/c7bf5e222eda7591bd59189676d3e7e7.webp')` }}
             />
             {/* Gradient Overlay for Readability */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#111926] via-[#111926]/40 to-transparent pointer-events-none" />
