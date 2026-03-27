@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Clock, BarChart2, Zap, Play, Lock } from 'lucide-react';
+import { Clock, Zap, Play, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -20,28 +20,35 @@ export default function Home({ initialMatches = [] }) {
     return () => clearInterval(timer);
   }, []);
 
-  // 2. TIME HELPERS: Fixed for Kenyan Scrapped Data
+  // 2. ROBUST TIME HELPERS: Manual parsing to bypass browser "Invalid Date" quirks
   const getMatchDate = (dateString) => {
     if (!dateString) return null;
-    // We strip +00 and Z because Betika data is already local Kenyan Time
-    const cleanTime = dateString.replace('+00', '').replace('Z', '').replace(' ', 'T');
-    return new Date(cleanTime);
+    try {
+      // Strip timezone/Z and split into date and time
+      const clean = dateString.replace('Z', '').split('+')[0].trim();
+      const [datePart, timePart] = clean.split(/[T ]/); // Handles " " or "T" separators
+      
+      if (!datePart || !timePart) return new Date(dateString);
+
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hours, minutes, seconds] = timePart.split(':').map(Number);
+
+      // Month is 0-indexed (Jan = 0)
+      return new Date(year, month - 1, day, hours, minutes, seconds || 0);
+    } catch (e) {
+      return null;
+    }
   };
 
   const isMatchStarted = (commenceTime) => {
     const matchDate = getMatchDate(commenceTime);
-    if (!matchDate) return false;
-    return currentTime >= matchDate;
+    return matchDate ? currentTime >= matchDate : false;
   };
 
   const formatFixedTime = (dateString) => {
-    const matchDate = getMatchDate(dateString);
-    if (!matchDate) return 'TBD';
-    return matchDate.toLocaleTimeString('en-GB', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        hour12: false 
-    });
+    // Direct regex extract is safer for display than relying on Date objects
+    const timeMatch = dateString?.match(/(\d{2}:\d{2})/);
+    return timeMatch ? timeMatch[0] : 'TBD';
   };
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
@@ -81,15 +88,14 @@ export default function Home({ initialMatches = [] }) {
     let filtered = initialMatches.filter(m => {
       const league = (m.league_name || '').toLowerCase();
       const sport = (m.sport_key || '').toLowerCase();
-      const isVirtual = league.includes('ebasketball') || league.includes('esoccer') || league.includes('srl') || league.includes('electronic') || league.includes('cyber') || sport.startsWith('esport');
+      const isVirtual = league.includes('ebasketball') || league.includes('esoccer') || 
+                        league.includes('srl') || league.includes('electronic') || 
+                        league.includes('cyber') || sport.startsWith('esport');
       return !isVirtual;
     });
 
     filtered = filtered.filter(m => m.sport_key === activeTab);
-
-    if (selectedLeague) {
-      filtered = filtered.filter(m => m.league_name === selectedLeague);
-    }
+    if (selectedLeague) filtered = filtered.filter(m => m.league_name === selectedLeague);
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -100,7 +106,6 @@ export default function Home({ initialMatches = [] }) {
         m.league_name?.toLowerCase().includes(q)
       );
     }
-    
     return filtered;
   }, [initialMatches, selectedLeague, searchQuery, activeTab]);
 
@@ -108,7 +113,7 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
-      {/* Hero Banner */}
+      {/* Banner */}
       <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
         <div className="max-w-[1440px] mx-auto h-[160px] relative">
             <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
@@ -119,128 +124,91 @@ export default function Home({ initialMatches = [] }) {
                     <p className="text-sm font-bold text-white/80 mt-2 italic uppercase tracking-wider">On all weekly losses</p>
                 </div>
             </div>
-            <img src="https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=1000" alt="Promo" className="w-full h-full object-cover opacity-30 object-center" />
+            <img src="https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=1000" alt="Promo" className="w-full h-full object-cover opacity-30" />
         </div>
       </div>
 
-      <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-0">
+      <div className="max-w-[1440px] mx-auto grid grid-cols-12">
         <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
-          <Sidebar 
-            onSelectLeague={(league) => setSelectedLeague(league)} 
-            onClearFilter={() => setSelectedLeague(null)} 
-          />
+          <Sidebar onSelectLeague={setSelectedLeague} onClearFilter={() => setSelectedLeague(null)} />
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* Tabs Navigation */}
+          {/* Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button 
                 key={tab.id}
-                onClick={() => {
-                    setActiveTab(tab.id);
-                    setSelectedLeague(null);
-                }}
-                className={`py-4 px-5 text-[11px] font-black uppercase tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${
-                  activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'
-                }`}
+                onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }}
+                className={`py-4 px-5 text-[11px] font-black uppercase tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'}`}
               >
-                <span className={`${activeTab === tab.id ? 'grayscale-0' : 'grayscale'} transition-all`}>
-                    {tab.icon}
-                </span>
+                <span className={activeTab === tab.id ? 'grayscale-0' : 'grayscale'}>{tab.icon}</span>
                 {tab.name}
-                {activeTab === tab.id && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#10b981]" />
-                )}
+                {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#10b981]" />}
               </button>
             ))}
           </div>
 
-          {/* Table Header */}
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
-            <div className="col-span-7 flex items-center gap-2">
-              Event Details 
-              {selectedLeague && (
-                <span className="bg-[#10b981]/10 text-[#10b981] px-2 py-0.5 rounded border border-[#10b981]/20 ml-2">
-                  • {selectedLeague}
-                </span>
-              )}
-            </div>
-            <div className="col-span-5 grid grid-cols-3 text-center">
-              <span>1</span><span>X</span><span>2</span>
-            </div>
+            <div className="col-span-7">Event Details {selectedLeague && <span className="text-[#10b981] ml-2">• {selectedLeague}</span>}</div>
+            <div className="col-span-5 grid grid-cols-3 text-center"><span>1</span><span>X</span><span>2</span></div>
           </div>
 
           <div className="divide-y divide-white/5">
-            {displayMatches.length > 0 ? (
-              displayMatches.map((match) => {
-                const started = isMatchStarted(match.commence_time);
-                const currentSelection = slipItems.find(item => item.matchId === match.id);
+            {displayMatches.map((match) => {
+              const started = isMatchStarted(match.commence_time);
+              const currentSelection = slipItems.find(item => item.matchId === match.id);
 
-                return (
-                  <div key={match.id} className={`grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors ${started ? 'opacity-60 grayscale-[0.5]' : ''}`}>
-                    <div className="col-span-7 pr-4 group">
-                      <Link href={`/${match.id}`}>
-                        <div className="cursor-pointer">
-                          <div className="flex items-center gap-2 mb-1">
-                            {started ? (
-                              <span className="text-[9px] bg-red-600/20 text-red-500 px-2 py-0.5 rounded flex items-center gap-1 font-black italic uppercase animate-pulse border border-red-600/20">
-                                <Play size={8} fill="currentColor" /> Live
-                              </span>
-                            ) : (
-                              <>
-                                <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
-                                  {match.display_league || match.league_name}
-                                </span>
-                                <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
-                                  <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.home_team)}</span>
-                            <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.away_team)}</span>
-                          </div>
-                        </div>
-                      </Link>
-                    </div>
-
-                    <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11 relative">
-                      {[
-                          { label: '1', val: match.home_odds },
-                          { label: 'X', val: match.draw_odds },
-                          { label: '2', val: match.away_odds }
-                      ].map((odd) => (
-                        <button
-                          key={odd.label}
-                          disabled={started}
-                          onClick={() => toggleBet(odd.label, odd.val, match)}
-                          className={`rounded-md flex items-center justify-center font-black text-[10px] italic transition-all border ${
-                            currentSelection?.selection === odd.label
-                              ? 'bg-[#10b981] border-[#10b981] text-white'
-                              : started 
-                                ? 'bg-[#0b0f1a] border-white/5 text-slate-700 cursor-not-allowed'
-                                : 'bg-[#1c2636] border-white/5 text-slate-300 hover:bg-[#253247] hover:text-[#10b981]'
-                          }`}
-                        >
-                          {started ? <Lock size={12} /> : (odd.val ? parseFloat(odd.val).toFixed(2) : '—')}
-                        </button>
-                      ))}
-                    </div>
+              return (
+                <div key={match.id} className={`grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors ${started ? 'opacity-60' : ''}`}>
+                  <div className="col-span-7 pr-4 group">
+                    <Link href={`/${match.id}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {started ? (
+                          <span className="text-[9px] bg-red-600/20 text-red-500 px-2 py-0.5 rounded flex items-center gap-1 font-black italic uppercase animate-pulse border border-red-600/20">
+                            <Play size={8} fill="currentColor" /> Live
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">{match.display_league || match.league_name}</span>
+                            <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic"><Clock size={10} /> {formatFixedTime(match.commence_time)}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981]">{cleanName(match.home_team)}</span>
+                        <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981]">{cleanName(match.away_team)}</span>
+                      </div>
+                    </Link>
                   </div>
-                );
-              })
-            ) : (
-              <div className="py-20 text-center opacity-20 flex flex-col items-center">
-                <Zap size={48} className="mb-4" />
-                <p className="font-black uppercase italic tracking-widest text-sm">No matches available</p>
-              </div>
-            )}
+
+                  <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
+                    {[
+                      { label: '1', val: match.home_odds },
+                      { label: 'X', val: match.draw_odds },
+                      { label: '2', val: match.away_odds }
+                    ].map((odd) => (
+                      <button
+                        key={odd.label}
+                        disabled={started}
+                        onClick={() => toggleBet(odd.label, odd.val, match)}
+                        className={`rounded-md flex items-center justify-center font-black text-[10px] italic border transition-all ${
+                          currentSelection?.selection === odd.label ? 'bg-[#10b981] border-[#10b981] text-white' : 
+                          started ? 'bg-[#0b0f1a] border-white/5 text-slate-700 cursor-not-allowed' : 
+                          'bg-[#1c2636] border-white/5 text-slate-300 hover:text-[#10b981]'
+                        }`}
+                      >
+                        {started ? <Lock size={12} /> : (odd.val ? parseFloat(odd.val).toFixed(2) : '—')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </main>
 
-        <aside className="hidden lg:col-span-3 lg:block p-4 space-y-4">
+        <aside className="hidden lg:col-span-3 lg:block p-4">
           <Betslip items={slipItems} setItems={setSlipItems} />
         </aside>
       </div>
@@ -250,21 +218,15 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    const allowedSports = ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'];
     const { data } = await supabase
       .from('api_events')
       .select('*')
-      .in('sport_key', allowedSports)
+      .in('sport_key', ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'])
       .order('commence_time', { ascending: true })
       .limit(1000); 
 
-    return { 
-      props: { 
-        initialMatches: JSON.parse(JSON.stringify(data || [])) 
-      } 
-    };
+    return { props: { initialMatches: data || [] } };
   } catch (err) {
-    console.error("Fetch error:", err);
     return { props: { initialMatches: [] } };
   }
 }
