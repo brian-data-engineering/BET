@@ -14,11 +14,37 @@ export default function Home({ initialMatches = [] }) {
   const { slipItems, setSlipItems } = useBets(); 
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Keep the clock updated every 30 seconds for precision
+  // 1. UPDATE CLOCK: Keeps the "Live" status accurate in real-time
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
+
+  // 2. TIME HELPERS: Fixed for Kenyan Scrapped Data
+  const getMatchDate = (dateString) => {
+    if (!dateString) return null;
+    // We strip +00 and Z because Betika data is already local Kenyan Time
+    const cleanTime = dateString.replace('+00', '').replace('Z', '').replace(' ', 'T');
+    return new Date(cleanTime);
+  };
+
+  const isMatchStarted = (commenceTime) => {
+    const matchDate = getMatchDate(commenceTime);
+    if (!matchDate) return false;
+    return currentTime >= matchDate;
+  };
+
+  const formatFixedTime = (dateString) => {
+    const matchDate = getMatchDate(dateString);
+    if (!matchDate) return 'TBD';
+    return matchDate.toLocaleTimeString('en-GB', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false 
+    });
+  };
+
+  const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
   const sportTabs = [
     { id: 'soccer', name: 'Soccer', icon: '⚽' },
@@ -28,22 +54,7 @@ export default function Home({ initialMatches = [] }) {
     { id: 'table-tennis', name: 'Table Tennis', icon: '🏓' },
   ];
 
-  const formatFixedTime = (dateString) => {
-    if (!dateString) return 'TBD';
-    const timeMatch = dateString.match(/(\d{2}:\d{2})/);
-    return timeMatch ? timeMatch[0] : 'TBD';
-  };
-
-  const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
-
-  // HELPER: Check if match is started
-  const isMatchStarted = (commenceTime) => {
-    if (!commenceTime) return false;
-    return currentTime > new Date(commenceTime);
-  };
-
   const toggleBet = (selection, value, match) => {
-    // BLOCK adding started games
     if (isMatchStarted(match.commence_time)) return;
 
     const matchId = match.id; 
@@ -61,7 +72,7 @@ export default function Home({ initialMatches = [] }) {
         selection: selection,
         marketName: '1X2',
         odds: value,
-        startTime: match.commence_time // Passed for Betslip auto-expiry
+        startTime: match.commence_time 
       }];
     });
   };
@@ -160,7 +171,6 @@ export default function Home({ initialMatches = [] }) {
             </div>
           </div>
 
-          {/* Match List */}
           <div className="divide-y divide-white/5">
             {displayMatches.length > 0 ? (
               displayMatches.map((match) => {
@@ -168,7 +178,7 @@ export default function Home({ initialMatches = [] }) {
                 const currentSelection = slipItems.find(item => item.matchId === match.id);
 
                 return (
-                  <div key={match.id} className={`grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors ${started ? 'opacity-50 grayscale-[0.3]' : ''}`}>
+                  <div key={match.id} className={`grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors ${started ? 'opacity-60 grayscale-[0.5]' : ''}`}>
                     <div className="col-span-7 pr-4 group">
                       <Link href={`/${match.id}`}>
                         <div className="cursor-pointer">
@@ -194,16 +204,8 @@ export default function Home({ initialMatches = [] }) {
                           </div>
                         </div>
                       </Link>
-                      <div className="mt-2 flex items-center gap-3 text-[10px] font-bold text-slate-500">
-                         <span className="flex items-center gap-1 cursor-pointer hover:text-[#10b981] italic">
-                            <BarChart2 size={12} /> Stats
-                         </span>
-                         <span className="text-slate-800">|</span>
-                         <span className="cursor-pointer hover:text-white italic">+ 45 Markets</span>
-                      </div>
                     </div>
 
-                    {/* Betting Buttons */}
                     <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11 relative">
                       {[
                           { label: '1', val: match.home_odds },
