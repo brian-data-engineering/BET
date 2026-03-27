@@ -1,6 +1,6 @@
-// pages/results.js
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import Navbar from '../components/Navbar'; // Adjust this path based on your folder structure
 
 export default function ResultsPage() {
   const [results, setResults] = useState([]);
@@ -11,7 +11,6 @@ export default function ResultsPage() {
   }, [searchTerm]);
 
   async function fetchResults() {
-    // Strictly filter for 'settled' matches and increase limit to 1000
     let query = supabase
       .from('results')
       .select('*')
@@ -20,12 +19,10 @@ export default function ResultsPage() {
       .limit(1000);
 
     if (searchTerm) {
-      // Logic: Search home/away names while maintaining the 'settled' filter
       query = query.or(`home_name.ilike.%${searchTerm}%,away_name.ilike.%${searchTerm}%`);
     }
 
     const { data, error } = await query;
-    
     if (error) {
       console.error("Fetch error:", error.message);
       return;
@@ -34,18 +31,33 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#060b18] text-white p-6 font-sans">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#060b18] text-white font-sans">
+      {/* 1. IMPORTED NAVBAR */}
+      <Navbar />
+
+      <div className="max-w-4xl mx-auto p-6">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <h1 className="text-2xl font-black italic text-[#10b981] uppercase tracking-tighter">
-            LUCRA <span className="text-white">RESULTS</span>
-          </h1>
-          <input 
-            type="text"
-            placeholder="Search Team or ID..."
-            className="bg-slate-900 border border-white/10 px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-[#10b981] w-full md:w-64"
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <div>
+            <h1 className="text-2xl font-black italic text-[#10b981] uppercase tracking-tighter">
+              LUCRA <span className="text-white">RESULTS</span>
+            </h1>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+              Last 1,000 Settled Matches
+            </p>
+          </div>
+          
+          <div className="relative w-full md:w-64">
+            <input 
+              type="text"
+              placeholder="Search Team or ID..."
+              className="bg-slate-900 border border-white/10 px-4 py-2 pl-10 rounded-lg text-sm focus:outline-none focus:border-[#10b981] w-full"
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {/* Simple Search Icon SVG */}
+            <svg className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
         </header>
 
         <div className="grid gap-4">
@@ -78,8 +90,8 @@ export default function ResultsPage() {
               </div>
             ))
           ) : (
-            <div className="text-center py-20 text-slate-600">
-              No settled results found.
+            <div className="text-center py-20 text-slate-600 border border-dashed border-white/5 rounded-2xl">
+              No settled results found for "{searchTerm}"
             </div>
           )}
         </div>
@@ -89,13 +101,8 @@ export default function ResultsPage() {
 }
 
 function StatusBadge({ status }) {
-  const colors = {
-    settled: "bg-green-500/10 text-green-500 border-green-500/20",
-    cancelled: "bg-red-500/10 text-red-500 border-red-500/20",
-    live: "bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse"
-  };
   return (
-    <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded border ${colors[status] || colors.live}`}>
+    <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded border bg-green-500/10 text-green-500 border-green-500/20">
       {status}
     </span>
   );
