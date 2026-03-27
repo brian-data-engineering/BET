@@ -34,7 +34,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
     const now = new Date().toISOString();
     
     // 1. Define allowed sports for the whitelist
-    const allowedSports = ['soccer', 'basketball', 'hockey', 'tennis', 'tabletennis'];
+    const allowedSports = ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'];
 
     // 2. Fetch data with strict whitelist
     const { data } = await supabase
