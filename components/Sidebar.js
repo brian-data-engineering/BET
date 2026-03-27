@@ -20,8 +20,8 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
     "soccer": { name: "Soccer", icon: "⚽" },
     "basketball": { name: "Basketball", icon: "🏀" },
     "tennis": { name: "Tennis", icon: "🎾" },
-    "hockey": { name: "Ice Hockey", icon: "🏒" },
-    "tabletennis": { name: "Table Tennis", icon: "🏓" },
+    "ice-hockey": { name: "Ice Hockey", icon: "🏒" },
+    "table-tennis": { name: "Table Tennis", icon: "🏓" },
     "default": { name: "Other", icon: "🏆" }
   };
 
