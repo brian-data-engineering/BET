@@ -10,7 +10,18 @@ export default function MatchDetail({ match }) {
   const router = useRouter();
   const { slipItems, setSlipItems } = useBets();
 
+  // CLEANING HELPERS
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
+
+  /**
+   * ZERO-CONVERSION TIME HELPER
+   * Extracts HH:mm directly from the string to ignore browser timezone offsets.
+   */
+  const formatFixedTime = (dateString) => {
+    if (!dateString) return 'TBD';
+    const timeMatch = dateString.match(/(\d{2}:\d{2})/);
+    return timeMatch ? timeMatch[0] : 'TBD';
+  };
 
   if (router.isFallback || !match) {
     return (
@@ -20,15 +31,12 @@ export default function MatchDetail({ match }) {
     );
   }
 
-  // FIXED: We now accept a generated 'uniqueId' to ensure no two buttons overlap
   const toggleBet = (marketName, selectionLabel, value, uniqueId) => {
     setSlipItems(prev => {
       if (prev.find(item => item.id === uniqueId)) {
         return prev.filter(item => item.id !== uniqueId);
       }
-      
       const otherMatches = prev.filter(item => item.matchId !== match.id);
-      
       return [...otherMatches, {
         id: uniqueId,
         matchId: match.id,
@@ -62,29 +70,41 @@ export default function MatchDetail({ match }) {
             </h1>
           </div>
 
-          <div className="bg-[#111926] border-y lg:border border-white/5 lg:rounded-2xl overflow-hidden relative">
-            <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none" />
-            <div className="flex justify-between items-center p-8 md:p-12 relative z-10">
+          {/* VS HEADER WITH CUSTOM BACKGROUND */}
+          <div className="bg-[#111926] border-y lg:border border-white/5 lg:rounded-2xl overflow-hidden relative min-h-[220px] md:min-h-[280px] flex items-center">
+            {/* Background Image Container */}
+            <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40"
+                style={{ backgroundImage: `url('/c7bf5e222eda7591bd59189676d3e7e7.webp')` }}
+            />
+            {/* Gradient Overlay for Readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#111926] via-[#111926]/40 to-transparent pointer-events-none" />
+            
+            <div className="w-full flex justify-between items-center p-8 md:p-12 relative z-10">
               <div className="flex-1 flex flex-col items-center text-center">
-                <div className="w-16 h-16 md:w-24 md:h-24 bg-[#1c2636] rounded-full mb-4 flex items-center justify-center border border-white/5 shadow-xl">
-                  <Shield size={40} className="text-[#10b981] opacity-50" />
+                <div className="w-16 h-16 md:w-24 md:h-24 bg-[#1c2636]/80 backdrop-blur-sm rounded-full mb-4 flex items-center justify-center border border-white/10 shadow-2xl">
+                  <Shield size={40} className="text-[#10b981] opacity-80" />
                 </div>
-                <h2 className="text-lg md:text-2xl font-black uppercase italic leading-tight">{cleanName(match.home_team)}</h2>
+                <h2 className="text-lg md:text-3xl font-black uppercase italic leading-tight tracking-tighter drop-shadow-md">
+                    {cleanName(match.home_team)}
+                </h2>
               </div>
 
               <div className="px-4 flex flex-col items-center">
-                <div className="text-[#f59e0b] text-3xl md:text-5xl font-black italic mb-2 tracking-tighter">VS</div>
-                <div className="bg-[#0b0f1a] px-4 py-1.5 rounded text-[10px] font-black uppercase italic text-slate-400 border border-white/5 flex items-center gap-2">
-                   <Clock size={12} className="text-[#10b981]" />
-                   {new Date(match.commence_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                <div className="text-[#f59e0b] text-4xl md:text-6xl font-black italic mb-3 tracking-tighter drop-shadow-[0_0_15px_rgba(245,158,11,0.3)]">VS</div>
+                <div className="bg-[#10b981] px-4 py-1.5 rounded-full text-[11px] font-black uppercase italic text-white flex items-center gap-2 shadow-lg">
+                   <Clock size={12} />
+                   {formatFixedTime(match.commence_time)}
                 </div>
               </div>
 
               <div className="flex-1 flex flex-col items-center text-center">
-                <div className="w-16 h-16 md:w-24 md:h-24 bg-[#1c2636] rounded-full mb-4 flex items-center justify-center border border-white/5 shadow-xl">
-                  <Shield size={40} className="text-[#10b981] opacity-50" />
+                <div className="w-16 h-16 md:w-24 md:h-24 bg-[#1c2636]/80 backdrop-blur-sm rounded-full mb-4 flex items-center justify-center border border-white/10 shadow-2xl">
+                  <Shield size={40} className="text-[#10b981] opacity-80" />
                 </div>
-                <h2 className="text-lg md:text-2xl font-black uppercase italic leading-tight">{cleanName(match.away_team)}</h2>
+                <h2 className="text-lg md:text-3xl font-black uppercase italic leading-tight tracking-tighter drop-shadow-md">
+                    {cleanName(match.away_team)}
+                </h2>
               </div>
             </div>
           </div>
@@ -136,8 +156,6 @@ export default function MatchDetail({ match }) {
                     </h4>
                     <div className={`grid gap-2 ${gridClass}`}>
                       {market.odds?.map((odd, oIdx) => {
-                        // GUARANTEED UNIQUE ID: Match + Market Name + Selection Name + Loop Index
-                        // This prevents "Under 2.5" and "Under 3.5" from ever sharing a highlight.
                         const uniqueId = `${match.id}-${market.name}-${odd.display}-${oIdx}`;
                         const isSelected = slipItems.find(item => item.id === uniqueId);
                         const val = odd.odd_value || odd.value;
