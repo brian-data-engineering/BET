@@ -21,7 +21,6 @@ export default function MatchDetail({ match }) {
   }
 
   const toggleBet = (marketName, selectionLabel, value, outcomeId) => {
-    // Using outcomeId ensures a unique reference for specific odds within a market
     const betId = `${match.id}-${marketName}-${outcomeId}`;
     
     setSlipItems(prev => {
@@ -101,7 +100,7 @@ export default function MatchDetail({ match }) {
                 </h3>
             </div>
 
-            {/* 1. Main 1X2 Market (from parent match data) */}
+            {/* 1. Main 1X2 Market */}
             <div className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
               <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">Match Result (1X2)</h4>
               <div className="grid grid-cols-3 gap-3">
@@ -127,22 +126,20 @@ export default function MatchDetail({ match }) {
               </div>
             </div>
 
-            {/* 2. Deep Markets (from JSONB array) */}
+            {/* 2. Deep Markets */}
             {match.deep_markets && match.deep_markets.length > 0 ? (
               match.deep_markets.map((market, mIdx) => {
-                // Adaptive grid: 2 cols for smaller markets, 3 or 4 for larger ones like Multigoals
-                const gridClass = market.odds.length > 6 ? 'grid-cols-3 md:grid-cols-4' : 
-                                 market.odds.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
+                const gridClass = market.odds?.length > 6 ? 'grid-cols-3 md:grid-cols-4' : 
+                                 market.odds?.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
 
                 return (
                   <div key={mIdx} className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
                     <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">
-                      {market.name}
+                      {cleanName(market.name)}
                     </h4>
                     <div className={`grid gap-2 ${gridClass}`}>
-                      {market.odds.map((odd, oIdx) => {
+                      {market.odds?.map((odd, oIdx) => {
                         const isSelected = slipItems.find(item => item.id === `${match.id}-${market.name}-${odd.outcome_id}`);
-                        // Fix for NaN: Check for 'odd_value' (Betika key) or fallback to 'value'
                         const val = odd.odd_value || odd.value;
 
                         return (
@@ -199,8 +196,14 @@ export async function getServerSideProps({ params }) {
 
     if (error || !data) return { notFound: true };
 
-    // Match the 'data' property from the JSON you shared
-    const rawMarkets = data.api_event_details?.markets?.data || [];
+    // Supabase returns joined tables as objects or arrays. 
+    // This logic ensures we grab the first item if it's an array.
+    const details = Array.isArray(data.api_event_details) 
+      ? data.api_event_details[0] 
+      : data.api_event_details;
+
+    // Check both standard 'data' wrapper and direct 'markets' array
+    const rawMarkets = details?.markets?.data || details?.markets || [];
 
     const matchData = {
       ...data,
@@ -213,6 +216,7 @@ export async function getServerSideProps({ params }) {
       }
     };
   } catch (err) {
+    console.error("Fetch Error:", err);
     return { notFound: true };
   }
 }
