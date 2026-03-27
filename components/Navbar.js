@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link'; // 1. Import Link from Next.js
+import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { 
   Search, Trophy, Activity, Rocket, Zap, Gift, Smartphone, X, Lock, Phone, LogOut 
@@ -7,11 +7,9 @@ import {
 
 const Navbar = ({ onSearch }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [modalMode, setModalMode] = useState('login');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -31,42 +29,26 @@ const Navbar = ({ onSearch }) => {
     const cleanPhone = `254${phoneNumber}`;
 
     try {
-      if (modalMode === 'register') {
-        const { data, error } = await supabase
-          .from('profiles')
-          .insert([{ phone: cleanPhone, password: password, balance: 0.00 }])
-          .select()
-          .single();
+      // Strictly LOGIN LOGIC
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('phone', cleanPhone)
+        .eq('password', password)
+        .single();
 
-        if (error) {
-          if (error.code === '23505') throw new Error("This number is already registered.");
-          throw error;
-        }
-        loginUser(data);
-      } else {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('phone', cleanPhone)
-          .eq('password', password)
-          .single();
-
-        if (error || !data) throw new Error("Invalid phone or password.");
-        loginUser(data);
-      }
+      if (error || !data) throw new Error("Invalid phone or password.");
+      
+      setUser(data);
+      localStorage.setItem('lucra_user', JSON.stringify(data));
+      setShowAuthModal(false);
+      setPhoneNumber('');
+      setPassword('');
     } catch (err) {
       alert(err.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  const loginUser = (userData) => {
-    setUser(userData);
-    localStorage.setItem('lucra_user', JSON.stringify(userData));
-    setShowAuthModal(false);
-    setPhoneNumber('');
-    setPassword('');
   };
 
   const handleLogout = () => {
@@ -76,13 +58,13 @@ const Navbar = ({ onSearch }) => {
 
   return (
     <nav className="sticky top-0 z-50 shadow-xl">
-      {/* --- AUTH MODAL --- */}
+      {/* --- LOGIN MODAL ONLY --- */}
       {showAuthModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
           <div className="bg-[#0b0f1a] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#004d3d]">
               <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">
-                {modalMode === 'login' ? 'Welcome Back' : 'Join BrianBet'}
+                Welcome Back
               </h2>
               <button onClick={() => setShowAuthModal(false)} className="text-white/50 hover:text-white">
                 <X size={24}/>
@@ -126,15 +108,7 @@ const Navbar = ({ onSearch }) => {
                 disabled={loading} 
                 className="w-full bg-[#10b981] hover:bg-[#0da371] text-white font-black py-4 rounded-xl shadow-lg uppercase tracking-widest transition-all disabled:opacity-50"
               >
-                {loading ? "Verifying..." : modalMode === 'login' ? "Login" : "Register Account"}
-              </button>
-              
-              <button 
-                type="button" 
-                onClick={() => setModalMode(modalMode === 'login' ? 'register' : 'login')} 
-                className="w-full text-xs font-bold text-slate-400 hover:text-[#10b981] uppercase"
-              >
-                {modalMode === 'login' ? "New here? Register now" : "Already have an account? Login"}
+                {loading ? "Verifying..." : "Login to BrianBet"}
               </button>
             </form>
           </div>
@@ -167,10 +141,12 @@ const Navbar = ({ onSearch }) => {
               </button>
             </div>
           ) : (
-            <>
-              <button onClick={() => {setModalMode('login'); setShowAuthModal(true);}} className="text-sm font-bold text-[#10b981] px-2">Login</button>
-              <button onClick={() => {setModalMode('register'); setShowAuthModal(true);}} className="bg-[#10b981] text-white text-sm font-bold px-5 py-2 rounded shadow-lg">Register</button>
-            </>
+            <button 
+              onClick={() => setShowAuthModal(true)} 
+              className="bg-[#10b981] text-white text-sm font-bold px-6 py-2 rounded shadow-lg transition-all active:scale-95"
+            >
+              Login
+            </button>
           )}
         </div>
       </div>
@@ -179,12 +155,9 @@ const Navbar = ({ onSearch }) => {
       <div className="bg-[#003d30] px-4 py-2 border-t border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-6 text-[11px] font-bold text-slate-400 uppercase italic">
           <button className="hover:text-white flex items-center gap-1.5"><Activity size={14} /> Live Score</button>
-          
-          {/* 2. REWRITTEN RESULTS LINK */}
           <Link href="/results" className="hover:text-white flex items-center gap-1.5 transition-colors">
             <Trophy size={14} /> Results
           </Link>
-
           <button className="hover:text-white flex items-center gap-1.5 text-[#f59e0b]"><Smartphone size={14} /> App</button>
         </div>
         
