@@ -1,4 +1,11 @@
-// ... existing imports
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
+import Navbar from '../components/Navbar';
+import Betslip from '../components/Betslip';
+import Sidebar from '../components/Sidebar';
+import { useBets } from '../context/BetContext'; 
+import { Clock, BarChart2, Zap } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
   const [activeTab, setActiveTab] = useState('soccer');
@@ -6,7 +13,7 @@ export default function Home({ initialMatches = [] }) {
   const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
 
-  // 1. Defined icons for the top tabs to match Sidebar style
+  // Defined icons and IDs to match your DB sport_keys
   const sportTabs = [
     { id: 'soccer', name: 'Soccer', icon: '⚽' },
     { id: 'basketball', name: 'Basketball', icon: '🏀' },
@@ -17,7 +24,24 @@ export default function Home({ initialMatches = [] }) {
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
-  // ... toggleBet logic remains the same
+  const toggleBet = (selection, value, match) => {
+    const matchId = match.id; 
+    const betId = `${matchId}-${selection}`;
+    
+    setSlipItems(prev => {
+      if (prev.find(item => item.id === betId)) {
+        return prev.filter(item => item.id !== betId);
+      }
+      const otherMatches = prev.filter(item => item.matchId !== matchId);
+      return [...otherMatches, {
+        id: betId,
+        matchId: matchId,
+        matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
+        selection: selection,
+        odds: value
+      }];
+    });
+  };
 
   const displayMatches = useMemo(() => {
     let filtered = initialMatches.filter(m => {
@@ -35,7 +59,7 @@ export default function Home({ initialMatches = [] }) {
       return !isVirtual;
     });
 
-    // 2. Filter by the active sport tab
+    // Filter by the active top sport tab
     filtered = filtered.filter(m => m.sport_key === activeTab);
 
     if (selectedLeague) {
@@ -47,6 +71,7 @@ export default function Home({ initialMatches = [] }) {
       filtered = filtered.filter(m => 
         m.home_team?.toLowerCase().includes(q) || 
         m.away_team?.toLowerCase().includes(q) ||
+        m.display_league?.toLowerCase().includes(q) ||
         m.league_name?.toLowerCase().includes(q)
       );
     }
@@ -58,7 +83,19 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
-      {/* Promo Banner remains the same */}
+      <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
+        <div className="max-w-[1440px] mx-auto h-[160px] relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
+                <div className="max-w-md">
+                    <h2 className="text-4xl font-black italic uppercase leading-none text-white tracking-tighter">
+                        Get <span className="text-[#f59e0b]">5% Cashback</span>
+                    </h2>
+                    <p className="text-sm font-bold text-white/80 mt-2 italic uppercase tracking-wider">On all weekly losses</p>
+                </div>
+            </div>
+            <img src="https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=1000" alt="Promo" className="w-full h-full object-cover opacity-30 object-center" />
+        </div>
+      </div>
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-0">
         <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
@@ -69,15 +106,14 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          
-          {/* UPDATED TOP SPORT TABS WITH ICONS */}
+          {/* SPORT TABS WITH ICONS */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button 
                 key={tab.id}
                 onClick={() => {
                     setActiveTab(tab.id);
-                    setSelectedLeague(null); 
+                    setSelectedLeague(null);
                 }}
                 className={`py-4 px-5 text-[11px] font-black uppercase tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${
                   activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'
@@ -94,19 +130,78 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* ... Match List headers and mapping logic remains the same */}
+          <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
+            <div className="col-span-7 flex items-center gap-2">
+              Event Details 
+              {selectedLeague && (
+                <span className="bg-[#10b981]/10 text-[#10b981] px-2 py-0.5 rounded border border-[#10b981]/20 ml-2">
+                  • {selectedLeague}
+                </span>
+              )}
+            </div>
+            <div className="col-span-5 grid grid-cols-3 text-center">
+              <span>1</span><span>X</span><span>2</span>
+            </div>
+          </div>
 
           <div className="divide-y divide-white/5">
             {displayMatches.length > 0 ? (
-              displayMatches.map((match) => (
-                  // ... Match row component (same as previous)
-              ))
+              displayMatches.map((match) => {
+                const currentSelection = slipItems.find(item => item.matchId === match.id);
+                return (
+                  <div key={match.id} className="grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors">
+                    <div className="col-span-7 pr-4 group">
+                      <Link href={`/${match.id}`}>
+                        <div className="cursor-pointer">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
+                              {match.display_league || match.league_name}
+                            </span>
+                            <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                              <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.home_team)}</span>
+                            <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.away_team)}</span>
+                          </div>
+                        </div>
+                      </Link>
+                      <div className="mt-2 flex items-center gap-3 text-[10px] font-bold text-slate-500">
+                         <span className="flex items-center gap-1 cursor-pointer hover:text-[#10b981] italic">
+                            <BarChart2 size={12} /> Stats
+                         </span>
+                         <span className="text-slate-800">|</span>
+                         <span className="cursor-pointer hover:text-white italic">+ 45 Markets</span>
+                      </div>
+                    </div>
+
+                    <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
+                      {[
+                          { label: '1', val: match.home_odds },
+                          { label: 'X', val: match.draw_odds },
+                          { label: '2', val: match.away_odds }
+                      ].map((odd) => (
+                        <button
+                          key={odd.label}
+                          onClick={() => toggleBet(odd.label, odd.val, match)}
+                          className={`rounded-md flex items-center justify-center font-black text-xs italic transition-all border ${
+                            currentSelection?.selection === odd.label
+                              ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                              : 'bg-[#1c2636] border-white/5 text-slate-300 hover:bg-[#253247]'
+                          }`}
+                        >
+                          {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
             ) : (
               <div className="py-20 text-center opacity-20 flex flex-col items-center">
                 <Zap size={48} className="mb-4" />
-                <p className="font-black uppercase italic tracking-widest text-sm">
-                    No {activeTab.replace('-', ' ')} matches found
-                </p>
+                <p className="font-black uppercase italic tracking-widest text-sm">No {activeTab.replace('-', ' ')} matches found</p>
               </div>
             )}
           </div>
@@ -114,11 +209,29 @@ export default function Home({ initialMatches = [] }) {
 
         <aside className="hidden lg:col-span-3 lg:block p-4 space-y-4">
           <Betslip items={slipItems} setItems={setSlipItems} />
-          {/* ... Booking code section */}
         </aside>
       </div>
     </div>
   );
 }
 
-// ... getServerSideProps remains the same
+export async function getServerSideProps() {
+  try {
+    const allowedSports = ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'];
+    const { data } = await supabase
+      .from('api_events')
+      .select('*')
+      .in('sport_key', allowedSports)
+      .order('commence_time', { ascending: true })
+      .limit(1000); 
+
+    return { 
+      props: { 
+        initialMatches: JSON.parse(JSON.stringify(data || [])) 
+      } 
+    };
+  } catch (err) {
+    console.error("Fetch error:", err);
+    return { props: { initialMatches: [] } };
+  }
+}
