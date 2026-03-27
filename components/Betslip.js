@@ -24,23 +24,45 @@ export default function Betslip({ items = [], setItems }) {
     setIsBooking(true);
 
     try {
-      // Generate unique 6-character code
-      const shortCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      // 1. AUTO-CLEAN: Purge codes older than 10 minutes from 'betsnow'
+      const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      await supabase.from('betsnow').delete().lt('created_at', tenMinsAgo);
 
+      let isUnique = false;
+      let finalCode = '';
+      let attempts = 0;
+
+      // 2. GENERATE UNIQUE 4-DIGIT CODE
+      while (!isUnique && attempts < 15) {
+        finalCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+        const { data } = await supabase
+          .from('betsnow')
+          .select('booking_code')
+          .eq('booking_code', finalCode)
+          .single();
+
+        if (!data) isUnique = true;
+        attempts++;
+      }
+
+      // 3. SAVE TO NEW 'betsnow' TABLE
       const { error } = await supabase
-        .from('booking_codes')
+        .from('betsnow')
         .insert([{ 
-          code: shortCode,
+          booking_code: finalCode,
           selections: items,
-          total_odds: parseFloat(totalOdds),
-          stake: parseFloat(stake)
+          // We can also store metadata if you added columns for odds/stake
+          // total_odds: parseFloat(totalOdds), 
+          // stake: parseFloat(stake)
         }]);
 
       if (error) throw error;
-      setBookingCode(shortCode);
+      setBookingCode(finalCode);
+
     } catch (err) {
       console.error("Booking Error:", err.message);
-      alert("System Busy: Could not generate code.");
+      alert("System Busy: Could not generate 4-digit code.");
     } finally {
       setIsBooking(false);
     }
@@ -80,14 +102,16 @@ export default function Betslip({ items = [], setItems }) {
             <div className="w-14 h-14 bg-[#10b981]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#10b981]/20">
               <CheckCircle2 size={28} className="text-[#10b981]" />
             </div>
-            <h3 className="text-sm font-black uppercase italic tracking-tighter text-white mb-1">Code Generated</h3>
-            <p className="text-[10px] text-slate-500 mb-6 uppercase font-bold italic">Valid at any Lucra shop or online</p>
+            <h3 className="text-sm font-black uppercase italic tracking-tighter text-white mb-1">Booking Successful</h3>
+            <p className="text-[10px] text-red-500 mb-6 uppercase font-black italic animate-pulse">
+              Expires in 10 minutes
+            </p>
             
             <div 
               onClick={copyToClipboard}
               className="bg-[#0b0f1a] border-2 border-dashed border-[#10b981]/40 p-6 rounded-xl mb-6 cursor-pointer hover:border-[#10b981] transition-all relative group"
             >
-              <span className="text-3xl font-black tracking-widest text-[#f59e0b]">
+              <span className="text-5xl font-black tracking-[10px] text-[#f59e0b] ml-[10px]">
                 {bookingCode}
               </span>
               <div className="absolute top-2 right-2 opacity-30 group-hover:opacity-100 transition-opacity text-white">
@@ -118,9 +142,8 @@ export default function Betslip({ items = [], setItems }) {
                   <div className="flex justify-between items-end">
                     <div>
                       <p className="text-xs font-black text-white italic">{item.selection}</p>
-                      {/* FIXED: Dynamic market name display */}
                       <p className="text-[9px] text-[#10b981] font-bold uppercase italic">
-                        Market: {item.marketName}
+                        {item.marketName}
                       </p>
                     </div>
                     <span className="text-sm font-black text-[#f59e0b] italic">
@@ -158,7 +181,7 @@ export default function Betslip({ items = [], setItems }) {
                 className="w-full bg-[#f59e0b] text-[#0b0f1a] font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] hover:bg-[#fbbf24] disabled:opacity-50 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
               >
                 <Zap size={18} className={`${isBooking ? 'animate-pulse' : 'fill-current'}`} />
-                <span className="uppercase tracking-tighter italic text-sm">{isBooking ? 'GENERATING...' : 'BOOK BET CODE'}</span>
+                <span className="uppercase tracking-tighter italic text-sm">{isBooking ? 'CLEANING SYSTEM...' : 'BOOK BET CODE'}</span>
               </button>
 
               <p className="text-[8px] text-center font-black uppercase italic text-slate-600 tracking-widest flex items-center justify-center gap-2">
