@@ -1,65 +1,141 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import { Search, Receipt, CheckCircle2, XCircle } from 'lucide-react';
+import { 
+  Search, 
+  Receipt, 
+  CheckCircle2, 
+  ShieldAlert, 
+  Coins, 
+  Clock,
+  UserCheck,
+  AlertTriangle
+} from 'lucide-react';
 
 export default function TicketManager() {
   const [ticketId, setTicketId] = useState('');
   const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const findTicket = async () => {
-    const { data } = await supabase.from('tickets').select('*').eq('id', ticketId).single();
-    setTicket(data);
+    if (!ticketId) return;
+    setLoading(true);
+    setTicket(null);
+    setError(null);
+    
+    // Querying the betsnow table
+    // We search by the bet_code (the one printed on the receipt)
+    const { data, error: fetchError } = await supabase
+      .from('betsnow') 
+      .select('*')
+      .eq('bet_code', ticketId.toUpperCase().trim())
+      .single();
+
+    if (fetchError || !data) {
+      setError("TICKET NOT FOUND IN SYSTEM");
+    } else {
+      setTicket(data);
+    }
+    setLoading(false);
+  };
+
+  const handlePayout = async () => {
+    // Safety check: Only 'won' tickets that haven't been paid yet
+    if (!ticket || ticket.status !== 'won' || ticket.is_paid) return;
+    
+    setPayoutLoading(true);
+    
+    // Update the betsnow record
+    const { error: updateError } = await supabase
+      .from('betsnow')
+      .update({ 
+        is_paid: true, 
+        paid_at: new Date().toISOString(),
+        // Assuming your auth context provides the cashier's identity
+      })
+      .eq('id', ticket.id);
+
+    if (!updateError) {
+      setTicket({ ...ticket, is_paid: true });
+      alert("PAYOUT SUCCESSFUL: Transaction Logged.");
+    } else {
+      alert("DATABASE ERROR: Payout could not be processed.");
+    }
+    setPayoutLoading(false);
   };
 
   return (
     <CashierLayout>
-      <div className="p-8 max-w-3xl mx-auto">
-        <div className="mb-10 text-center">
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter">Ticket Validator</h1>
-          <p className="text-gray-500 text-sm">Scan or enter the 8-digit Ticket ID</p>
+      <div className="p-8 max-w-4xl mx-auto min-h-screen bg-[#0b0f1a] text-white">
+        
+        {/* Header */}
+        <div className="mb-12 text-center">
+          <div className="inline-flex p-3 bg-[#10b981]/10 rounded-2xl mb-4 border border-[#10b981]/20">
+            <Receipt className="text-[#10b981]" size={24} />
+          </div>
+          <h1 className="text-4xl font-black italic uppercase tracking-tighter">Betsnow Validator</h1>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1 italic text-center">Cashier Payout Terminal v2.0</p>
         </div>
 
-        <div className="flex gap-4 mb-10">
-          <div className="relative flex-1">
-            <Receipt className="absolute left-4 top-4 text-gray-500" size={20} />
+        {/* Search Input */}
+        <div className="flex gap-4 mb-12">
+          <div className="relative flex-1 group">
+            <Search className="absolute left-5 top-5 text-slate-500 group-focus-within:text-[#10b981] transition-colors" size={20} />
             <input 
-              placeholder="Enter Ticket ID (e.g. LC-4492)" 
-              className="w-full bg-slate-900 p-4 pl-12 rounded-2xl border border-gray-800 focus:border-lucra-green outline-none font-mono"
+              placeholder="ENTER BET CODE (E.G. BT-9920)" 
+              className="w-full bg-[#111926] p-5 pl-14 rounded-2xl border border-white/5 focus:border-[#10b981] outline-none font-black tracking-[0.2em] text-sm uppercase placeholder:text-slate-700 transition-all shadow-inner"
               onChange={e => setTicketId(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && findTicket()}
             />
           </div>
-          <button onClick={findTicket} className="bg-lucra-green text-black px-10 rounded-2xl font-black flex items-center gap-2 hover:bg-white transition-all">
-            <Search size={20}/> VALIDATE
+          <button 
+            onClick={findTicket} 
+            disabled={loading}
+            className="bg-[#10b981] text-black px-12 rounded-2xl font-black flex items-center gap-3 hover:bg-white transition-all active:scale-95 shadow-xl shadow-[#10b981]/10 uppercase italic text-sm"
+          >
+            {loading ? <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : "Verify"}
           </button>
         </div>
 
-        {ticket && (
-          <div className="bg-slate-900 rounded-[2.5rem] p-10 border border-gray-800 animate-in fade-in zoom-in-95">
-             <div className="flex justify-between border-b border-gray-800 pb-6 mb-6">
-                <div>
-                    <p className="text-[10px] text-gray-500 font-black uppercase">Status</p>
-                    <span className={`text-xl font-black uppercase ${ticket.status === 'won' ? 'text-lucra-green' : 'text-red-500'}`}>
-                        {ticket.status}
-                    </span>
-                </div>
-                <div className="text-right">
-                    <p className="text-[10px] text-gray-500 font-black uppercase">Potential Payout</p>
-                    <p className="text-xl font-black">KES {ticket.payout}</p>
-                </div>
-             </div>
-             {ticket.status === 'won' && !ticket.is_paid ? (
-                 <button className="w-full bg-lucra-green text-black font-black py-5 rounded-2xl flex items-center justify-center gap-2">
-                    <CheckCircle2 size={20} /> PAY OUT KES {ticket.payout}
-                 </button>
-             ) : (
-                 <div className="text-center py-4 text-gray-500 font-bold uppercase text-xs italic">
-                    {ticket.is_paid ? "Ticket Already Paid" : "Ticket Not Eligible for Payout"}
-                 </div>
-             )}
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-3xl flex items-center gap-4 animate-shake">
+            <AlertTriangle className="text-red-500" size={24} />
+            <p className="text-xs font-black uppercase italic text-red-400 tracking-widest">{error}</p>
           </div>
         )}
-      </div>
-    </CashierLayout>
-  );
-}
+
+        {/* Ticket Data */}
+        {ticket && (
+          <div className="bg-[#111926] rounded-[3rem] p-10 border border-white/5 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+            
+            <div className="flex justify-between items-start border-b border-white/5 pb-8 mb-8">
+              <div>
+                <p className="text-[9px] text-slate-500 font-black uppercase italic tracking-widest mb-1">Ticket Reference</p>
+                <h2 className="text-3xl font-black text-[#10b981] italic tracking-tighter">{ticket.bet_code}</h2>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] text-slate-500 font-black uppercase italic tracking-widest mb-1">Current Status</p>
+                <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase italic ${ticket.status === 'won' ? 'bg-[#10b981]/20 text-[#10b981]' : 'bg-slate-800 text-slate-500'}`}>
+                  {ticket.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+              <DataTile label="Stake" value={`KES ${parseFloat(ticket.stake || 0).toLocaleString()}`} />
+              <DataTile label="Total Odds" value={`x${parseFloat(ticket.total_odds || 0).toFixed(2)}`} />
+              <DataTile 
+                label="Winning Amount" 
+                value={`KES ${parseFloat(ticket.potential_payout || 0).toLocaleString()}`} 
+                highlight={ticket.status === 'won'}
+              />
+            </div>
+
+            {/* Payout Logic */}
+            {ticket.status === 'won' ? (
+              ticket.is_paid ? (
+                <div className="bg-blue-500/5 border border-blue-500/10 p-8 rounded-[2rem] text-center">
+                  <CheckCircle2 className="mx-auto text-blue-5
