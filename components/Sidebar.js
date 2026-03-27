@@ -15,7 +15,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
   const [expandedCountry, setExpandedCountry] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Updated to match only your 5 core sports
+  // 1. MAPPING: Matches the precise keys in your database
   const sportMapping = {
     "soccer": { name: "Soccer", icon: "⚽" },
     "basketball": { name: "Basketball", icon: "🏀" },
@@ -33,14 +33,13 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
     setLoading(true);
     const now = new Date().toISOString();
     
-    // 1. Define allowed sports for the whitelist
+    // 2. WHITELIST: Must match the strings in your database 'sport_key' column
     const allowedSports = ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'];
 
-    // 2. Fetch data with strict whitelist
     const { data } = await supabase
       .from('api_events')
       .select('sport_key, country, league_name')
-      .in('sport_key', allowedSports) // Database-level whitelist
+      .in('sport_key', allowedSports) 
       .gt('commence_time', now) 
       .order('country', { ascending: true });
 
@@ -52,7 +51,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
         const league = (item.league_name || "").replace(/['"]+/g, '').trim();
         const leagueLower = league.toLowerCase();
 
-        // 3. Robust check to exclude eSports/SRL from the Sidebar menu
+        // 3. VIRTUAL FILTER: Removes eSports/Simulated leagues
         const isVirtual = 
           leagueLower.includes('ebasketball') || 
           leagueLower.includes('esoccer') || 
@@ -60,7 +59,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
           leagueLower.includes('electronic') ||
           leagueLower.includes('cyber');
 
-        if (isVirtual) return; // Skip these items
+        if (isVirtual) return;
 
         const country = (item.country || "International").replace(/['"]+/g, '').trim();
         
