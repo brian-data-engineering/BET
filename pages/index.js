@@ -13,6 +13,7 @@ export default function Home({ initialMatches = [] }) {
   const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
 
+  // Clean names to prevent formatting issues in the UI
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
   const toggleBet = (selection, value, match) => {
@@ -34,25 +35,48 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
-  // CLEANED FILTERING LOGIC
+  // --- REWRITTEN FILTERING LOGIC ---
   const displayMatches = useMemo(() => {
-    let filtered = initialMatches;
+    // 1. Strict removal of Virtuals/eSports/SRL leagues
+    let filtered = initialMatches.filter(m => {
+      const league = (m.league_name || '').toLowerCase();
+      const sport = (m.sport_key || '').toLowerCase();
+      
+      const isVirtual = 
+        league.includes('ebasketball') || 
+        league.includes('esoccer') || 
+        league.includes('srl') || 
+        league.includes('electronic') ||
+        league.includes('cyber') ||
+        sport.startsWith('esport');
 
+      return !isVirtual;
+    });
+
+    // 2. Tab filtering (Highlights vs Upcoming)
+    if (activeTab === 'highlights') {
+      // Logic: Only show matches with odds > 1.2 or specific 'High Volume' leagues
+      filtered = filtered.filter(m => (m.home_odds > 1.2 || m.away_odds > 1.2));
+    }
+
+    // 3. League selection from Sidebar
     if (selectedLeague) {
-      // Direct Match using the new league_name column
       filtered = filtered.filter(m => m.league_name === selectedLeague);
     }
 
+    // 4. Search Query logic
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
         m.home_team?.toLowerCase().includes(q) || 
         m.away_team?.toLowerCase().includes(q) ||
-        m.display_league?.toLowerCase().includes(q) // Search against the full name
+        m.display_league?.toLowerCase().includes(q) ||
+        m.league_name?.toLowerCase().includes(q)
       );
     }
+    
     return filtered;
-  }, [initialMatches, selectedLeague, searchQuery]);
+  }, [initialMatches, selectedLeague, searchQuery, activeTab]);
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
@@ -122,7 +146,6 @@ export default function Home({ initialMatches = [] }) {
                         <div className="cursor-pointer">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
-                              {/* Using the new display_league column */}
                               {match.display_league || match.league_name}
                             </span>
                             <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
@@ -194,13 +217,18 @@ export default function Home({ initialMatches = [] }) {
   );
 }
 
+// --- SERVER SIDE FETCH WITH SPORT WHITELIST ---
 export async function getServerSideProps() {
   try {
+    // Whitelist only the sports you want to appear
+    const allowedSports = ['soccer', 'basketball', 'hockey', 'tennis', 'tabletennis'];
+
     const { data } = await supabase
       .from('api_events')
       .select('*')
+      .in('sport_key', allowedSports) // This blocks Aussie Rules, Boxing, Cricket, etc.
       .order('commence_time', { ascending: true })
-      .limit(1000); // Changed from 100 to 1000
+      .limit(1000); 
 
     return { 
       props: { 
