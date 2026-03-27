@@ -13,7 +13,6 @@ export default function Home({ initialMatches = [] }) {
   const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
 
-  // Defined icons and IDs to match your DB sport_keys
   const sportTabs = [
     { id: 'soccer', name: 'Soccer', icon: '⚽' },
     { id: 'basketball', name: 'Basketball', icon: '🏀' },
@@ -21,6 +20,17 @@ export default function Home({ initialMatches = [] }) {
     { id: 'ice-hockey', name: 'Ice Hockey', icon: '🏒' },
     { id: 'table-tennis', name: 'Table Tennis', icon: '🏓' },
   ];
+
+  // Helper to format time specifically for Kenyan Timezone (EAT)
+  const formatKenyanTime = (dateString) => {
+    if (!dateString) return 'TBD';
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Africa/Nairobi',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(dateString));
+  };
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
@@ -38,6 +48,7 @@ export default function Home({ initialMatches = [] }) {
         matchId: matchId,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         selection: selection,
+        marketName: '1X2', // Default market for home page
         odds: value
       }];
     });
@@ -59,7 +70,6 @@ export default function Home({ initialMatches = [] }) {
       return !isVirtual;
     });
 
-    // Filter by the active top sport tab
     filtered = filtered.filter(m => m.sport_key === activeTab);
 
     if (selectedLeague) {
@@ -83,6 +93,7 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
+      {/* Banner */}
       <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
         <div className="max-w-[1440px] mx-auto h-[160px] relative">
             <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
@@ -106,7 +117,7 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* SPORT TABS WITH ICONS */}
+          {/* Sport Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button 
@@ -158,7 +169,7 @@ export default function Home({ initialMatches = [] }) {
                               {match.display_league || match.league_name}
                             </span>
                             <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
-                              <Clock size={10} /> {new Date(match.commence_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              <Clock size={10} /> {formatKenyanTime(match.commence_time)}
                             </span>
                           </div>
                           <div className="flex flex-col">
