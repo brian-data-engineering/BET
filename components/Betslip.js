@@ -1,5 +1,5 @@
-import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Betslip({ items = [], setItems }) {
@@ -7,8 +7,15 @@ export default function Betslip({ items = [], setItems }) {
   const [isBooking, setIsBooking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [stake, setStake] = useState(100);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   const MAX_GAMES = 20;
+
+  // Refresh clock every 30 seconds to catch kick-offs accurately
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const removeItem = (id) => setItems(items.filter(item => item.id !== id));
   
@@ -18,11 +25,20 @@ export default function Betslip({ items = [], setItems }) {
     setCopied(false);
   };
 
+  // Logic: Check if a game has already started
+  const isExpired = (startTime) => {
+    if (!startTime) return false;
+    return currentTime > new Date(startTime);
+  };
+
+  const expiredGames = items.filter(item => isExpired(item.startTime));
+  const hasExpired = expiredGames.length > 0;
+
   const totalOdds = items.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1).toFixed(2);
   const potentialWinnings = (totalOdds * stake).toFixed(2);
 
   const handleBookBet = async () => {
-    if (items.length === 0 || items.length > MAX_GAMES) return;
+    if (items.length === 0 || items.length > MAX_GAMES || hasExpired) return;
     setIsBooking(true);
 
     try {
@@ -53,7 +69,7 @@ export default function Betslip({ items = [], setItems }) {
         .insert([{ 
           booking_code: finalCode,
           selections: items,
-          status: 'pending' // Critical for your Python Settlement Engine
+          status: 'pending'
         }]);
 
       if (error) throw error;
@@ -91,6 +107,7 @@ export default function Betslip({ items = [], setItems }) {
         )}
       </div>
 
+      {/* BODY - SCROLLABLE */}
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
         {items.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
@@ -117,30 +134,53 @@ export default function Betslip({ items = [], setItems }) {
         ) : (
           /* ACTIVE SLIP LIST */
           <div className="space-y-2">
-            {items.map((item) => (
-              <div key={item.id} className="bg-[#1c2636] border border-white/5 p-3 rounded-xl relative group">
-                <button onClick={() => removeItem(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-white transition-colors"><X size={14} /></button>
-                <p className="text-[10px] text-slate-400 font-black uppercase italic tracking-tighter truncate w-[90%] mb-1">{item.matchName}</p>
-                <div className="flex justify-between items-end">
-                  <div>
-                    <p className="text-xs font-black text-white italic">{item.selection}</p>
-                    <p className="text-[9px] text-[#10b981] font-bold uppercase italic">{item.marketName}</p>
+            {items.map((item) => {
+              const started = isExpired(item.startTime);
+              return (
+                <div key={item.id} className={`bg-[#1c2636] border p-3 rounded-xl relative group transition-all ${started ? 'border-red-500/50 bg-red-500/5 opacity-80' : 'border-white/5'}`}>
+                  <button onClick={() => removeItem(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-white transition-colors z-20">
+                    <X size={14} />
+                  </button>
+                  
+                  {started && (
+                    <div className="absolute inset-0 bg-[#0b0f1a]/40 flex items-center justify-center rounded-xl pointer-events-none z-10">
+                      <span className="bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded uppercase italic tracking-widest animate-pulse border border-white/10">
+                        Match Started
+                      </span>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-400 font-black uppercase italic tracking-tighter truncate w-[85%] mb-1">{item.matchName}</p>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-xs font-black text-white italic">{item.selection}</p>
+                      <p className="text-[9px] text-[#10b981] font-bold uppercase italic">{item.marketName}</p>
+                    </div>
+                    <span className="text-sm font-black text-[#f59e0b] italic">{parseFloat(item.odds || 0).toFixed(2)}</span>
                   </div>
-                  <span className="text-sm font-black text-[#f59e0b] italic">{parseFloat(item.odds || 0).toFixed(2)}</span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* FOOTER - STICKS TO BOTTOM */}
+      {/* FOOTER - FIXED AT BOTTOM */}
       {items.length > 0 && !bookingCode && (
         <div className="p-4 bg-[#0b0f1a] border-t border-white/5 space-y-3 shrink-0">
-          {items.length >= MAX_GAMES && (
-            <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20 mb-2">
+          
+          {/* Warnings (Limit or Expiry) */}
+          {items.length >= MAX_GAMES && !hasExpired && (
+            <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
               <AlertTriangle size={14} />
               <span className="text-[9px] font-black uppercase italic">Max limit of {MAX_GAMES} games reached</span>
+            </div>
+          )}
+
+          {hasExpired && (
+            <div className="flex items-center gap-2 text-red-500 bg-red-500/10 p-2 rounded-lg border border-red-500/20">
+              <Lock size={14} />
+              <span className="text-[9px] font-black uppercase italic">Remove started games to continue</span>
             </div>
           )}
 
@@ -161,11 +201,16 @@ export default function Betslip({ items = [], setItems }) {
 
           <button 
             onClick={handleBookBet} 
-            disabled={isBooking || items.length > MAX_GAMES} 
-            className="w-full bg-[#f59e0b] text-[#0b0f1a] font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] hover:bg-[#fbbf24] disabled:opacity-50 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+            disabled={isBooking || items.length > MAX_GAMES || hasExpired} 
+            className={`w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-[0_0_20px_rgba(245,158,11,0.1)] 
+              ${hasExpired 
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
+                : 'bg-[#f59e0b] text-[#0b0f1a] hover:bg-[#fbbf24] disabled:opacity-50'}`}
           >
-            <Zap size={18} className={`${isBooking ? 'animate-pulse' : 'fill-current'}`} />
-            <span className="uppercase tracking-tighter italic text-sm">{isBooking ? 'Processing...' : 'BOOK BET CODE'}</span>
+            {hasExpired ? <Lock size={18} /> : <Zap size={18} className={`${isBooking ? 'animate-pulse' : 'fill-current'}`} />}
+            <span className="uppercase tracking-tighter italic text-sm">
+              {hasExpired ? 'Slip Blocked' : isBooking ? 'Processing...' : 'BOOK BET CODE'}
+            </span>
           </button>
 
           <p className="text-[8px] text-center font-black uppercase italic text-slate-600 tracking-widest flex items-center justify-center gap-2">
