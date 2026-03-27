@@ -1,0 +1,21 @@
+name: Settle Bets
+on:
+  schedule:
+    - cron: '*/30 * * * *' # Runs every 30 minutes
+  workflow_dispatch: # Allows you to run it manually for testing
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install psycopg2-binary rapidfuzz
+      - name: Run Settlement
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }} # Add your Supabase URI to GitHub Secrets
+        run: python settle_bets.py
