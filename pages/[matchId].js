@@ -20,17 +20,15 @@ export default function MatchDetail({ match }) {
     );
   }
 
-  // Generalized toggle for both main and deep markets
-  const toggleBet = (marketName, selectionLabel, value, oddKey) => {
-    const betId = `${match.id}-${marketName}-${oddKey}`;
+  const toggleBet = (marketName, selectionLabel, value, outcomeId) => {
+    // Using outcomeId ensures a unique reference for specific odds within a market
+    const betId = `${match.id}-${marketName}-${outcomeId}`;
     
     setSlipItems(prev => {
-      // If already selected, remove it
       if (prev.find(item => item.id === betId)) {
         return prev.filter(item => item.id !== betId);
       }
       
-      // Remove any other bets from this SAME match (optional: prevents multiple bets on one match)
       const otherMatches = prev.filter(item => item.matchId !== match.id);
       
       return [...otherMatches, {
@@ -103,9 +101,9 @@ export default function MatchDetail({ match }) {
                 </h3>
             </div>
 
-            {/* 1. Main 1X2 Market */}
+            {/* 1. Main 1X2 Market (from parent match data) */}
             <div className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
-              <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">3-Way Match Winner</h4>
+              <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">Match Result (1X2)</h4>
               <div className="grid grid-cols-3 gap-3">
                 {mainMarkets.map((odd, idx) => {
                   const isSelected = slipItems.find(item => item.id === `${match.id}-1X2-${odd.label}`);
@@ -129,36 +127,45 @@ export default function MatchDetail({ match }) {
               </div>
             </div>
 
-            {/* 2. Dynamic Deep Markets from JSONB */}
+            {/* 2. Deep Markets (from JSONB array) */}
             {match.deep_markets && match.deep_markets.length > 0 ? (
-              match.deep_markets.map((market, mIdx) => (
-                <div key={mIdx} className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
-                  <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">
-                    {market.market_name}
-                  </h4>
-                  <div className={`grid gap-3 ${market.odds.length > 2 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                    {market.odds.map((odd, oIdx) => {
-                      const isSelected = slipItems.find(item => item.id === `${match.id}-${market.market_name}-${odd.odd_key}`);
-                      return (
-                        <button 
-                          key={oIdx}
-                          onClick={() => toggleBet(market.market_name, odd.display, odd.value, odd.odd_key)}
-                          className={`flex flex-col items-center justify-center p-3 h-14 rounded-md border transition-all ${
-                            isSelected ? 'bg-[#10b981] border-[#10b981] text-white shadow-lg' : 'bg-[#111926] border-white/5 text-slate-300 hover:border-white/20'
-                          }`}
-                        >
-                          <span className={`text-[8px] font-black uppercase mb-0.5 ${isSelected ? 'text-white/70' : 'text-slate-500'}`}>
-                            {odd.display}
-                          </span>
-                          <span className="font-black text-xs italic">
-                            {parseFloat(odd.value).toFixed(2)}
-                          </span>
-                        </button>
-                      );
-                    })}
+              match.deep_markets.map((market, mIdx) => {
+                // Adaptive grid: 2 cols for smaller markets, 3 or 4 for larger ones like Multigoals
+                const gridClass = market.odds.length > 6 ? 'grid-cols-3 md:grid-cols-4' : 
+                                 market.odds.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
+
+                return (
+                  <div key={mIdx} className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
+                    <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">
+                      {market.name}
+                    </h4>
+                    <div className={`grid gap-2 ${gridClass}`}>
+                      {market.odds.map((odd, oIdx) => {
+                        const isSelected = slipItems.find(item => item.id === `${match.id}-${market.name}-${odd.outcome_id}`);
+                        // Fix for NaN: Check for 'odd_value' (Betika key) or fallback to 'value'
+                        const val = odd.odd_value || odd.value;
+
+                        return (
+                          <button 
+                            key={oIdx}
+                            onClick={() => toggleBet(market.name, odd.display, val, odd.outcome_id)}
+                            className={`flex flex-col items-center justify-center p-2 min-h-[50px] rounded-md border transition-all ${
+                              isSelected ? 'bg-[#10b981] border-[#10b981] text-white shadow-lg' : 'bg-[#111926] border-white/5 text-slate-300 hover:border-white/20'
+                            }`}
+                          >
+                            <span className={`text-[8px] font-black uppercase mb-1 leading-none ${isSelected ? 'text-white/70' : 'text-slate-500'}`}>
+                              {odd.display}
+                            </span>
+                            <span className="font-black text-xs italic">
+                              {val ? parseFloat(val).toFixed(2) : '—'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="py-12 text-center border border-dashed border-white/5 rounded-2xl text-slate-700 font-black uppercase text-[10px] italic tracking-widest">
                 Deep markets will be available shortly
@@ -192,10 +199,12 @@ export async function getServerSideProps({ params }) {
 
     if (error || !data) return { notFound: true };
 
-    // Format data so it's easier to use in the component
+    // Match the 'data' property from the JSON you shared
+    const rawMarkets = data.api_event_details?.markets?.data || [];
+
     const matchData = {
       ...data,
-      deep_markets: data.api_event_details?.markets || []
+      deep_markets: rawMarkets
     };
 
     return {
