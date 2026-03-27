@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
 import ProtectedRoute from '../../components/auth/ProtectedRoute';
-import { Wallet, Users, ArrowDownRight, Info } from 'lucide-center';
+import { Wallet, Users, ArrowDownRight, Info, Send } from 'lucide-react';
 import { LayoutDashboard, Send } from 'lucide-react';
 
 export default function ShopWallet() {
