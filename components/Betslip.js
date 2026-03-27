@@ -11,17 +11,16 @@ export default function Betslip({ items = [], setItems }) {
 
   const MAX_GAMES = 20;
 
-  // 1. Live Clock Sync
+  // 1. Live Clock Sync (Every 10 seconds for tighter locking)
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 10000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. Reliable Time Parsing (Kenyan Scrapped Data)
+  // 2. Reliable Time Parsing
   const isExpired = (startTime) => {
     if (!startTime) return false;
     try {
-      // Stripping UTC indicators ensures the browser treats this as local Kenyan time
       const cleanTime = startTime.replace('+00', '').replace('Z', '').replace(' ', 'T');
       const matchDate = new Date(cleanTime);
       return currentTime >= matchDate;
@@ -30,18 +29,28 @@ export default function Betslip({ items = [], setItems }) {
     }
   };
 
-  // 3. Derived State
+  // 3. Derived State Logic Fixes
   const expiredGames = useMemo(() => items.filter(item => isExpired(item.startTime)), [items, currentTime]);
   const hasExpired = expiredGames.length > 0;
 
   const totalOdds = useMemo(() => {
-    return items.reduce((acc, item) => acc * (parseFloat(item.odds) || 1), 1).toFixed(2);
-  }, [items]);
+    return items.reduce((acc, item) => {
+      // FIX: If game started, multiply by 1.00 to neutralize it
+      if (isExpired(item.startTime)) return acc * 1;
+      return acc * (parseFloat(item.odds) || 1);
+    }, 1).toFixed(2);
+  }, [items, currentTime]);
 
   const potentialWinnings = useMemo(() => {
+    // FIX: Show 0.00 if any game has started to prevent misleading the user
+    if (hasExpired) return "0.00";
+    
     const stakeNum = parseFloat(stake) || 0;
-    return (parseFloat(totalOdds) * stakeNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }, [totalOdds, stake]);
+    return (parseFloat(totalOdds) * stakeNum).toLocaleString(undefined, { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
+  }, [totalOdds, stake, hasExpired]);
 
   // 4. Handlers
   const removeItem = (id) => setItems(prev => prev.filter(item => item.id !== id));
@@ -58,7 +67,6 @@ export default function Betslip({ items = [], setItems }) {
     setIsBooking(true);
 
     try {
-      // Clean up old entries (Older than 10 mins)
       const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       await supabase.from('betsnow').delete().lt('created_at', tenMinsAgo);
 
@@ -108,8 +116,8 @@ export default function Betslip({ items = [], setItems }) {
         {items.length > 0 && !bookingCode && (
           <div className="flex gap-3">
             {hasExpired && (
-              <button onClick={removeExpired} className="text-red-500 hover:text-red-400 flex items-center gap-1 transition-colors">
-                <RefreshCw size={14} className="animate-spin-slow" />
+              <button onClick={removeExpired} className="text-red-500 hover:text-red-400 flex items-center gap-1 transition-colors group">
+                <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
                 <span className="text-[9px] font-black uppercase">Clear Started</span>
               </button>
             )}
@@ -147,13 +155,16 @@ export default function Betslip({ items = [], setItems }) {
             {items.map((item) => {
               const started = isExpired(item.startTime);
               return (
-                <div key={item.id} className={`bg-[#1c2636] border p-3 rounded-xl relative transition-all ${started ? 'border-red-500/50 bg-red-500/5' : 'border-white/5'}`}>
+                <div key={item.id} className={`bg-[#1c2636] border p-3 rounded-xl relative transition-all ${started ? 'border-red-500/50 bg-red-500/5 opacity-70' : 'border-white/5'}`}>
                   <button onClick={() => removeItem(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-white transition-colors z-20">
                     <X size={14} />
                   </button>
                   {started && (
-                    <div className="absolute inset-0 bg-[#0b0f1a]/40 flex items-center justify-center rounded-xl z-10">
-                      <span className="bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded uppercase italic tracking-widest animate-pulse border border-white/10">Match Started</span>
+                    <div className="absolute inset-0 bg-[#0b0f1a]/60 flex items-center justify-center rounded-xl z-10 backdrop-blur-[1px]">
+                      <div className="flex flex-col items-center gap-1">
+                        <Lock size={12} className="text-red-500" />
+                        <span className="text-red-500 text-[8px] font-black uppercase italic tracking-widest">LOCKED</span>
+                      </div>
                     </div>
                   )}
                   <p className="text-[10px] text-slate-400 font-black uppercase italic tracking-tighter truncate w-[85%] mb-1">{item.matchName}</p>
@@ -162,7 +173,9 @@ export default function Betslip({ items = [], setItems }) {
                       <p className="text-xs font-black text-white italic">{item.selection}</p>
                       <p className="text-[9px] text-[#10b981] font-bold uppercase italic">{item.marketName}</p>
                     </div>
-                    <span className="text-sm font-black text-[#f59e0b] italic">{(parseFloat(item.odds) || 0).toFixed(2)}</span>
+                    <span className="text-sm font-black text-[#f59e0b] italic">
+                        {started ? '1.00' : (parseFloat(item.odds) || 0).toFixed(2)}
+                    </span>
                   </div>
                 </div>
               );
@@ -175,9 +188,9 @@ export default function Betslip({ items = [], setItems }) {
       {items.length > 0 && !bookingCode && (
         <div className="p-4 bg-[#0b0f1a] border-t border-white/5 space-y-3 shrink-0">
           {hasExpired ? (
-            <div className="flex items-center gap-2 text-red-500 bg-red-500/10 p-2 rounded-lg border border-red-500/20">
-              <Lock size={14} />
-              <span className="text-[9px] font-black uppercase italic">Remove started games to continue</span>
+            <div className="flex items-center gap-2 text-red-500 bg-red-500/10 p-2 rounded-lg border border-red-500/20 animate-in slide-in-from-bottom-2">
+              <AlertTriangle size={14} className="animate-pulse" />
+              <span className="text-[9px] font-black uppercase italic">Slip contains started matches</span>
             </div>
           ) : items.length >= MAX_GAMES && (
             <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
@@ -187,8 +200,8 @@ export default function Betslip({ items = [], setItems }) {
           )}
 
           <div className="flex justify-between items-center text-[11px] font-black uppercase italic text-slate-500">
-            <span>Total Odds</span>
-            <span className="text-[#f59e0b] text-base font-black">{totalOdds}</span>
+            <span className="flex items-center gap-1">Total Odds {hasExpired && <Lock size={10} className="text-red-500" />}</span>
+            <span className={`text-base font-black transition-colors ${hasExpired ? 'text-red-500' : 'text-[#f59e0b]'}`}>{totalOdds}</span>
           </div>
           
           <div className="bg-[#111926] border border-white/5 rounded-lg p-3 flex justify-between items-center">
@@ -198,14 +211,16 @@ export default function Betslip({ items = [], setItems }) {
 
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-black uppercase italic text-slate-400">Potential Win</span>
-            <span className="text-[#10b981] font-black text-lg italic tracking-tighter">KES {potentialWinnings}</span>
+            <span className={`font-black text-lg italic tracking-tighter transition-colors ${hasExpired ? 'text-slate-600' : 'text-[#10b981]'}`}>
+                KES {potentialWinnings}
+            </span>
           </div>
 
           <button 
             onClick={handleBookBet} 
             disabled={isBooking || items.length > MAX_GAMES || hasExpired} 
             className={`w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]
-              ${hasExpired ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-[#f59e0b] text-[#0b0f1a] hover:bg-[#fbbf24]'}`}
+              ${hasExpired ? 'bg-slate-800 text-slate-600 cursor-not-allowed opacity-50' : 'bg-[#f59e0b] text-[#0b0f1a] hover:bg-[#fbbf24]'}`}
           >
             {hasExpired ? <Lock size={18} /> : <Zap size={18} className={isBooking ? 'animate-pulse' : 'fill-current'} />}
             <span className="uppercase tracking-tighter italic text-sm">
@@ -221,8 +236,6 @@ export default function Betslip({ items = [], setItems }) {
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1c2636; border-radius: 10px; }
-        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin-slow { animation: spin-slow 3s linear infinite; }
       `}</style>
     </div>
   );
