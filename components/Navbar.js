@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link'; // 1. Import Link from Next.js
 import { supabase } from '../lib/supabaseClient';
 import { 
-  Search, Trophy, Activity, Rocket, Zap, Gift, Smartphone, X, Lock, Phone, UserCircle, LogOut 
+  Search, Trophy, Activity, Rocket, Zap, Gift, Smartphone, X, Lock, Phone, LogOut 
 } from 'lucide-react';
 
 const Navbar = ({ onSearch }) => {
@@ -11,10 +12,8 @@ const Navbar = ({ onSearch }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // User Session State
   const [user, setUser] = useState(null);
 
-  // Check for logged in user on load
   useEffect(() => {
     const savedUser = localStorage.getItem('lucra_user');
     if (savedUser) {
@@ -29,22 +28,13 @@ const Navbar = ({ onSearch }) => {
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Formatting number for Kenyan standard (2547...)
     const cleanPhone = `254${phoneNumber}`;
 
     try {
       if (modalMode === 'register') {
-        // REGISTER LOGIC
         const { data, error } = await supabase
           .from('profiles')
-          .insert([
-            { 
-              phone: cleanPhone, 
-              password: password, // Now strictly lowercase 'password' to match your DB fix
-              balance: 0.00 
-            }
-          ])
+          .insert([{ phone: cleanPhone, password: password, balance: 0.00 }])
           .select()
           .single();
 
@@ -52,10 +42,8 @@ const Navbar = ({ onSearch }) => {
           if (error.code === '23505') throw new Error("This number is already registered.");
           throw error;
         }
-        
         loginUser(data);
       } else {
-        // LOGIN LOGIC
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -63,14 +51,10 @@ const Navbar = ({ onSearch }) => {
           .eq('password', password)
           .single();
 
-        if (error || !data) {
-          throw new Error("Invalid phone or password.");
-        }
-        
+        if (error || !data) throw new Error("Invalid phone or password.");
         loginUser(data);
       }
     } catch (err) {
-      console.error("Auth Error:", err.message);
       alert(err.message);
     } finally {
       setLoading(false);
@@ -83,7 +67,6 @@ const Navbar = ({ onSearch }) => {
     setShowAuthModal(false);
     setPhoneNumber('');
     setPassword('');
-    // No confirmation code needed anymore!
   };
 
   const handleLogout = () => {
@@ -101,7 +84,7 @@ const Navbar = ({ onSearch }) => {
               <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">
                 {modalMode === 'login' ? 'Welcome Back' : 'Join BrianBet'}
               </h2>
-              <button onClick={() => setShowAuthModal(false)} className="text-white/50 hover:text-white transition-colors">
+              <button onClick={() => setShowAuthModal(false)} className="text-white/50 hover:text-white">
                 <X size={24}/>
               </button>
             </div>
@@ -141,7 +124,7 @@ const Navbar = ({ onSearch }) => {
               <button 
                 type="submit" 
                 disabled={loading} 
-                className="w-full bg-[#10b981] hover:bg-[#0da371] text-white font-black py-4 rounded-xl shadow-lg uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
+                className="w-full bg-[#10b981] hover:bg-[#0da371] text-white font-black py-4 rounded-xl shadow-lg uppercase tracking-widest transition-all disabled:opacity-50"
               >
                 {loading ? "Verifying..." : modalMode === 'login' ? "Login" : "Register Account"}
               </button>
@@ -149,7 +132,7 @@ const Navbar = ({ onSearch }) => {
               <button 
                 type="button" 
                 onClick={() => setModalMode(modalMode === 'login' ? 'register' : 'login')} 
-                className="w-full text-xs font-bold text-slate-400 hover:text-[#10b981] transition-colors uppercase"
+                className="w-full text-xs font-bold text-slate-400 hover:text-[#10b981] uppercase"
               >
                 {modalMode === 'login' ? "New here? Register now" : "Already have an account? Login"}
               </button>
@@ -160,7 +143,7 @@ const Navbar = ({ onSearch }) => {
 
       {/* --- TOP BAR --- */}
       <div className="bg-[#0b0f1a] px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-1 cursor-pointer">
+        <Link href="/" className="flex items-center gap-1 cursor-pointer">
           <div className="w-9 h-9 border-2 border-[#10b981] rounded-full flex items-center justify-center font-black text-[#10b981] text-lg">bb</div>
           <div className="flex flex-col leading-none">
             <span className="text-2xl font-black tracking-tighter text-white uppercase italic">
@@ -168,40 +151,27 @@ const Navbar = ({ onSearch }) => {
             </span>
             <span className="text-[10px] font-bold text-[#f59e0b] ml-auto">.co.ke</span>
           </div>
-        </div>
+        </Link>
 
         <div className="flex items-center gap-3">
           {user ? (
             <div className="flex items-center gap-4">
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">My Balance</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Balance</span>
                 <span className="text-sm font-black text-[#10b981]">
                   Ksh {Number(user.balance || 0).toFixed(2)}
                 </span>
               </div>
-              <div className="h-8 w-[1px] bg-white/10" />
               <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
                 <LogOut size={20} />
               </button>
             </div>
           ) : (
             <>
-              <button onClick={() => {setModalMode('login'); setShowAuthModal(true);}} className="text-sm font-bold text-[#10b981] hover:text-white px-2 transition-colors">Login</button>
-              <button onClick={() => {setModalMode('register'); setShowAuthModal(true);}} className="bg-[#10b981] hover:bg-[#059669] text-white text-sm font-bold px-5 py-2 rounded shadow-lg transition-all active:scale-95">Register</button>
+              <button onClick={() => {setModalMode('login'); setShowAuthModal(true);}} className="text-sm font-bold text-[#10b981] px-2">Login</button>
+              <button onClick={() => {setModalMode('register'); setShowAuthModal(true);}} className="bg-[#10b981] text-white text-sm font-bold px-5 py-2 rounded shadow-lg">Register</button>
             </>
           )}
-        </div>
-      </div>
-
-      {/* --- FEATURE BAR --- */}
-      <div className="bg-[#004d3d] border-t border-white/5 px-4 overflow-x-auto no-scrollbar">
-        <div className="max-w-[1440px] mx-auto flex items-center gap-6 py-2.5 whitespace-nowrap">
-          <NavItem icon={<Trophy size={16} />} label="Sports" active />
-          <NavItem icon={<Activity size={16} />} label="Live" />
-          <NavItem icon={<Rocket size={16} />} label="Aviator" isNew />
-          <NavItem icon={<Zap size={16} />} label="Crash" />
-          <NavItem icon={<Gift size={16} />} label="Promos" />
-          <NavItem icon={<Smartphone size={16} />} label="Virtuals" />
         </div>
       </div>
 
@@ -209,10 +179,16 @@ const Navbar = ({ onSearch }) => {
       <div className="bg-[#003d30] px-4 py-2 border-t border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-6 text-[11px] font-bold text-slate-400 uppercase italic">
           <button className="hover:text-white flex items-center gap-1.5"><Activity size={14} /> Live Score</button>
-          <button className="hover:text-white flex items-center gap-1.5"><Trophy size={14} /> Results</button>
+          
+          {/* 2. REWRITTEN RESULTS LINK */}
+          <Link href="/results" className="hover:text-white flex items-center gap-1.5 transition-colors">
+            <Trophy size={14} /> Results
+          </Link>
+
           <button className="hover:text-white flex items-center gap-1.5 text-[#f59e0b]"><Smartphone size={14} /> App</button>
         </div>
-        <div onClick={() => onSearch()} className="flex items-center gap-2 text-white/70 hover:text-white cursor-pointer group">
+        
+        <div onClick={() => onSearch && onSearch()} className="flex items-center gap-2 text-white/70 hover:text-white cursor-pointer group">
           <Search size={18} className="group-hover:scale-110 transition-transform" />
           <span className="text-sm font-bold uppercase tracking-tight">Search</span>
         </div>
@@ -220,13 +196,5 @@ const Navbar = ({ onSearch }) => {
     </nav>
   );
 };
-
-const NavItem = ({ icon, label, active = false, isNew = false }) => (
-  <button className={`flex items-center gap-1.5 px-1 py-1 transition-all relative ${active ? 'text-white border-b-2 border-white' : 'text-white/70 hover:text-white'}`}>
-    {icon}
-    <span className="text-xs font-black uppercase tracking-tight">{label}</span>
-    {isNew && <span className="bg-red-600 text-[8px] font-black px-1 rounded absolute -top-1 -right-4 animate-bounce shadow-lg">NEW</span>}
-  </button>
-);
 
 export default Navbar;
