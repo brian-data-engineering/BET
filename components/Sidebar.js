@@ -15,17 +15,13 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
   const [expandedCountry, setExpandedCountry] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Updated to match the string sport_keys from your database
+  // Updated to match only your 5 core sports
   const sportMapping = {
     "soccer": { name: "Soccer", icon: "⚽" },
     "basketball": { name: "Basketball", icon: "🏀" },
     "tennis": { name: "Tennis", icon: "🎾" },
-    "ice hockey": { name: "Ice Hockey", icon: "🏒" },
-    "table tennis": { name: "Table Tennis", icon: "🏓" },
-    "volleyball": { name: "Volleyball", icon: "🏐" },
-    "rugby": { name: "Rugby", icon: "🏉" },
-    "esoccer": { name: "E-Soccer", icon: "🎮" },
-    "esport counter-strike": { name: "CS:GO", icon: "🔫" },
+    "hockey": { name: "Ice Hockey", icon: "🏒" },
+    "tabletennis": { name: "Table Tennis", icon: "🏓" },
     "default": { name: "Other", icon: "🏆" }
   };
 
@@ -36,30 +32,44 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
   const fetchHierarchy = async () => {
     setLoading(true);
     const now = new Date().toISOString();
+    
+    // 1. Define allowed sports for the whitelist
+    const allowedSports = ['soccer', 'basketball', 'hockey', 'tennis', 'tabletennis'];
 
-    // DYNAMIC FETCH: Build menu only from active games in api_events
+    // 2. Fetch data with strict whitelist
     const { data } = await supabase
       .from('api_events')
       .select('sport_key, country, league_name')
-      .gt('commence_time', now) // Only games starting in the future
+      .in('sport_key', allowedSports) // Database-level whitelist
+      .gt('commence_time', now) 
       .order('country', { ascending: true });
 
     if (data) {
       const newTree = {};
       
       data.forEach(item => {
-        const sport = item.sport_key || "soccer";
-        const country = (item.country || "International").replace(/['"]+/g, '').trim();
+        const sport = item.sport_key;
         const league = (item.league_name || "").replace(/['"]+/g, '').trim();
+        const leagueLower = league.toLowerCase();
+
+        // 3. Robust check to exclude eSports/SRL from the Sidebar menu
+        const isVirtual = 
+          leagueLower.includes('ebasketball') || 
+          leagueLower.includes('esoccer') || 
+          leagueLower.includes('srl') || 
+          leagueLower.includes('electronic') ||
+          leagueLower.includes('cyber');
+
+        if (isVirtual) return; // Skip these items
+
+        const country = (item.country || "International").replace(/['"]+/g, '').trim();
         
         if (!newTree[sport]) newTree[sport] = {};
         if (!newTree[sport][country]) newTree[sport][country] = new Set();
         
-        // Using a Set inside the loop avoids duplicate league entries
         newTree[sport][country].add(league);
       });
 
-      // Convert Sets back to Arrays for the UI mapping
       const finalTree = {};
       Object.keys(newTree).forEach(s => {
         finalTree[s] = {};
