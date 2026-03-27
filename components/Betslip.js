@@ -1,5 +1,5 @@
-import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle, Lock, RefreshCw } from 'lucide-react';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle, Lock } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Betslip({ items = [], setItems }) {
@@ -11,13 +11,13 @@ export default function Betslip({ items = [], setItems }) {
 
   const MAX_GAMES = 20;
 
-  // 1. Live Clock Sync (10 seconds)
+  // 1. Precise Clock Sync (Every 5 seconds for snappier removal)
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 10000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 5000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. Time Helper
+  // 2. Robust Time Parsing Helper
   const isExpired = (startTime) => {
     if (!startTime) return false;
     try {
@@ -30,26 +30,27 @@ export default function Betslip({ items = [], setItems }) {
   };
 
   /**
-   * 3. AUTO-VANISH LOGIC
-   * This effect watches the clock. If a game expires, it removes it from the slip
-   * automatically so the odds and potential winnings stay live/valid.
+   * 3. AUTO-VANISH LOGIC (Optimized)
+   * Uses functional updates to prevent race conditions when multiple games start.
    */
   useEffect(() => {
     const hasStartedGames = items.some(item => isExpired(item.startTime));
     
     if (hasStartedGames) {
-      // Filter out only the games that haven't started yet
-      const validItems = items.filter(item => !isExpired(item.startTime));
-      setItems(validItems);
-      
-      // If the slip becomes empty because of auto-removal, reset booking code
-      if (validItems.length === 0) {
-        setBookingCode(null);
-      }
+      setItems(prevItems => {
+        const filtered = prevItems.filter(item => !isExpired(item.startTime));
+        
+        // If the slip becomes empty after auto-removal, clear booking state
+        if (filtered.length === 0 && bookingCode) {
+          setBookingCode(null);
+        }
+        
+        return filtered;
+      });
     }
-  }, [currentTime, items]); // Triggers every 10s or when slip changes
+  }, [currentTime, items.length]); 
 
-  // 4. Derived State (Simplified now that items auto-filter)
+  // 4. Derived State
   const totalOdds = useMemo(() => {
     return items.reduce((acc, item) => {
       return acc * (parseFloat(item.odds) || 1);
@@ -58,7 +59,8 @@ export default function Betslip({ items = [], setItems }) {
 
   const potentialWinnings = useMemo(() => {
     const stakeNum = parseFloat(stake) || 0;
-    return (parseFloat(totalOdds) * stakeNum).toLocaleString(undefined, { 
+    const wins = parseFloat(totalOdds) * stakeNum;
+    return wins.toLocaleString(undefined, { 
       minimumFractionDigits: 2, 
       maximumFractionDigits: 2 
     });
@@ -78,6 +80,7 @@ export default function Betslip({ items = [], setItems }) {
     setIsBooking(true);
 
     try {
+      // Cleanup old codes (older than 10 mins)
       const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       await supabase.from('betsnow').delete().lt('created_at', tenMinsAgo);
 
@@ -85,9 +88,14 @@ export default function Betslip({ items = [], setItems }) {
       let isUnique = false;
       let attempts = 0;
 
+      // Unique Code Generator
       while (!isUnique && attempts < 15) {
         finalCode = Math.floor(1000 + Math.random() * 9000).toString();
-        const { data } = await supabase.from('betsnow').select('booking_code').eq('booking_code', finalCode).maybeSingle();
+        const { data } = await supabase.from('betsnow')
+          .select('booking_code')
+          .eq('booking_code', finalCode)
+          .maybeSingle();
+        
         if (!data) isUnique = true;
         attempts++;
       }
@@ -101,6 +109,7 @@ export default function Betslip({ items = [], setItems }) {
       if (error) throw error;
       setBookingCode(finalCode);
     } catch (err) {
+      console.error("Booking Error:", err);
       alert("System Busy: Try again.");
     } finally {
       setIsBooking(false);
@@ -108,6 +117,7 @@ export default function Betslip({ items = [], setItems }) {
   };
 
   const copyToClipboard = () => {
+    if (!bookingCode) return;
     navigator.clipboard.writeText(bookingCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -139,6 +149,7 @@ export default function Betslip({ items = [], setItems }) {
             <p className="text-slate-500 text-[10px] font-black uppercase italic tracking-widest">Your slip is empty</p>
           </div>
         ) : bookingCode ? (
+          /* SUCCESS STATE */
           <div className="py-4 text-center animate-in fade-in zoom-in-95">
             <div className="w-14 h-14 bg-[#10b981]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#10b981]/20">
               <CheckCircle2 size={28} className="text-[#10b981]" />
@@ -154,6 +165,7 @@ export default function Betslip({ items = [], setItems }) {
             <button onClick={clearAll} className="w-full bg-[#1c2636] text-white font-black py-3 rounded-lg text-[10px] uppercase italic hover:bg-slate-700 transition-all">Start New Slip</button>
           </div>
         ) : (
+          /* ACTIVE ITEMS STATE */
           <div className="space-y-2">
             {items.map((item) => (
               <div key={item.id} className="bg-[#1c2636] border border-white/5 p-3 rounded-xl relative transition-all animate-in slide-in-from-right-2">
@@ -193,7 +205,12 @@ export default function Betslip({ items = [], setItems }) {
           
           <div className="bg-[#111926] border border-white/5 rounded-lg p-3 flex justify-between items-center">
             <span className="text-[10px] font-black uppercase italic text-slate-400">Stake (KES)</span>
-            <input type="number" value={stake} onChange={(e) => setStake(e.target.value)} className="bg-transparent text-right font-black text-white outline-none w-20 text-sm" />
+            <input 
+              type="number" 
+              value={stake} 
+              onChange={(e) => setStake(e.target.value)} 
+              className="bg-transparent text-right font-black text-white outline-none w-20 text-sm" 
+            />
           </div>
 
           <div className="flex justify-between items-center">
@@ -206,13 +223,14 @@ export default function Betslip({ items = [], setItems }) {
           <button 
             onClick={handleBookBet} 
             disabled={isBooking || items.length > MAX_GAMES} 
-            className="w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] bg-[#f59e0b] text-[#0b0f1a] hover:bg-[#fbbf24]"
+            className="w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] bg-[#f59e0b] text-[#0b0f1a] hover:bg-[#fbbf24] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Zap size={18} className={isBooking ? 'animate-pulse' : 'fill-current'} />
             <span className="uppercase tracking-tighter italic text-sm">
               {isBooking ? 'Processing...' : 'BOOK BET CODE'}
             </span>
           </button>
+          
           <p className="text-[8px] text-center font-black uppercase italic text-slate-600 tracking-widest flex items-center justify-center gap-2">
             <Smartphone size={10} /> Powered by Lucra Mobile
           </p>
