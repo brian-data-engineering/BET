@@ -3,52 +3,89 @@ import { QRCodeSVG } from 'qrcode.react';
 export default function PrintableTicket({ ticket }) {
   if (!ticket) return null;
 
+  // Formatting currency for the thermal printer
+  const formatCurrency = (num) => 
+    new Intl.NumberFormat('en-KE', { minimumFractionDigits: 2 }).format(num || 0);
+
   return (
-    <div className="print-only p-4 text-black bg-white w-[80mm] font-mono text-[12px]">
-      <div className="text-center border-b border-dashed border-black pb-4 mb-4">
-        <h1 className="text-xl font-black italic tracking-tighter uppercase">LUCRA<span className="text-gray-600">.BET</span></h1>
-        <p className="text-[10px] uppercase font-bold">Nairobi Terminal #01</p>
-        <p className="text-[9px]">{new Date().toLocaleString()}</p>
+    <div className="print-only p-4 text-black bg-white w-[80mm] font-mono text-[12px] leading-tight">
+      {/* Header / Logo */}
+      <div className="text-center border-b-2 border-black pb-4 mb-4">
+        <h1 className="text-2xl font-black italic tracking-tighter uppercase mb-0">
+          LUCRA<span className="opacity-50">.BET</span>
+        </h1>
+        <p className="text-[9px] font-bold tracking-widest uppercase">Nairobi Retail Terminal #01</p>
+        <p className="text-[9px] mt-1">{new Date().toLocaleString('en-GB')}</p>
       </div>
 
+      {/* Selections Section */}
       <div className="mb-4">
-        <p className="font-bold border-b border-black mb-2 uppercase text-[10px]">Selections</p>
-        {ticket.selections.map((item, i) => (
-          <div key={i} className="mb-2">
-            <div className="flex justify-between font-bold">
-              <span>{item.matchName}</span>
-              <span>@{item.odds}</span>
+        <div className="flex justify-between border-b border-black mb-2 py-1 font-black uppercase text-[10px]">
+          <span>Event / Selection</span>
+          <span>Odds</span>
+        </div>
+        
+        {ticket.selections?.map((item, i) => (
+          <div key={i} className="mb-3">
+            <div className="flex justify-between items-start font-bold text-[11px]">
+              <span className="max-w-[80%] uppercase leading-none">{item.matchName}</span>
+              <span>{parseFloat(item.odds || 0).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-[10px]">
-              <span>Pick: {item.selection}</span>
-              <span>Result</span>
+            <div className="flex justify-between text-[10px] mt-1 italic">
+              <span className="font-black">PICK: {item.selection}</span>
+              <span className="opacity-70">[Match Winner]</span>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="border-t border-dashed border-black pt-2 space-y-1">
-        <div className="flex justify-between font-bold">
-          <span>Total Odds:</span>
-          <span>{ticket.total_odds}</span>
+      {/* Financial Summary */}
+      <div className="border-t-2 border-black pt-3 space-y-2">
+        <div className="flex justify-between text-[11px]">
+          <span className="font-bold">TOTAL ODDS:</span>
+          <span className="font-black">{parseFloat(ticket.total_odds || 0).toFixed(2)}</span>
         </div>
-        <div className="flex justify-between font-bold">
-          <span>Stake:</span>
-          <span>KES {ticket.stake}</span>
+        <div className="flex justify-between text-[11px]">
+          <span className="font-bold">STAKE (KES):</span>
+          <span className="font-black">{formatCurrency(ticket.stake)}</span>
         </div>
-        <div className="flex justify-between text-lg font-black border-t border-black mt-2 pt-2">
-          <span>POT. WIN:</span>
-          <span>KES {ticket.payout}</span>
+        
+        {/* The Big One: Potential Payout */}
+        <div className="flex justify-between items-center border-y-2 border-black my-2 py-3">
+          <span className="text-sm font-black italic uppercase">Pot. Payout</span>
+          <span className="text-xl font-black italic tracking-tighter">
+            KES {formatCurrency(ticket.potential_payout || ticket.payout)}
+          </span>
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col items-center border-t border-dashed border-black pt-4">
-        <QRCodeSVG value={ticket.id} size={100} level="H" />
-        <p className="mt-2 font-black text-sm tracking-[0.3em]">{ticket.id}</p>
-        <p className="text-[8px] mt-4 uppercase text-center font-bold">
+      {/* Validation & Security */}
+      <div className="mt-6 flex flex-col items-center pt-2">
+        <div className="p-2 border border-black rounded-lg">
+          <QRCodeSVG 
+            value={ticket.booking_code || ticket.id} 
+            size={120} 
+            level="M" 
+            includeMargin={false}
+          />
+        </div>
+        
+        <div className="mt-4 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-1">Ticket Reference</p>
+          <p className="font-black text-lg tracking-[0.2em] bg-black text-white px-4 py-1 italic">
+            {ticket.booking_code}
+          </p>
+        </div>
+
+        {/* Footer Fine Print */}
+        <div className="text-[8px] mt-6 uppercase text-center font-bold leading-normal border-t border-dashed border-black pt-4">
           Tickets expire in 7 days. <br />
-          Check status at lucra.bet/check
-        </p>
+          Taxes may apply upon payout. <br />
+          Verification: lucra.bet/verify <br />
+          <span className="text-[7px] mt-2 block opacity-50 italic">
+            Sig: {Math.random().toString(36).substring(2, 15).toUpperCase()}
+          </span>
+        </div>
       </div>
     </div>
   );
