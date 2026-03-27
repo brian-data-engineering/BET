@@ -20,19 +20,17 @@ export default function MatchDetail({ match }) {
     );
   }
 
-  // UPDATED: Added outcomeId to the betId for absolute uniqueness
-  const toggleBet = (marketName, selectionLabel, value, outcomeId) => {
-    const betId = `${match.id}-${marketName}-${outcomeId}`;
-    
+  // FIXED: We now accept a generated 'uniqueId' to ensure no two buttons overlap
+  const toggleBet = (marketName, selectionLabel, value, uniqueId) => {
     setSlipItems(prev => {
-      if (prev.find(item => item.id === betId)) {
-        return prev.filter(item => item.id !== betId);
+      if (prev.find(item => item.id === uniqueId)) {
+        return prev.filter(item => item.id !== uniqueId);
       }
       
       const otherMatches = prev.filter(item => item.matchId !== match.id);
       
       return [...otherMatches, {
-        id: betId,
+        id: uniqueId,
         matchId: match.id,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         marketName: marketName,
@@ -55,7 +53,6 @@ export default function MatchDetail({ match }) {
       <div className="max-w-[1440px] mx-auto grid grid-cols-12 gap-0 lg:gap-6 p-0 lg:p-6">
         <main className="col-span-12 lg:col-span-9 space-y-4">
           
-          {/* Header Navigation */}
           <div className="flex items-center gap-4 px-4 py-2 lg:px-0">
             <Link href="/" className="p-2 bg-[#1c2636] border border-white/5 hover:bg-[#253247] rounded-md transition">
               <ChevronLeft size={20} />
@@ -65,7 +62,6 @@ export default function MatchDetail({ match }) {
             </h1>
           </div>
 
-          {/* Scoreboard / VS Card */}
           <div className="bg-[#111926] border-y lg:border border-white/5 lg:rounded-2xl overflow-hidden relative">
             <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none" />
             <div className="flex justify-between items-center p-8 md:p-12 relative z-10">
@@ -105,12 +101,12 @@ export default function MatchDetail({ match }) {
               <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter">Match Result (1X2)</h4>
               <div className="grid grid-cols-3 gap-3">
                 {mainMarkets.map((odd, idx) => {
-                  // Unique ID check for 1X2
-                  const isSelected = slipItems.find(item => item.id === `${match.id}-1X2-${odd.label}`);
+                  const uniqueId = `${match.id}-main-1x2-${odd.label}`;
+                  const isSelected = slipItems.find(item => item.id === uniqueId);
                   return (
                     <button 
                       key={idx}
-                      onClick={() => toggleBet('1X2', odd.display, odd.val, odd.label)}
+                      onClick={() => toggleBet('1X2', odd.display, odd.val, uniqueId)}
                       className={`flex flex-col items-center justify-center p-4 h-16 rounded-md border transition-all duration-150 ${
                         isSelected ? 'bg-[#10b981] border-[#10b981] text-white' : 'bg-[#111926] border-white/5 text-slate-300 hover:border-white/20'
                       }`}
@@ -140,17 +136,16 @@ export default function MatchDetail({ match }) {
                     </h4>
                     <div className={`grid gap-2 ${gridClass}`}>
                       {market.odds?.map((odd, oIdx) => {
-                        // UPDATED: Now looks for the specific outcomeId to prevent multi-highlighting
-                        const isSelected = slipItems.find(item => 
-                          item.id === `${match.id}-${market.name}-${odd.outcome_id}`
-                        );
-                        
+                        // GUARANTEED UNIQUE ID: Match + Market Name + Selection Name + Loop Index
+                        // This prevents "Under 2.5" and "Under 3.5" from ever sharing a highlight.
+                        const uniqueId = `${match.id}-${market.name}-${odd.display}-${oIdx}`;
+                        const isSelected = slipItems.find(item => item.id === uniqueId);
                         const val = odd.odd_value || odd.value;
 
                         return (
                           <button 
                             key={oIdx}
-                            onClick={() => toggleBet(market.name, odd.display, val, odd.outcome_id)}
+                            onClick={() => toggleBet(market.name, odd.display, val, uniqueId)}
                             className={`flex flex-col items-center justify-center p-2 min-h-[50px] rounded-md border transition-all ${
                               isSelected ? 'bg-[#10b981] border-[#10b981] text-white shadow-lg' : 'bg-[#111926] border-white/5 text-slate-300 hover:border-white/20'
                             }`}
