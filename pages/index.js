@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Clock, BarChart2, Zap } from 'lucide-react';
+import { Clock, BarChart2, Zap, Play, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -12,6 +12,13 @@ export default function Home({ initialMatches = [] }) {
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Keep the clock updated every 30 seconds for precision
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const sportTabs = [
     { id: 'soccer', name: 'Soccer', icon: '⚽' },
@@ -21,21 +28,24 @@ export default function Home({ initialMatches = [] }) {
     { id: 'table-tennis', name: 'Table Tennis', icon: '🏓' },
   ];
 
-  /**
-   * ZERO-CONVERSION TIME HELPER
-   * Bypasses timezones. Simply extracts HH:mm from strings like "2026-03-27 19:00:00+00"
-   */
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    
-    // Look for the HH:mm pattern (e.g., 19:00)
     const timeMatch = dateString.match(/(\d{2}:\d{2})/);
     return timeMatch ? timeMatch[0] : 'TBD';
   };
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
+  // HELPER: Check if match is started
+  const isMatchStarted = (commenceTime) => {
+    if (!commenceTime) return false;
+    return currentTime > new Date(commenceTime);
+  };
+
   const toggleBet = (selection, value, match) => {
+    // BLOCK adding started games
+    if (isMatchStarted(match.commence_time)) return;
+
     const matchId = match.id; 
     const betId = `${matchId}-${selection}`;
     
@@ -50,7 +60,8 @@ export default function Home({ initialMatches = [] }) {
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         selection: selection,
         marketName: '1X2',
-        odds: value
+        odds: value,
+        startTime: match.commence_time // Passed for Betslip auto-expiry
       }];
     });
   };
@@ -59,15 +70,7 @@ export default function Home({ initialMatches = [] }) {
     let filtered = initialMatches.filter(m => {
       const league = (m.league_name || '').toLowerCase();
       const sport = (m.sport_key || '').toLowerCase();
-      
-      const isVirtual = 
-        league.includes('ebasketball') || 
-        league.includes('esoccer') || 
-        league.includes('srl') || 
-        league.includes('electronic') ||
-        league.includes('cyber') ||
-        sport.startsWith('esport');
-
+      const isVirtual = league.includes('ebasketball') || league.includes('esoccer') || league.includes('srl') || league.includes('electronic') || league.includes('cyber') || sport.startsWith('esport');
       return !isVirtual;
     });
 
@@ -118,6 +121,7 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
+          {/* Tabs Navigation */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button 
@@ -141,6 +145,7 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
+          {/* Table Header */}
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
             <div className="col-span-7 flex items-center gap-2">
               Event Details 
@@ -155,22 +160,33 @@ export default function Home({ initialMatches = [] }) {
             </div>
           </div>
 
+          {/* Match List */}
           <div className="divide-y divide-white/5">
             {displayMatches.length > 0 ? (
               displayMatches.map((match) => {
+                const started = isMatchStarted(match.commence_time);
                 const currentSelection = slipItems.find(item => item.matchId === match.id);
+
                 return (
-                  <div key={match.id} className="grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors">
+                  <div key={match.id} className={`grid grid-cols-12 bg-[#111926] hover:bg-[#161f2e] p-3 items-center transition-colors ${started ? 'opacity-50 grayscale-[0.3]' : ''}`}>
                     <div className="col-span-7 pr-4 group">
                       <Link href={`/${match.id}`}>
                         <div className="cursor-pointer">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
-                              {match.display_league || match.league_name}
-                            </span>
-                            <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
-                              <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                            </span>
+                            {started ? (
+                              <span className="text-[9px] bg-red-600/20 text-red-500 px-2 py-0.5 rounded flex items-center gap-1 font-black italic uppercase animate-pulse border border-red-600/20">
+                                <Play size={8} fill="currentColor" /> Live
+                              </span>
+                            ) : (
+                              <>
+                                <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">
+                                  {match.display_league || match.league_name}
+                                </span>
+                                <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                                  <Clock size={10} /> {formatFixedTime(match.commence_time)}
+                                </span>
+                              </>
+                            )}
                           </div>
                           <div className="flex flex-col">
                             <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981] transition-colors">{cleanName(match.home_team)}</span>
@@ -187,7 +203,8 @@ export default function Home({ initialMatches = [] }) {
                       </div>
                     </div>
 
-                    <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
+                    {/* Betting Buttons */}
+                    <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11 relative">
                       {[
                           { label: '1', val: match.home_odds },
                           { label: 'X', val: match.draw_odds },
@@ -195,14 +212,17 @@ export default function Home({ initialMatches = [] }) {
                       ].map((odd) => (
                         <button
                           key={odd.label}
+                          disabled={started}
                           onClick={() => toggleBet(odd.label, odd.val, match)}
-                          className={`rounded-md flex items-center justify-center font-black text-xs italic transition-all border ${
+                          className={`rounded-md flex items-center justify-center font-black text-[10px] italic transition-all border ${
                             currentSelection?.selection === odd.label
-                              ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.2)]'
-                              : 'bg-[#1c2636] border-white/5 text-slate-300 hover:bg-[#253247]'
+                              ? 'bg-[#10b981] border-[#10b981] text-white'
+                              : started 
+                                ? 'bg-[#0b0f1a] border-white/5 text-slate-700 cursor-not-allowed'
+                                : 'bg-[#1c2636] border-white/5 text-slate-300 hover:bg-[#253247] hover:text-[#10b981]'
                           }`}
                         >
-                          {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
+                          {started ? <Lock size={12} /> : (odd.val ? parseFloat(odd.val).toFixed(2) : '—')}
                         </button>
                       ))}
                     </div>
@@ -212,7 +232,7 @@ export default function Home({ initialMatches = [] }) {
             ) : (
               <div className="py-20 text-center opacity-20 flex flex-col items-center">
                 <Zap size={48} className="mb-4" />
-                <p className="font-black uppercase italic tracking-widest text-sm">No {activeTab.replace('-', ' ')} matches found</p>
+                <p className="font-black uppercase italic tracking-widest text-sm">No matches available</p>
               </div>
             )}
           </div>
