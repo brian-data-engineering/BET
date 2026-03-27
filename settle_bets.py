@@ -1,70 +1,88 @@
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
+from supabase import create_client
 from rapidfuzz import fuzz
 
-# Database Connection (Uses GitHub Secrets for safety)
-DB_URL = os.getenv('DATABASE_URL')
+# --- CONFIGURATION ---
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
-def settle():
-    conn = psycopg2.connect(DB_URL)
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+# Initialize Supabase
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    # 1. Get Pending Bets
-    cur.execute("SELECT id, selections, created_at FROM betsnow WHERE status = 'pending'")
-    tickets = cur.fetchall()
+def settle_bets():
+    print("🚀 Starting Settlement Engine...")
 
-    # 2. Get Recent Results (Last 2 days to be safe)
-    cur.execute("SELECT home_name, away_name, fulltime_home, fulltime_away, match_date FROM results WHERE match_date > now() - interval '2 days'")
-    results = cur.fetchall()
+    # 1. FETCH PENDING TICKETS
+    # We grab tickets that haven't been settled yet
+    tickets_res = supabase.table("betsnow").select("id, selections").eq("status", "pending").execute()
+    tickets = tickets_res.data
+
+    if not tickets:
+        print("✅ No pending tickets to settle.")
+        return
+
+    # 2. FETCH RECENT RESULTS
+    # We grab results from the last 3 days to compare names
+    results_res = supabase.table("results").select("*").order("match_date", desc=True).limit(200).execute()
+    results = results_res.data
+
+    if not results:
+        print("⚠️ No results found in database to compare against.")
+        return
 
     for ticket in tickets:
         ticket_id = ticket['id']
         selections = ticket['selections'] # This is your JSONB array
         
         ticket_won = True
-        match_found_for_all = True
+        all_matches_found = True
 
-        for selection in selections:
-            b_home = selection.get('home_team') # Adjust based on your JSON keys
-            b_away = selection.get('away_team')
-            user_pick = selection.get('pick')
+        for sel in selections:
+            # Get names from your Betika-scraped JSON
+            # Note: Ensure these keys match what you saved in UnifiedTerminal.js
+            b_home = sel.get('home_team') or sel.get('matchName', '').split(' vs ')[0]
+            b_away = sel.get('away_team') or sel.get('matchName', '').split(' vs ')[1] if ' vs ' in str(sel.get('matchName')) else ''
+            user_pick = str(sel.get('selection') or sel.get('pick'))
 
-            # Find matching result using Fuzzy Logic
-            best_match = None
+            # Fuzzy Match against the Results table
+            match_result = None
             for r in results:
-                h_score = fuzz.token_sort_ratio(b_home, r['home_name'])
-                a_score = fuzz.token_sort_ratio(b_away, r['away_name'])
+                # Score similarity between Betika names and Odds API names
+                h_sim = fuzz.token_sort_ratio(b_home, r['home_name'])
+                a_sim = fuzz.token_sort_ratio(b_away, r['away_name'])
                 
-                if h_score > 85 and a_score > 85:
-                    best_match = r
+                if h_sim > 85 and a_sim > 85:
+                    match_result = r
                     break
             
-            if best_match:
-                # Logic: Check if the specific pick won
-                res_h = best_match['fulltime_home']
-                res_a = best_match['fulltime_away']
+            if match_result:
+                res_h = match_result.get('fulltime_home') or match_result.get('home_score', 0)
+                res_a = match_result.get('fulltime_away') or match_result.get('away_score', 0)
                 
-                win_condition = False
-                if user_pick == '1' and res_h > res_a: win_condition = True
-                elif user_pick == '2' and res_a > res_h: win_condition = True
-                elif user_pick == 'X' and res_h == res_a: win_condition = True
-                elif user_pick == 'GG' and res_h > 0 and res_a > 0: win_condition = True
-                elif user_pick == 'NG' and (res_h == 0 or res_a == 0): win_condition = True
+                # SETTLEMENT LOGIC
+                is_win = False
+                if user_pick == '1' and res_h > res_a: is_win = True
+                elif user_pick == '2' and res_a > res_h: is_win = True
+                elif user_pick == 'X' and res_h == res_a: is_win = True
+                elif user_pick == 'GG' and res_h > 0 and res_a > 0: is_win = True
+                elif user_pick == 'NG' and (res_h == 0 or res_a == 0): is_win = True
+                elif user_pick == 'OV25' and (res_h + res_a) > 2.5: is_win = True
+                elif user_pick == 'UN25' and (res_h + res_a) < 2.5: is_win = True
                 
-                if not win_condition:
+                if not is_win:
                     ticket_won = False
             else:
-                match_found_for_all = False # Result isn't in yet
+                # Result not found yet, skip this ticket for now
+                all_matches_found = False
+                break
 
-        # 3. Update Status
-        if match_found_for_all:
-            final_status = 'won' if ticket_won else 'lost'
-            cur.execute("UPDATE betsnow SET status = %s WHERE id = %s", (final_status, ticket_id))
+        # 3. UPDATE TICKET STATUS
+        if all_matches_found:
+            final_status = "won" if ticket_won else "lost"
+            supabase.table("betsnow").update({"status": final_status}).eq("id", ticket_id).execute()
+            print(f"🎫 Ticket {ticket_id[:8]} settled as: {final_status.upper()}")
 
-    conn.commit()
-    cur.close()
-    conn.close()
+    print("🏁 Settlement cycle complete.")
 
 if __name__ == "__main__":
-    settle()
+    settle_bets()
