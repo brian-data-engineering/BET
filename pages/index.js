@@ -21,15 +21,12 @@ export default function Home({ initialMatches = [] }) {
     { id: 'table-tennis', name: 'Table Tennis', icon: '🏓' },
   ];
 
-  // Helper to format time specifically for Kenyan Timezone (EAT)
-  const formatKenyanTime = (dateString) => {
+  // Since Betika data is already EAT, we just extract the HH:mm from the string directly
+  const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Africa/Nairobi',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date(dateString));
+    // Splits "2026-03-27 19:30:00" and takes "19:30:00", then slices to "19:30"
+    const timePart = dateString.includes(' ') ? dateString.split(' ')[1] : dateString;
+    return timePart ? timePart.slice(0, 5) : 'TBD';
   };
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
@@ -48,7 +45,7 @@ export default function Home({ initialMatches = [] }) {
         matchId: matchId,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         selection: selection,
-        marketName: '1X2', // Default market for home page
+        marketName: '1X2',
         odds: value
       }];
     });
@@ -93,7 +90,6 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
-      {/* Banner */}
       <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
         <div className="max-w-[1440px] mx-auto h-[160px] relative">
             <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
@@ -117,7 +113,6 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* Sport Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button 
@@ -169,7 +164,7 @@ export default function Home({ initialMatches = [] }) {
                               {match.display_league || match.league_name}
                             </span>
                             <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
-                              <Clock size={10} /> {formatKenyanTime(match.commence_time)}
+                              <Clock size={10} /> {formatFixedTime(match.commence_time)}
                             </span>
                           </div>
                           <div className="flex flex-col">
