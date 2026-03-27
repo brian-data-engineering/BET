@@ -9,6 +9,7 @@ export default function Betslip({ items = [], setItems }) {
   const [stake, setStake] = useState(100);
 
   const removeItem = (id) => setItems(items.filter(item => item.id !== id));
+  
   const clearAll = () => {
     setItems([]);
     setBookingCode(null);
@@ -23,7 +24,7 @@ export default function Betslip({ items = [], setItems }) {
     setIsBooking(true);
 
     try {
-      // Generate unique 6-character code (e.g., B7X9LP)
+      // Generate unique 6-character code
       const shortCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
       const { error } = await supabase
@@ -54,7 +55,7 @@ export default function Betslip({ items = [], setItems }) {
   return (
     <div className="bg-[#111926] border border-white/5 rounded-2xl overflow-hidden flex flex-col h-fit sticky top-24 shadow-2xl">
       
-      {/* HEADER - Updated to match Image 5 palette */}
+      {/* HEADER */}
       <div className="bg-[#0b0f1a] p-4 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Ticket size={16} className="text-[#10b981]" />
@@ -80,7 +81,7 @@ export default function Betslip({ items = [], setItems }) {
               <CheckCircle2 size={28} className="text-[#10b981]" />
             </div>
             <h3 className="text-sm font-black uppercase italic tracking-tighter text-white mb-1">Code Generated</h3>
-            <p className="text-[10px] text-slate-500 mb-6 uppercase font-bold italic">Valid at any BonusBet shop or online</p>
+            <p className="text-[10px] text-slate-500 mb-6 uppercase font-bold italic">Valid at any Lucra shop or online</p>
             
             <div 
               onClick={copyToClipboard}
@@ -105,7 +106,7 @@ export default function Betslip({ items = [], setItems }) {
         ) : (
           /* ACTIVE SLIP VIEW */
           <div className="space-y-4">
-            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+            <div className="max-h-[350px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
               {items.map((item) => (
                 <div key={item.id} className="bg-[#1c2636] border border-white/5 p-3 rounded-xl relative group">
                   <button onClick={() => removeItem(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-white transition-colors">
@@ -117,15 +118,19 @@ export default function Betslip({ items = [], setItems }) {
                   <div className="flex justify-between items-end">
                     <div>
                       <p className="text-xs font-black text-white italic">{item.selection}</p>
-                      <p className="text-[9px] text-[#10b981] font-bold uppercase italic">Market: 1x2</p>
+                      {/* FIXED: Dynamic market name display */}
+                      <p className="text-[9px] text-[#10b981] font-bold uppercase italic">
+                        Market: {item.marketName}
+                      </p>
                     </div>
-                    <span className="text-sm font-black text-[#f59e0b] italic">{parseFloat(item.odds).toFixed(2)}</span>
+                    <span className="text-sm font-black text-[#f59e0b] italic">
+                      {parseFloat(item.odds || 0).toFixed(2)}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Stake Input Area - Matches Image 5 */}
             <div className="pt-4 border-t border-white/5 space-y-3">
               <div className="flex justify-between items-center text-[11px] font-black uppercase italic text-slate-500">
                 <span>Total Odds</span>
@@ -157,7 +162,7 @@ export default function Betslip({ items = [], setItems }) {
               </button>
 
               <p className="text-[8px] text-center font-black uppercase italic text-slate-600 tracking-widest flex items-center justify-center gap-2">
-                <Smartphone size={10} /> Powered by BonusBet Mobile
+                <Smartphone size={10} /> Powered by Lucra Mobile
               </p>
             </div>
           </div>
