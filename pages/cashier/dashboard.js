@@ -4,7 +4,7 @@ import CashierLayout from '../../components/cashier/CashierLayout';
 import MatchCard from '../../components/cashier/MatchCard';
 import BetSlip from '../../components/cashier/BetSlip';
 import PrintableTicket from '../../components/cashier/PrintableTicket';
-import { Search, Zap } from 'lucide-react';
+import { Search, Zap, Loader2, Info } from 'lucide-react';
 
 export default function CashierDashboard() {
   const [matches, setMatches] = useState([]);
@@ -14,42 +14,45 @@ export default function CashierDashboard() {
   const [isLoadingCode, setIsLoadingCode] = useState(false);
   const [currentTicket, setCurrentTicket] = useState(null);
 
+  // 1. Fetch live matches (Sync with your scraper)
   useEffect(() => {
     const fetchMatches = async () => {
-      const { data } = await supabase.from('matches').select('*').eq('status', 'open');
+      const { data } = await supabase
+        .from('matches')
+        .select('*')
+        .eq('status', 'open')
+        .order('commence_time', { ascending: true });
       setMatches(data || []);
     };
     fetchMatches();
   }, []);
 
-  // Helper to ensure odds are valid numbers (prevents NaN)
   const parseOdds = (val) => {
     const parsed = parseFloat(val);
     return isNaN(parsed) ? 1.00 : parsed;
   };
 
-  // 1. Load & Sanitize Booking Code Logic
+  // 2. Booking Code Logic (Load pre-selected slips)
   const loadBookingCode = async () => {
-    if (!bookingInput) return;
-    setIsLoadingCode(true);
+    const cleanCode = bookingInput.trim().toUpperCase();
+    if (!cleanCode) return;
     
+    setIsLoadingCode(true);
     const { data, error } = await supabase
       .from('booking_codes')
       .select('*')
-      .eq('code', bookingInput.toUpperCase())
+      .eq('code', cleanCode)
       .single();
 
     if (data && data.selections) {
-      // Force all odds to be numbers and handle different field names (odd vs odds)
       const sanitized = data.selections.map(item => ({
         ...item,
         odds: parseOdds(item.odds || item.odd) 
       }));
-      
       setCart(sanitized); 
       setBookingInput('');
     } else {
-      alert("Invalid or Expired Booking Code");
+      alert("INVALID CODE: Booking sequence not recognized in database.");
     }
     setIsLoadingCode(false);
   };
@@ -67,61 +70,62 @@ export default function CashierDashboard() {
 
   const removeFromSlip = (id) => setCart(cart.filter(item => item.matchId !== id));
 
-  // 2. Final Print & Save Logic with Math Safety
+  // 3. Final Payout & Database Insertion (Mapping to betsnow)
   const handlePrint = async () => {
     if (cart.length === 0) return;
 
-    const ticketId = 'LC-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+    // Generate high-visibility 6-digit Bet Code
+    const betCode = 'BT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
     
-    // Safety math for total odds
     const calculatedTotalOdds = cart.reduce((acc, item) => acc * parseOdds(item.odds), 1);
-    const finalOdds = calculatedTotalOdds.toFixed(2);
-    
-    // Safety math for payout
     const numericStake = parseFloat(stake) || 0;
     const calculatedPayout = (calculatedTotalOdds * numericStake).toFixed(2);
 
     const ticketData = {
-      id: ticketId,
+      bet_code: betCode,
       cashier_id: (await supabase.auth.getUser()).data.user.id,
-      selections: cart,
+      selections: cart, // Stored as JSONB in betsnow
       stake: numericStake,
-      total_odds: parseFloat(finalOdds),
-      payout: parseFloat(calculatedPayout),
-      status: 'pending'
+      total_odds: parseFloat(calculatedTotalOdds.toFixed(2)),
+      potential_payout: parseFloat(calculatedPayout),
+      status: 'pending',
+      is_paid: false,
+      created_at: new Date().toISOString()
     };
 
-    const { error } = await supabase.from('tickets').insert([ticketData]);
+    // Inserting into your production 'betsnow' table
+    const { error } = await supabase.from('betsnow').insert([ticketData]);
 
     if (!error) {
       setCurrentTicket(ticketData);
+      // Trigger thermal printer
       setTimeout(() => {
         window.print();
         setCart([]);
         setCurrentTicket(null);
       }, 500);
     } else {
-      alert("Error saving ticket: " + error.message);
+      alert("SYSTEM ERROR: Failed to commit bet to betsnow table.");
     }
   };
 
   return (
     <CashierLayout>
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#0b0f1a]">
         
-        {/* Main Feed */}
-        <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
-          <div className="flex justify-between items-start mb-8">
+        {/* Main Selection Area */}
+        <div className="flex-1 p-8 overflow-y-auto scrollbar-hide">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
             <div>
-              <h1 className="text-3xl font-black italic uppercase tracking-tighter">Live Terminal</h1>
-              <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Select events or enter a booking code</p>
+              <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white">Betting Terminal</h1>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] mt-1 italic">Node: 001-CASHIER-MAIN</p>
             </div>
 
-            {/* Booking Code Search Bar */}
-            <div className="flex gap-2 bg-slate-900 p-2 rounded-2xl border border-gray-800 w-72 shadow-xl">
+            {/* Input for External Booking Codes */}
+            <div className="flex gap-2 bg-[#111926] p-2 rounded-2xl border border-white/5 w-full md:w-80 shadow-2xl focus-within:border-[#10b981] transition-all">
               <input 
-                placeholder="ENTER BOOKING CODE" 
-                className="bg-transparent border-none outline-none text-[10px] font-black px-2 flex-1 tracking-widest text-white uppercase"
+                placeholder="LOAD BOOKING CODE" 
+                className="bg-transparent border-none outline-none text-[11px] font-black px-4 flex-1 tracking-[0.2em] text-white uppercase placeholder:text-slate-700"
                 value={bookingInput}
                 onChange={(e) => setBookingInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && loadBookingCode()}
@@ -129,33 +133,45 @@ export default function CashierDashboard() {
               <button 
                 onClick={loadBookingCode}
                 disabled={isLoadingCode}
-                className="bg-lucra-green text-black p-2 rounded-xl hover:bg-white transition-all disabled:opacity-50"
+                className="bg-[#10b981] text-black p-3 rounded-xl hover:bg-white transition-all disabled:opacity-50 active:scale-90"
               >
-                {isLoadingCode ? <div className="animate-spin h-4 w-4 border-2 border-black border-t-transparent rounded-full" /> : <Search size={16} />}
+                {isLoadingCode ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} />}
               </button>
             </div>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {matches.map(m => (
-              <MatchCard key={m.id} match={m} onSelect={addToSlip} />
-            ))}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {matches.length > 0 ? (
+              matches.map(m => (
+                <MatchCard key={m.id} match={m} onSelect={addToSlip} />
+              ))
+            ) : (
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
+                <Info className="mx-auto text-slate-800 mb-4" size={48} />
+                <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.4em] italic">No active matches in market</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Sidebar Slip */}
-        <div className="w-96 border-l border-gray-800 p-6 bg-slate-950/50 shadow-2xl">
-          <BetSlip 
-            cart={cart} 
-            onRemove={removeFromSlip} 
-            stake={stake} 
-            setStake={setStake} 
-            onPrint={handlePrint} 
-          />
+        {/* The Action Slip (Right Sidebar) */}
+        <div className="w-[420px] border-l border-white/5 bg-[#111926]/50 backdrop-blur-md flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
+          <div className="flex-1 overflow-y-auto p-8 scrollbar-hide">
+            <BetSlip 
+              cart={cart} 
+              onRemove={removeFromSlip} 
+              stake={stake} 
+              setStake={setStake} 
+              onPrint={handlePrint} 
+            />
+          </div>
         </div>
       </div>
 
-      <PrintableTicket ticket={currentTicket} />
+      {/* Hidden container for Browser Print functionality */}
+      <div className="hidden print:block">
+        <PrintableTicket ticket={currentTicket} />
+      </div>
       
     </CashierLayout>
   );
