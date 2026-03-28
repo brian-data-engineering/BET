@@ -11,12 +11,15 @@ import { AlertCircle, Loader2, ChevronRight } from 'lucide-react';
 export default function ResultsPage() {
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSport, setActiveSport] = useState('soccer'); // Tracks soccer, basketball, or table-tennis
+  const [activeSport, setActiveSport] = useState('soccer'); // Initial state
   const { slipItems } = useBets();
 
   useEffect(() => {
     async function getResults() {
       setIsLoading(true);
+      // Optional: Clear results when switching sports for a cleaner feel
+      setResults([]); 
+      
       try {
         const { data, error } = await supabase
           .from('results')
@@ -37,7 +40,7 @@ export default function ResultsPage() {
     getResults();
   }, [activeSport]);
 
-  // Grouping by league
+  // Grouping by league for a clean dashboard view
   const groupedResults = results.reduce((acc, match) => {
     const league = match.league_name || 'Other Leagues';
     if (!acc[league]) acc[league] = [];
@@ -51,38 +54,46 @@ export default function ResultsPage() {
       
       <div className="max-w-[1200px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6 px-4 pt-4 lg:pt-6 pb-24 lg:pb-10">
         
-        {/* Left Sidebar - Now supports Table Tennis selection */}
+        {/* Left Sidebar - Now fully integrated with Ice Hockey selection */}
         <div className="w-full lg:w-64 shrink-0">
            <ResultsSidebar activeSport={activeSport} setActiveSport={setActiveSport} />
         </div>
 
         {/* Main Feed Container */}
-        <main className="flex-1 min-h-screen rounded-lg overflow-hidden bg-[#111926] border border-white/5 shadow-2xl flex flex-col">
+        <main className="flex-1 min-h-[600px] rounded-lg overflow-hidden bg-[#111926] border border-white/5 shadow-2xl flex flex-col transition-all duration-300">
           
-          {/* Main Header: z-30 to stay on top of everything */}
+          {/* Top Header: Displays result count and active sport */}
           <ResultsHeader count={results.length} activeSport={activeSport} />
 
           <div className="flex flex-col">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
-                <Loader2 className="animate-spin text-[#10b981]" size={32} />
-                <span className="text-[11px] font-bold italic tracking-widest uppercase">
-                  Syncing {activeSport.replace('-', ' ')}...
+              /* Loading State: Personalized to the active sport */
+              <div className="flex flex-col items-center justify-center py-32 text-slate-500 gap-3">
+                <div className="relative">
+                  <Loader2 className="animate-spin text-[#10b981]" size={40} />
+                  <div className="absolute inset-0 blur-lg bg-[#10b981]/20 animate-pulse" />
+                </div>
+                <span className="text-[11px] font-bold italic tracking-[0.2em] uppercase mt-2">
+                  Syncing {activeSport.replace('-', ' ')} Feed
                 </span>
               </div>
             ) : Object.keys(groupedResults).length > 0 ? (
+              /* Results Feed: Grouped by League */
               Object.keys(groupedResults).map((league) => (
                 <div key={league} className="flex flex-col">
-                  {/* League Heading: z-20 and lower top offset to prevent overlap */}
-                  <div className="bg-[#1a231f] px-4 py-2 flex items-center gap-3 border-b border-black/40 sticky top-[44px] lg:top-[112px] z-20 shadow-sm">
-                    <ChevronRight size={14} className="text-[#10b981]" />
-                    <span className="text-[10px] font-black text-slate-200 uppercase tracking-wider">
+                  {/* League Heading: Sticky to keep context while scrolling */}
+                  <div className="bg-[#1a231f] px-4 py-2.5 flex items-center gap-3 border-y border-black/40 sticky top-[48px] lg:top-[112px] z-20 shadow-lg shadow-black/20 backdrop-blur-md">
+                    <ChevronRight size={14} className="text-[#10b981] opacity-70" />
+                    <span className="text-[10px] font-black text-slate-100 uppercase tracking-widest">
                       {league}
+                    </span>
+                    <span className="ml-auto text-[8px] bg-white/5 px-1.5 rounded-full text-slate-500 font-bold">
+                      {groupedResults[league].length} Matches
                     </span>
                   </div>
                   
                   {/* Match Rows */}
-                  <div className="flex flex-col divide-y divide-black/10">
+                  <div className="flex flex-col divide-y divide-black/20">
                     {groupedResults[league].map((match) => (
                       <ResultsRow key={match.id} match={match} />
                     ))}
@@ -90,9 +101,19 @@ export default function ResultsPage() {
                 </div>
               ))
             ) : (
-              <div className="py-32 text-center text-slate-600 flex flex-col items-center gap-4">
-                <AlertCircle size={40} className="opacity-10" />
-                <span className="text-sm font-bold italic">No {activeSport} results found</span>
+              /* Empty State: Shown when no settled matches exist */
+              <div className="py-40 text-center text-slate-600 flex flex-col items-center gap-5">
+                <div className="p-6 rounded-full bg-white/[0.02] border border-white/5">
+                  <AlertCircle size={48} className="opacity-10 text-[#ffcc00]" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-black italic uppercase tracking-widest text-slate-400">
+                    No results found
+                  </span>
+                  <p className="text-[10px] text-slate-500 font-bold max-w-[200px] leading-relaxed">
+                    Check back later for updated {activeSport.replace('-', ' ')} results.
+                  </p>
+                </div>
               </div>
             )}
           </div>
