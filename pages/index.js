@@ -29,20 +29,27 @@ export default function Home({ initialMatches = [] }) {
    * Locks betting 60 seconds before commence_time.
    */
   const getMatchStatus = (commenceTime) => {
-    if (!commenceTime) return { isLocked: true, secondsLeft: 0 };
-    
-    // STRIP OFFSET: Force '19:00:00+00' to be treated as local '19:00:00'
-    const cleanTime = commenceTime.replace('+00', '').replace('Z', '').replace(' ', 'T');
-    const matchDate = new Date(cleanTime);
-    
-    // T-minus 60 seconds
-    const lockTime = matchDate.getTime() - 60000; 
-    
-    return {
-      isLocked: currentTime.getTime() >= lockTime,
-      secondsLeft: Math.floor((matchDate - currentTime) / 1000)
-    };
+  if (!commenceTime) return { isLocked: true, secondsLeft: 0 };
+
+  // 1. Force the string into a very specific ISO format: YYYY-MM-DDTHH:MM:SS
+  // This tells JS: "Do NOT adjust for UTC. Read this exactly as written."
+  const cleanTime = commenceTime.split('+')[0].replace(' ', 'T');
+  const matchDate = new Date(cleanTime);
+  
+  // 2. We must also ensure 'currentTime' is treated the same way
+  // We use a 60-second buffer (60000ms)
+  const lockTime = matchDate.getTime() - 60000;
+  
+  // 3. DEBUG: Check your console to see the exact numbers being compared
+  // console.log(`Match: ${matchDate.getTime()} vs Now: ${currentTime.getTime()}`);
+
+  const isLocked = currentTime.getTime() >= lockTime;
+
+  return {
+    isLocked: isLocked,
+    secondsLeft: Math.floor((matchDate.getTime() - currentTime.getTime()) / 1000)
   };
+};
 
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
