@@ -1,4 +1,4 @@
-import { Trophy, Dribbble, CircleDot, ChevronRight } from 'lucide-react';
+import { Trophy, Dribbble, CircleDot, Activity, ChevronRight } from 'lucide-react';
 
 export default function ResultsSidebar({ activeSport, setActiveSport }) {
   const sports = [
@@ -13,6 +13,11 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
       icon: <Dribbble size={16} /> 
     },
     { 
+      id: 'ice-hockey', 
+      name: 'Ice Hockey', 
+      icon: <Activity size={16} /> 
+    },
+    { 
       id: 'table-tennis', 
       name: 'Table Tennis', 
       icon: <CircleDot size={16} /> 
@@ -22,10 +27,12 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
   return (
     <aside className="hidden lg:flex flex-col w-64 bg-[#0b0f1a] p-2 gap-1 sticky top-[105px] h-fit">
       <div className="px-3 mb-4 flex items-center justify-between">
-        <h3 className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
-          All Sports
-        </h3>
-        <div className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse" />
+        <div className="flex items-center gap-2">
+           <div className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse shadow-[0_0_8px_#10b981]" />
+           <h3 className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
+             Live Results
+           </h3>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -43,14 +50,14 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
               }`}
             >
               <div className="flex items-center gap-3 text-[13px] font-black tracking-tight">
-                <span className={`${isActive ? 'text-[#10b981]' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                <span className={`transition-colors ${isActive ? 'text-[#10b981]' : 'text-slate-500 group-hover:text-slate-300'}`}>
                   {sport.icon}
                 </span>
                 {sport.name}
               </div>
               
               {isActive && (
-                <ChevronRight size={14} className="opacity-50" />
+                <ChevronRight size={14} className="opacity-50 animate-in slide-in-from-left-1" />
               )}
             </button>
           );
@@ -59,9 +66,15 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
 
       {/* Footer Info inside Sidebar */}
       <div className="mt-6 px-4 py-4 rounded-2xl bg-gradient-to-br from-[#111926] to-[#0b0f1a] border border-white/5">
-        <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
-          Showing settled results for the last 24 hours.
-        </p>
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] text-slate-500 font-bold leading-relaxed">
+            Showing settled results for the last 24 hours.
+          </p>
+          <div className="h-[1px] w-full bg-white/5" />
+          <p className="text-[9px] text-[#10b981]/60 font-medium">
+            Data updates automatically
+          </p>
+        </div>
       </div>
     </aside>
   );
