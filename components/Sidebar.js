@@ -5,13 +5,12 @@ import {
   ChevronRight, 
   ChevronDown, 
   FilterX,
-  Globe,
-  Star 
+  Globe
 } from 'lucide-react';
 
 const Sidebar = ({ onSelectLeague, onClearFilter }) => {
   const [tree, setTree] = useState({}); 
-  const [expandedSport, setExpandedSport] = useState('soccer'); // Default to soccer
+  const [expandedSport, setExpandedSport] = useState('soccer'); 
   const [loading, setLoading] = useState(true);
 
   const sportMapping = {
@@ -21,11 +20,6 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
     "ice-hockey": { name: "Ice Hockey", icon: "🏒" },
     "table-tennis": { name: "Table Tennis", icon: "🏓" }
   };
-
-  // Add a "Top Leagues" section for UX
-  const topLeagues = [
-    "Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1", "Champions League", "NBA"
-  ];
 
   useEffect(() => {
     fetchHierarchy();
@@ -41,6 +35,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
       .select('sport_key, country, league_name')
       .in('sport_key', allowedSports) 
       .gt('commence_time', now) 
+      .order('country', { ascending: true })
       .order('league_name', { ascending: true });
 
     if (data) {
@@ -48,10 +43,11 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
       
       data.forEach(item => {
         const sport = item.sport_key;
+        // Clean names to handle potential scrap/extra quotes
         const league = (item.league_name || "").replace(/['"]+/g, '').trim();
         const country = (item.country || "International").replace(/['"]+/g, '').trim();
 
-        // Virtual Filter
+        // Filter out virtual/e-sports if they slipped through
         if (/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league)) return;
 
         if (!newTree[sport]) newTree[sport] = {};
@@ -86,22 +82,6 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
         </button>
       </div>
 
-      {/* Top Leagues Section (Static UX win) */}
-      <div className="py-4 border-b border-white/5">
-        <div className="px-4 mb-2 flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-tighter italic">
-          <Star size={12} className="text-yellow-500" /> Popular
-        </div>
-        {topLeagues.map(name => (
-          <button
-            key={name}
-            onClick={() => onSelectLeague(name)}
-            className="w-full text-left px-8 py-1.5 text-[11px] font-bold text-slate-400 hover:text-[#10b981] hover:bg-white/5 transition-all truncate"
-          >
-            {name}
-          </button>
-        ))}
-      </div>
-
       <div className="py-2">
         {loading ? (
           <div className="p-4 space-y-3">
@@ -127,26 +107,33 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                 </button>
 
                 {isSportExpanded && (
-                  <div className="bg-[#0b0f1a]/30 max-h-[400px] overflow-y-auto no-scrollbar">
-                    {Object.keys(countries).map(country => (
-                      <div key={country} className="group">
-                        <div className="px-6 py-2 flex items-center gap-2 bg-white/5 border-y border-white/5">
-                          <Globe size={10} className="text-slate-600" />
-                          <span className="text-[9px] font-black uppercase italic text-slate-400">{country}</span>
+                  <div className="bg-[#0b0f1a]/30 max-h-[600px] overflow-y-auto no-scrollbar">
+                    {Object.keys(countries).length === 0 ? (
+                      <div className="px-10 py-4 text-[10px] text-slate-600 italic">No active leagues</div>
+                    ) : (
+                      Object.keys(countries).map(country => (
+                        <div key={country} className="group">
+                          {/* Country Row */}
+                          <div className="px-6 py-2 flex items-center gap-2 bg-white/5 border-y border-white/5">
+                            <Globe size={10} className="text-slate-600" />
+                            <span className="text-[9px] font-black uppercase italic text-slate-400">{country}</span>
+                          </div>
+                          
+                          {/* Leagues under Country */}
+                          <div className="flex flex-col">
+                            {countries[country].map(league => (
+                              <button
+                                key={league}
+                                onClick={() => onSelectLeague(league)}
+                                className="w-full text-left px-10 py-2.5 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-[#10b981]/20 transition-all truncate uppercase italic border-l-2 border-transparent hover:border-[#10b981]"
+                              >
+                                {league}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex flex-col">
-                          {countries[country].map(league => (
-                            <button
-                              key={league}
-                              onClick={() => onSelectLeague(league)}
-                              className="w-full text-left px-10 py-2.5 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-[#10b981]/20 transition-all truncate uppercase italic border-l-2 border-transparent hover:border-[#10b981]"
-                            >
-                              {league}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 )}
               </div>
