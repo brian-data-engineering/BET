@@ -14,39 +14,37 @@ export default function Home({ initialMatches = [] }) {
   const { slipItems, setSlipItems } = useBets(); 
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 1. HIGH-FREQUENCY CLOCK: Every 5 seconds to clear "live crap" immediately
+  // 1. HIGH-FREQUENCY CLOCK
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 5000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. PARSING LOGIC: Ensures scraped UTC strings match Local Time correctly
- const getMatchDate = (dateString) => {
-  if (!dateString) return null;
-  try {
-    // 1. Replace space with 'T' (e.g., "2026-03-28 19:00" -> "2026-03-28T19:00")
-    let iso = dateString.replace(' ', 'T');
-    
-    // 2. FORCE UTC: If it doesn't have a Z or an offset, add 'Z'
-    // This tells the browser: "This is London time, please add 3 hours for Nairobi"
-    if (!iso.includes('Z') && !iso.includes('+')) {
-      iso += 'Z';
+  // 2. UPDATED PARSING LOGIC: Treat raw DB time as Nairobi Local Time
+  const getMatchDate = (dateString) => {
+    if (!dateString) return null;
+    try {
+      // Step 1: Remove any timezone markers (+00, Z, etc.) 
+      // This forces the browser to interpret the numbers as "Current Local Time"
+      const localString = dateString.replace('Z', '').replace(/\+\d{2}(:?\d{2})?/, '').replace(' ', 'T');
+      
+      const d = new Date(localString);
+      return isNaN(d.getTime()) ? null : d;
+    } catch (e) {
+      return null;
     }
-    
-    const d = new Date(iso);
-    return isNaN(d.getTime()) ? null : d;
-  } catch (e) {
-    return null;
-  }
-};
+  };
+
   const isMatchStarted = (commenceTime) => {
     const matchDate = getMatchDate(commenceTime);
-    // Hide game the instant matchDate is in the past
     return matchDate ? currentTime >= matchDate : false;
   };
 
+  // Displays the time exactly as it appears in the string (Nairobi Raw)
   const formatFixedTime = (dateString) => {
-    const timeMatch = dateString?.match(/(\d{2}:\d{2})/);
+    if (!dateString) return 'TBD';
+    // Matches the HH:mm pattern directly from the raw string
+    const timeMatch = dateString.match(/(\d{2}:\d{2})/);
     return timeMatch ? timeMatch[0] : 'TBD';
   };
 
@@ -83,13 +81,11 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
-  // 3. MASTER FILTER: This keeps the UI clean
+  // 3. MASTER FILTER
   const displayMatches = useMemo(() => {
     let filtered = initialMatches.filter(m => {
-      // GUARD 1: Remove Live Games (The "Crap" Filter)
       if (isMatchStarted(m.commence_time)) return false;
 
-      // GUARD 2: Virtual/Cyber Filter
       const league = (m.league_name || '').toLowerCase();
       const sport = (m.sport_key || '').toLowerCase();
       const isVirtual = league.includes('ebasketball') || league.includes('esoccer') || 
@@ -111,13 +107,12 @@ export default function Home({ initialMatches = [] }) {
       );
     }
     return filtered;
-  }, [initialMatches, selectedLeague, searchQuery, activeTab, currentTime]); // List refreshes every clock tick
+  }, [initialMatches, selectedLeague, searchQuery, activeTab, currentTime]);
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
-      {/* Banner */}
       <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
         <div className="max-w-[1440px] mx-auto h-[160px] relative">
             <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
@@ -138,7 +133,6 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button 
@@ -223,15 +217,14 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    // SERVER-SIDE GUARD: Only fetch games that are NOT yet live
-    // (We use a 1-minute buffer in case clocks are slightly off)
+    // Note: Since raw time is Nairobi, we fetch games occurring after "Nairobi Now"
     const now = new Date(Date.now() - 60000).toISOString();
 
     const { data } = await supabase
       .from('api_events')
       .select('*')
       .in('sport_key', ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'])
-      .gt('commence_time', now) // <--- CRITICAL: Filter games already started
+      .gt('commence_time', now)
       .order('commence_time', { ascending: true })
       .limit(100); 
 
