@@ -164,7 +164,7 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
+          <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 italic bg-[#0b0f1a]/30">
             <div className="col-span-7 flex items-center gap-2">
               Event {selectedLeague && <span className="text-[#10b981] ml-2">/ {selectedLeague}</span>}
             </div>
@@ -184,7 +184,7 @@ export default function Home({ initialMatches = [] }) {
                   <div className="col-span-7 pr-4">
                     <Link href={`/${match.id}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-[10px] font-black uppercase italic truncate max-w-[120px] ${closingSoon ? 'text-orange-500' : 'text-[#10b981]'}`}>
+                        <span className={`text-[10px] font-black italic truncate max-w-[120px] ${closingSoon ? 'text-orange-500' : 'text-[#10b981]'}`}>
                           {match.display_league || match.league_name}
                         </span>
                         <span className={`text-[9px] font-bold flex items-center gap-1 italic ${closingSoon ? 'text-orange-400' : 'text-slate-500'}`}>
@@ -193,8 +193,8 @@ export default function Home({ initialMatches = [] }) {
                         </span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.home_team)}</span>
-                        <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.away_team)}</span>
+                        <span className="text-sm font-black text-slate-200 truncate">{cleanName(match.home_team)}</span>
+                        <span className="text-sm font-black text-slate-200 truncate">{cleanName(match.away_team)}</span>
                       </div>
                     </Link>
                   </div>
