@@ -189,7 +189,7 @@ export default function Home({ initialMatches = [] }) {
                         </span>
                         <span className={`text-[9px] font-bold flex items-center gap-1 italic ${closingSoon ? 'text-orange-400' : 'text-slate-500'}`}>
                           <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                          {closingSoon && <span className="ml-1 text-[8px] animate-pulse">LOCKING</span>}
+                          {closingSoon && <span className="ml-1 text-[8px] animate-pulse">STARTING</span>}
                         </span>
                       </div>
                       <div className="flex flex-col">
