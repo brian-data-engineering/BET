@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { 
-  Trophy, 
-  ChevronRight, 
-  ChevronDown, 
-  FilterX,
-  Globe
-} from 'lucide-react';
+import { Trophy, ChevronRight, ChevronDown, FilterX, Globe } from 'lucide-react';
 
 const Sidebar = ({ onSelectLeague, onClearFilter }) => {
   const [tree, setTree] = useState({}); 
@@ -40,22 +34,15 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
 
     if (data) {
       const newTree = {};
-      
       data.forEach(item => {
         const sport = item.sport_key;
-        // Clean names to handle potential scrap/extra quotes
         const league = (item.league_name || "").replace(/['"]+/g, '').trim();
         const country = (item.country || "International").replace(/['"]+/g, '').trim();
-
-        // Filter out virtual/e-sports if they slipped through
         if (/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league)) return;
-
         if (!newTree[sport]) newTree[sport] = {};
         if (!newTree[sport][country]) newTree[sport][country] = new Set();
-        
         newTree[sport][country].add(league);
       });
-
       const finalTree = {};
       Object.keys(newTree).forEach(s => {
         finalTree[s] = {};
@@ -63,7 +50,6 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
           finalTree[s][c] = Array.from(newTree[s][c]);
         });
       });
-
       setTree(finalTree);
     }
     setLoading(false);
@@ -71,7 +57,6 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
 
   return (
     <div className="w-full bg-[#111926] text-slate-300 min-h-screen border-r border-white/5 select-none">
-      {/* Header */}
       <div className="p-4 flex items-center justify-between border-b border-white/5 bg-[#0b0f1a]/50">
         <div className="flex items-center gap-2">
            <Trophy size={14} className="text-[#10b981]" />
@@ -113,18 +98,15 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                     ) : (
                       Object.keys(countries).map(country => (
                         <div key={country} className="group">
-                          {/* Country Row */}
                           <div className="px-6 py-2 flex items-center gap-2 bg-white/5 border-y border-white/5">
                             <Globe size={10} className="text-slate-600" />
                             <span className="text-[9px] font-black uppercase italic text-slate-400">{country}</span>
                           </div>
-                          
-                          {/* Leagues under Country */}
                           <div className="flex flex-col">
                             {countries[country].map(league => (
                               <button
                                 key={league}
-                                onClick={() => onSelectLeague(league)}
+                                onClick={() => onSelectLeague(league, sportKey)} // THE FIX: Pass sportKey
                                 className="w-full text-left px-10 py-2.5 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-[#10b981]/20 transition-all truncate uppercase italic border-l-2 border-transparent hover:border-[#10b981]"
                               >
                                 {league}
