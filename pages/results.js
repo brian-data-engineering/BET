@@ -11,7 +11,7 @@ import { AlertCircle, Loader2, ChevronRight } from 'lucide-react';
 export default function ResultsPage() {
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSport, setActiveSport] = useState('soccer'); // Default sport
+  const [activeSport, setActiveSport] = useState('soccer');
   const { slipItems } = useBets();
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export default function ResultsPage() {
           .from('results')
           .select('*')
           .eq('status', 'settled') 
-          .eq('sport_type', activeSport) // Filter by sidebar selection
+          .eq('sport_type', activeSport)
           .order('match_date', { ascending: false })
           .limit(150);
 
@@ -35,9 +35,8 @@ export default function ResultsPage() {
       }
     }
     getResults();
-  }, [activeSport]); // Re-run when user clicks a different sport
+  }, [activeSport]);
 
-  // GROUPING LOGIC: Groups matches by League Name
   const groupedResults = results.reduce((acc, match) => {
     const league = match.league_name || 'Other Leagues';
     if (!acc[league]) acc[league] = [];
@@ -49,34 +48,38 @@ export default function ResultsPage() {
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Navbar />
       
-      <div className="max-w-[1200px] mx-auto flex gap-6 px-4 pt-6 pb-24 lg:pb-10">
+      <div className="max-w-[1200px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6 px-4 pt-4 lg:pt-6 pb-24 lg:pb-10">
         
-        {/* Sidebar for Desktop */}
-        <ResultsSidebar activeSport={activeSport} setActiveSport={setActiveSport} />
+        {/* Sidebar */}
+        <div className="w-full lg:w-64">
+           <ResultsSidebar activeSport={activeSport} setActiveSport={setActiveSport} />
+        </div>
 
-        {/* Main Feed */}
-        <main className="flex-1 min-h-screen rounded-xl overflow-hidden bg-[#111926] border border-white/5 shadow-2xl">
-          <ResultsHeader count={results.length} />
+        {/* Main Feed Container */}
+        <main className="flex-1 min-h-screen rounded-lg overflow-hidden bg-[#111926] border border-white/5 shadow-2xl flex flex-col">
+          
+          {/* We pass the activeSport here to show in the header */}
+          <ResultsHeader count={results.length} activeSport={activeSport} />
 
           <div className="flex flex-col">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
                 <Loader2 className="animate-spin text-[#10b981]" size={32} />
-                <span className="text-[11px] font-bold italic tracking-widest">Loading {activeSport}...</span>
+                <span className="text-[11px] font-bold italic tracking-widest uppercase">Syncing {activeSport}...</span>
               </div>
             ) : Object.keys(groupedResults).length > 0 ? (
               Object.keys(groupedResults).map((league) => (
-                <div key={league} className="flex flex-col mb-1">
-                  {/* League Heading - Dark Green bar like screenshot */}
-                  <div className="bg-[#1a231f] px-4 py-1.5 flex items-center gap-2 border-y border-black/40">
+                <div key={league} className="flex flex-col">
+                  {/* League Heading - Refined to match image better */}
+                  <div className="bg-[#1a231f] px-4 py-2 flex items-center gap-3 border-b border-black/40 sticky top-[45px] lg:top-[105px] z-20 shadow-sm">
                     <ChevronRight size={14} className="text-[#10b981]" />
-                    <span className="text-[11px] font-black text-slate-200 tracking-wide">
+                    <span className="text-[10px] font-black text-slate-200 uppercase tracking-wider">
                       {league}
                     </span>
                   </div>
                   
                   {/* Match Rows */}
-                  <div className="divide-y divide-black/10">
+                  <div className="flex flex-col divide-y divide-black/5">
                     {groupedResults[league].map((match) => (
                       <ResultsRow key={match.id} match={match} />
                     ))}
