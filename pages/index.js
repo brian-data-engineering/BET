@@ -18,7 +18,6 @@ export default function Home({ initialMatches = [] }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
-  // Tick every 5 seconds for high-precision clearing
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 5000);
     return () => clearInterval(timer);
@@ -26,16 +25,21 @@ export default function Home({ initialMatches = [] }) {
 
   /**
    * BUSINESS LOGIC: 
-   * A match is "started" (locked) for betting 60 seconds BEFORE the official time.
+   * Strips +00 to fix the 3-hour Nairobi offset.
+   * Locks betting 60 seconds before commence_time.
    */
   const getMatchStatus = (commenceTime) => {
     if (!commenceTime) return { isLocked: true, secondsLeft: 0 };
     
-    const matchDate = new Date(commenceTime.replace(' ', 'T'));
-    const lockDate = new Date(matchDate.getTime() - 60000); // T-minus 60 seconds
+    // STRIP OFFSET: Force '19:00:00+00' to be treated as local '19:00:00'
+    const cleanTime = commenceTime.replace('+00', '').replace('Z', '').replace(' ', 'T');
+    const matchDate = new Date(cleanTime);
+    
+    // T-minus 60 seconds
+    const lockTime = matchDate.getTime() - 60000; 
     
     return {
-      isLocked: currentTime >= lockDate,
+      isLocked: currentTime.getTime() >= lockTime,
       secondsLeft: Math.floor((matchDate - currentTime) / 1000)
     };
   };
@@ -78,11 +82,9 @@ export default function Home({ initialMatches = [] }) {
 
   const displayMatches = useMemo(() => {
     let filtered = initialMatches.filter(m => {
-      // 1. REMOVE GAMES 60 SECONDS BEFORE START
       const { isLocked } = getMatchStatus(m.commence_time);
       if (isLocked) return false;
 
-      // 2. Remove E-Sports/SRL
       const league = (m.league_name || '').toLowerCase();
       return !/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league);
     });
@@ -166,7 +168,7 @@ export default function Home({ initialMatches = [] }) {
             {displayMatches.length > 0 ? displayMatches.map((match) => {
               const currentSelection = slipItems.find(item => item.matchId === match.id);
               const { secondsLeft } = getMatchStatus(match.commence_time);
-              const closingSoon = secondsLeft < 300; // 5 mins warning
+              const closingSoon = secondsLeft < 300; 
 
               return (
                 <div key={match.id} className="grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors relative overflow-hidden">
@@ -180,7 +182,7 @@ export default function Home({ initialMatches = [] }) {
                         </span>
                         <span className={`text-[9px] font-bold flex items-center gap-1 italic ${closingSoon ? 'text-orange-400' : 'text-slate-500'}`}>
                           <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                          {closingSoon && <span className="ml-1 text-[8px] animate-pulse">LOCKING SOON</span>}
+                          {closingSoon && <span className="ml-1 text-[8px] animate-pulse">LOCKING</span>}
                         </span>
                       </div>
                       <div className="flex flex-col">
@@ -251,15 +253,17 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    // Note: Fetching T-60s on server to ensure we don't send expired games initially
-    const now = new Date(Date.now() - 60000).toISOString();
+    // We create a ISO string that matches the DB format (ignores UTC offset)
+    const nowLocalAsUTC = new Date(Date.now() + 60000).toISOString().replace('Z', '');
+    
     const { data } = await supabase
       .from('api_events')
       .select('*')
       .in('sport_key', ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'])
-      .gt('commence_time', now)
+      .gt('commence_time', nowLocalAsUTC)
       .order('commence_time', { ascending: true })
       .limit(500); 
+
     return { props: { initialMatches: data || [] } };
   } catch (err) { return { props: { initialMatches: [] } }; }
 }
