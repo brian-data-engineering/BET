@@ -17,11 +17,12 @@ supabase: Client = create_client(url, key)
 API_KEY = "394691c0a855a9c21e847bd3600eb8059fc7c57dcfd181c225176ad85973c187"
 BASE_URL = "https://api.odds-api.io/v3/events"
 
-# Updated to include Table Tennis
+# Configuration including Ice Hockey
 SPORTS_TO_SYNC = [
     {"name": "soccer", "url": f"{BASE_URL}?apiKey={API_KEY}&sport=football&limit=1000"},
     {"name": "basketball", "url": f"{BASE_URL}?apiKey={API_KEY}&sport=basketball&limit=1000"},
-    {"name": "table-tennis", "url": f"{BASE_URL}?apiKey={API_KEY}&sport=table-tennis&limit=1000"}
+    {"name": "table-tennis", "url": f"{BASE_URL}?apiKey={API_KEY}&sport=table-tennis&limit=1000"},
+    {"name": "ice-hockey", "url": f"{BASE_URL}?apiKey={API_KEY}&sport=ice-hockey&limit=1000"}
 ]
 
 def sync_results():
@@ -30,8 +31,7 @@ def sync_results():
     for sport in SPORTS_TO_SYNC:
         print(f"📡 Fetching {sport['name']} results...")
         try:
-            response = requests.get(sport['url'])
-            # Add timeout to prevent the script from hanging
+            response = requests.get(sport['url'], timeout=10)
             response.raise_for_status()
             events = response.json()
 
@@ -40,7 +40,7 @@ def sync_results():
                 continue
 
             for event in events:
-                # Only sync settled matches (ignores 'cancelled' or 'live' based on your JSON)
+                # 1. We only want 'settled' matches to ensure we have final scores
                 status = event.get('status')
                 if status != 'settled':
                     continue
@@ -50,7 +50,7 @@ def sync_results():
                 
                 # Extracting period data
                 fulltime = periods.get('fulltime', {})
-                # p1 is halftime for soccer, Q1 for basketball, and Set 1 for Table Tennis
+                # p1: Soccer Halftime, Basketball Q1, Table Tennis Set 1, Hockey Period 1
                 p1 = periods.get('p1', {}) 
 
                 all_formatted_data.append({
@@ -67,16 +67,15 @@ def sync_results():
                     "fulltime_away": fulltime.get('away'),
                     "half_time_home": p1.get('home'),
                     "half_time_away": p1.get('away'),
-                    "periods": periods # This saves all sets (p1, p2, p3, p4, p5) as JSON
+                    "periods": periods # Crucial for Hockey OT/Penalties and Basketball Quarters
                 })
 
         except Exception as e:
             print(f"❌ Error fetching {sport['name']}: {e}")
 
-    # Upsert to Supabase
+    # 2. Upsert to Supabase 'results' table
     if all_formatted_data:
         try:
-            # Using execute() to commit the upsert
             supabase.table("results").upsert(all_formatted_data).execute()
             print(f"✅ Successfully synced {len(all_formatted_data)} total results to Lucra.")
         except Exception as e:
