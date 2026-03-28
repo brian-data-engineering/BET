@@ -14,39 +14,33 @@ export default function Home({ initialMatches = [] }) {
   const { slipItems, setSlipItems } = useBets(); 
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 1. UPDATE CLOCK: Keeps the "Live" status accurate in real-time
+  // 1. HIGH-FREQUENCY CLOCK: Every 5 seconds to clear "live crap" immediately
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 5000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. ROBUST TIME HELPERS: Manual parsing to bypass browser "Invalid Date" quirks
+  // 2. PARSING LOGIC: Ensures scraped UTC strings match Local Time correctly
   const getMatchDate = (dateString) => {
     if (!dateString) return null;
     try {
-      // Strip timezone/Z and split into date and time
-      const clean = dateString.replace('Z', '').split('+')[0].trim();
-      const [datePart, timePart] = clean.split(/[T ]/); // Handles " " or "T" separators
+      // If the string doesn't end in Z, we append it to force UTC interpretation
+      const isoString = dateString.includes('Z') || dateString.includes('+') 
+        ? dateString.replace(' ', 'T') 
+        : dateString.replace(' ', 'T') + 'Z';
       
-      if (!datePart || !timePart) return new Date(dateString);
-
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hours, minutes, seconds] = timePart.split(':').map(Number);
-
-      // Month is 0-indexed (Jan = 0)
-      return new Date(year, month - 1, day, hours, minutes, seconds || 0);
-    } catch (e) {
-      return null;
-    }
+      const d = new Date(isoString);
+      return isNaN(d.getTime()) ? null : d;
+    } catch (e) { return null; }
   };
 
   const isMatchStarted = (commenceTime) => {
     const matchDate = getMatchDate(commenceTime);
+    // Hide game the instant matchDate is in the past
     return matchDate ? currentTime >= matchDate : false;
   };
 
   const formatFixedTime = (dateString) => {
-    // Direct regex extract is safer for display than relying on Date objects
     const timeMatch = dateString?.match(/(\d{2}:\d{2})/);
     return timeMatch ? timeMatch[0] : 'TBD';
   };
@@ -84,8 +78,13 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
+  // 3. MASTER FILTER: This keeps the UI clean
   const displayMatches = useMemo(() => {
     let filtered = initialMatches.filter(m => {
+      // GUARD 1: Remove Live Games (The "Crap" Filter)
+      if (isMatchStarted(m.commence_time)) return false;
+
+      // GUARD 2: Virtual/Cyber Filter
       const league = (m.league_name || '').toLowerCase();
       const sport = (m.sport_key || '').toLowerCase();
       const isVirtual = league.includes('ebasketball') || league.includes('esoccer') || 
@@ -107,7 +106,7 @@ export default function Home({ initialMatches = [] }) {
       );
     }
     return filtered;
-  }, [initialMatches, selectedLeague, searchQuery, activeTab]);
+  }, [initialMatches, selectedLeague, searchQuery, activeTab, currentTime]); // List refreshes every clock tick
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
@@ -155,56 +154,57 @@ export default function Home({ initialMatches = [] }) {
           </div>
 
           <div className="divide-y divide-white/5">
-            {displayMatches.map((match) => {
-              const started = isMatchStarted(match.commence_time);
-              const currentSelection = slipItems.find(item => item.matchId === match.id);
+            {displayMatches.length > 0 ? (
+              displayMatches.map((match) => {
+                const currentSelection = slipItems.find(item => item.matchId === match.id);
 
-              return (
-                <div key={match.id} className={`grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors ${started ? 'opacity-60' : ''}`}>
-                  <div className="col-span-7 pr-4 group">
-                    <Link href={`/${match.id}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        {started ? (
-                          <span className="text-[9px] bg-red-600/20 text-red-500 px-2 py-0.5 rounded flex items-center gap-1 font-black italic uppercase animate-pulse border border-red-600/20">
-                            <Play size={8} fill="currentColor" /> Live
+                return (
+                  <div key={match.id} className="grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors">
+                    <div className="col-span-7 pr-4 group">
+                      <Link href={`/${match.id}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter truncate max-w-[150px]">
+                            {match.display_league || match.league_name}
                           </span>
-                        ) : (
-                          <>
-                            <span className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">{match.display_league || match.league_name}</span>
-                            <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic"><Clock size={10} /> {formatFixedTime(match.commence_time)}</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981]">{cleanName(match.home_team)}</span>
-                        <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981]">{cleanName(match.away_team)}</span>
-                      </div>
-                    </Link>
-                  </div>
+                          <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                            <Clock size={10} /> {formatFixedTime(match.commence_time)}
+                          </span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981]">{cleanName(match.home_team)}</span>
+                          <span className="text-sm font-black text-slate-200 uppercase truncate group-hover:text-[#10b981]">{cleanName(match.away_team)}</span>
+                        </div>
+                      </Link>
+                    </div>
 
-                  <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
-                    {[
-                      { label: '1', val: match.home_odds },
-                      { label: 'X', val: match.draw_odds },
-                      { label: '2', val: match.away_odds }
-                    ].map((odd) => (
-                      <button
-                        key={odd.label}
-                        disabled={started}
-                        onClick={() => toggleBet(odd.label, odd.val, match)}
-                        className={`rounded-md flex items-center justify-center font-black text-[10px] italic border transition-all ${
-                          currentSelection?.selection === odd.label ? 'bg-[#10b981] border-[#10b981] text-white' : 
-                          started ? 'bg-[#0b0f1a] border-white/5 text-slate-700 cursor-not-allowed' : 
-                          'bg-[#1c2636] border-white/5 text-slate-300 hover:text-[#10b981]'
-                        }`}
-                      >
-                        {started ? <Lock size={12} /> : (odd.val ? parseFloat(odd.val).toFixed(2) : '—')}
-                      </button>
-                    ))}
+                    <div className="col-span-5 grid grid-cols-3 gap-1.5 h-11">
+                      {[
+                        { label: '1', val: match.home_odds },
+                        { label: 'X', val: match.draw_odds },
+                        { label: '2', val: match.away_odds }
+                      ].map((odd) => (
+                        <button
+                          key={odd.label}
+                          onClick={() => toggleBet(odd.label, odd.val, match)}
+                          className={`rounded-md flex items-center justify-center font-black text-[10px] italic border transition-all ${
+                            currentSelection?.selection === odd.label 
+                              ? 'bg-[#10b981] border-[#10b981] text-white' 
+                              : 'bg-[#1c2636] border-white/5 text-slate-300 hover:text-[#10b981]'
+                          }`}
+                        >
+                          {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="py-20 text-center opacity-20">
+                <Clock className="mx-auto mb-2 text-slate-500" size={32} />
+                <p className="text-[10px] font-black uppercase italic tracking-widest">No Upcoming Matches</p>
+              </div>
+            )}
           </div>
         </main>
 
@@ -218,12 +218,17 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
+    // SERVER-SIDE GUARD: Only fetch games that are NOT yet live
+    // (We use a 1-minute buffer in case clocks are slightly off)
+    const now = new Date(Date.now() - 60000).toISOString();
+
     const { data } = await supabase
       .from('api_events')
       .select('*')
       .in('sport_key', ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'])
+      .gt('commence_time', now) // <--- CRITICAL: Filter games already started
       .order('commence_time', { ascending: true })
-      .limit(1000); 
+      .limit(100); 
 
     return { props: { initialMatches: data || [] } };
   } catch (err) {
