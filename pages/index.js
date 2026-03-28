@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Clock, Trophy, List, X, LayoutGrid } from 'lucide-react';
+import { Clock, Trophy, List, X, LayoutGrid, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -18,15 +18,26 @@ export default function Home({ initialMatches = [] }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
+  // Tick every 5 seconds for high-precision clearing
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 5000);
     return () => clearInterval(timer);
   }, []);
 
-  const isMatchStarted = (commenceTime) => {
-    if (!commenceTime) return false;
+  /**
+   * BUSINESS LOGIC: 
+   * A match is "started" (locked) for betting 60 seconds BEFORE the official time.
+   */
+  const getMatchStatus = (commenceTime) => {
+    if (!commenceTime) return { isLocked: true, secondsLeft: 0 };
+    
     const matchDate = new Date(commenceTime.replace(' ', 'T'));
-    return currentTime >= matchDate;
+    const lockDate = new Date(matchDate.getTime() - 60000); // T-minus 60 seconds
+    
+    return {
+      isLocked: currentTime >= lockDate,
+      secondsLeft: Math.floor((matchDate - currentTime) / 1000)
+    };
   };
 
   const formatFixedTime = (dateString) => {
@@ -46,7 +57,9 @@ export default function Home({ initialMatches = [] }) {
   ];
 
   const toggleBet = (selection, value, match) => {
-    if (isMatchStarted(match.commence_time)) return;
+    const { isLocked } = getMatchStatus(match.commence_time);
+    if (isLocked) return;
+
     const betId = `${match.id}-${selection}`;
     setSlipItems(prev => {
       if (prev.find(item => item.id === betId)) return prev.filter(item => item.id !== betId);
@@ -65,13 +78,16 @@ export default function Home({ initialMatches = [] }) {
 
   const displayMatches = useMemo(() => {
     let filtered = initialMatches.filter(m => {
-      if (isMatchStarted(m.commence_time)) return false;
+      // 1. REMOVE GAMES 60 SECONDS BEFORE START
+      const { isLocked } = getMatchStatus(m.commence_time);
+      if (isLocked) return false;
+
+      // 2. Remove E-Sports/SRL
       const league = (m.league_name || '').toLowerCase();
       return !/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league);
     });
 
     if (selectedLeague) {
-      // Find the sport associated with this league to keep tabs in sync
       const sample = initialMatches.find(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
       if (sample && sample.sport_key !== activeTab) {
         setActiveTab(sample.sport_key);
@@ -139,7 +155,6 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* Event Header */}
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
             <div className="col-span-7 flex items-center gap-2">
               Event {selectedLeague && <span className="text-[#10b981] ml-2">/ {selectedLeague}</span>}
@@ -147,20 +162,25 @@ export default function Home({ initialMatches = [] }) {
             <div className="col-span-5 grid grid-cols-3 text-center"><span>1</span><span>X</span><span>2</span></div>
           </div>
 
-          {/* Match List */}
           <div className="divide-y divide-white/5">
             {displayMatches.length > 0 ? displayMatches.map((match) => {
               const currentSelection = slipItems.find(item => item.matchId === match.id);
+              const { secondsLeft } = getMatchStatus(match.commence_time);
+              const closingSoon = secondsLeft < 300; // 5 mins warning
+
               return (
-                <div key={match.id} className="grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors">
+                <div key={match.id} className="grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors relative overflow-hidden">
+                  {closingSoon && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-orange-500 animate-pulse" />}
+                  
                   <div className="col-span-7 pr-4">
                     <Link href={`/${match.id}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] text-[#10b981] font-black uppercase italic truncate max-w-[120px]">
+                        <span className={`text-[10px] font-black uppercase italic truncate max-w-[120px] ${closingSoon ? 'text-orange-500' : 'text-[#10b981]'}`}>
                           {match.display_league || match.league_name}
                         </span>
-                        <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                        <span className={`text-[9px] font-bold flex items-center gap-1 italic ${closingSoon ? 'text-orange-400' : 'text-slate-500'}`}>
                           <Clock size={10} /> {formatFixedTime(match.commence_time)}
+                          {closingSoon && <span className="ml-1 text-[8px] animate-pulse">LOCKING SOON</span>}
                         </span>
                       </div>
                       <div className="flex flex-col">
@@ -179,7 +199,10 @@ export default function Home({ initialMatches = [] }) {
                 </div>
               );
             }) : (
-                <div className="py-20 text-center text-slate-600 text-[10px] font-black uppercase italic tracking-widest">No Matches Available</div>
+                <div className="py-20 text-center text-slate-600 text-[10px] font-black uppercase italic tracking-widest flex flex-col items-center gap-2">
+                  <AlertCircle size={20} className="opacity-20" />
+                  No Matches Available
+                </div>
             )}
           </div>
         </main>
@@ -201,7 +224,6 @@ export default function Home({ initialMatches = [] }) {
           <span className="text-[8px] uppercase font-black italic">Home</span>
         </button>
 
-        {/* Floating Slip Button */}
         <div className="relative">
             <button onClick={() => setIsMobileSlipOpen(true)} className="bg-[#10b981] w-14 h-14 rounded-full -mt-10 border-4 border-[#0b0f1a] flex items-center justify-center text-white shadow-xl shadow-[#10b981]/20 transform active:scale-95 transition-transform">
                 <Trophy size={24} />
@@ -229,6 +251,7 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
+    // Note: Fetching T-60s on server to ensure we don't send expired games initially
     const now = new Date(Date.now() - 60000).toISOString();
     const { data } = await supabase
       .from('api_events')
