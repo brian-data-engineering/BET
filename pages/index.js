@@ -24,10 +24,7 @@ export default function Home({ initialMatches = [] }) {
   const getMatchDate = (dateString) => {
     if (!dateString) return null;
     try {
-      // Step 1: Remove any timezone markers (+00, Z, etc.) 
-      // This forces the browser to interpret the numbers as "Current Local Time"
       const localString = dateString.replace('Z', '').replace(/\+\d{2}(:?\d{2})?/, '').replace(' ', 'T');
-      
       const d = new Date(localString);
       return isNaN(d.getTime()) ? null : d;
     } catch (e) {
@@ -40,10 +37,8 @@ export default function Home({ initialMatches = [] }) {
     return matchDate ? currentTime >= matchDate : false;
   };
 
-  // Displays the time exactly as it appears in the string (Nairobi Raw)
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    // Matches the HH:mm pattern directly from the raw string
     const timeMatch = dateString.match(/(\d{2}:\d{2})/);
     return timeMatch ? timeMatch[0] : 'TBD';
   };
@@ -60,7 +55,6 @@ export default function Home({ initialMatches = [] }) {
 
   const toggleBet = (selection, value, match) => {
     if (isMatchStarted(match.commence_time)) return;
-
     const matchId = match.id; 
     const betId = `${matchId}-${selection}`;
     
@@ -81,22 +75,34 @@ export default function Home({ initialMatches = [] }) {
     });
   };
 
-  // 3. MASTER FILTER
+  // 3. MASTER FILTER (Fixed for Sidebar & Search)
   const displayMatches = useMemo(() => {
     let filtered = initialMatches.filter(m => {
       if (isMatchStarted(m.commence_time)) return false;
 
       const league = (m.league_name || '').toLowerCase();
       const sport = (m.sport_key || '').toLowerCase();
+      
+      // Virtual Filter
       const isVirtual = league.includes('ebasketball') || league.includes('esoccer') || 
                         league.includes('srl') || league.includes('electronic') || 
                         league.includes('cyber') || sport.startsWith('esport');
       return !isVirtual;
     });
 
+    // Filter by Sport Tab
     filtered = filtered.filter(m => m.sport_key === activeTab);
-    if (selectedLeague) filtered = filtered.filter(m => m.league_name === selectedLeague);
 
+    // FIX: Filter by League selected in Sidebar
+    // We check both league_name and display_league for a match
+    if (selectedLeague) {
+      filtered = filtered.filter(m => 
+        m.league_name === selectedLeague || 
+        m.display_league === selectedLeague
+      );
+    }
+
+    // Search Query Filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
@@ -113,6 +119,7 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans">
       <Navbar onSearch={setSearchQuery} />
       
+      {/* Banner */}
       <div className="w-full bg-[#004d3d] overflow-hidden hidden md:block border-b border-white/5">
         <div className="max-w-[1440px] mx-auto h-[160px] relative">
             <div className="absolute inset-0 bg-gradient-to-r from-[#004d3d] via-[#004d3d]/80 to-transparent flex items-center px-12 z-10">
@@ -129,15 +136,25 @@ export default function Home({ initialMatches = [] }) {
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12">
         <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
-          <Sidebar onSelectLeague={setSelectedLeague} onClearFilter={() => setSelectedLeague(null)} />
+          <Sidebar 
+            onSelectLeague={(league) => {
+                setSelectedLeague(league);
+                setSearchQuery(''); // Clear search when picking a league
+            }} 
+            onClearFilter={() => setSelectedLeague(null)} 
+          />
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
+          {/* Sport Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button 
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }}
+                onClick={() => { 
+                  setActiveTab(tab.id); 
+                  setSelectedLeague(null); // Reset league filter on sport change
+                }}
                 className={`py-4 px-5 text-[11px] font-black uppercase tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'}`}
               >
                 <span className={activeTab === tab.id ? 'grayscale-0' : 'grayscale'}>{tab.icon}</span>
@@ -147,11 +164,20 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
+          {/* Sub-Header / Current Filter Info */}
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
-            <div className="col-span-7">Event Details {selectedLeague && <span className="text-[#10b981] ml-2">• {selectedLeague}</span>}</div>
+            <div className="col-span-7 flex items-center gap-2">
+              Event Details 
+              {selectedLeague && (
+                <span className="bg-[#10b981]/20 text-[#10b981] px-2 py-0.5 rounded border border-[#10b981]/30">
+                  {selectedLeague}
+                </span>
+              )}
+            </div>
             <div className="col-span-5 grid grid-cols-3 text-center"><span>1</span><span>X</span><span>2</span></div>
           </div>
 
+          {/* Match List */}
           <div className="divide-y divide-white/5">
             {displayMatches.length > 0 ? (
               displayMatches.map((match) => {
@@ -201,7 +227,13 @@ export default function Home({ initialMatches = [] }) {
             ) : (
               <div className="py-20 text-center opacity-20">
                 <Clock className="mx-auto mb-2 text-slate-500" size={32} />
-                <p className="text-[10px] font-black uppercase italic tracking-widest">No Upcoming Matches</p>
+                <p className="text-[10px] font-black uppercase italic tracking-widest">No Matches Found</p>
+                <button 
+                  onClick={() => {setSelectedLeague(null); setSearchQuery('');}}
+                  className="mt-4 text-[9px] underline pointer-events-auto"
+                >
+                  Clear all filters
+                </button>
               </div>
             )}
           </div>
@@ -217,16 +249,14 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    // Note: Since raw time is Nairobi, we fetch games occurring after "Nairobi Now"
     const now = new Date(Date.now() - 60000).toISOString();
-
     const { data } = await supabase
       .from('api_events')
       .select('*')
       .in('sport_key', ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'])
       .gt('commence_time', now)
       .order('commence_time', { ascending: true })
-      .limit(100); 
+      .limit(1000); // Increased limit to ensure search/filter works across all data
 
     return { props: { initialMatches: data || [] } };
   } catch (err) {
