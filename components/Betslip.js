@@ -24,11 +24,11 @@ export default function Betslip({ items = [], setItems }) {
   const isLocked = (startTime) => {
     if (!startTime) return false;
     try {
-      // Strip +00 or Z to treat as local Nairobi time
-      const cleanTime = startTime.replace('+00', '').replace('Z', '').replace(' ', 'T');
+      // split('+')[0] is the key: it stops the browser from adding 3 hours to UTC strings
+      const cleanTime = startTime.split('+')[0].replace('Z', '').replace(' ', 'T');
       const matchDate = new Date(cleanTime);
       
-      // Lock 60 seconds before start
+      // LOCK 60 SECONDS BEFORE START
       const lockTime = matchDate.getTime() - 60000;
       return currentTime.getTime() >= lockTime;
     } catch (e) {
@@ -38,16 +38,16 @@ export default function Betslip({ items = [], setItems }) {
 
   /**
    * 3. AUTO-PURGE LOGIC
-   * Removes matches from the slip 1 minute before they start.
+   * Watches items and removes them 1 minute before kickoff
    */
   useEffect(() => {
-    const expiredExist = items.some(item => isLocked(item.startTime));
+    const hasLockedItems = items.some(item => isLocked(item.startTime));
     
-    if (expiredExist) {
+    if (hasLockedItems) {
       setItems(prevItems => {
         const filtered = prevItems.filter(item => !isLocked(item.startTime));
         
-        // Clear booking state if the slip becomes empty via auto-purge
+        // Reset booking if slip becomes empty during purge
         if (filtered.length === 0 && bookingCode) {
           setBookingCode(null);
         }
@@ -171,20 +171,24 @@ export default function Betslip({ items = [], setItems }) {
         ) : (
           <div className="space-y-2">
             {items.map((item) => {
-              // Calculate time remaining for this specific item
-              const cleanTime = item.startTime?.replace('+00', '').replace('Z', '').replace(' ', 'T');
+              // Time calculation for the warning indicator
+              const cleanTime = item.startTime?.split('+')[0].replace('Z', '').replace(' ', 'T');
               const timeLeft = Math.floor((new Date(cleanTime) - currentTime) / 1000);
               const warning = timeLeft < 300; // 5 min warning
 
               return (
-                <div key={item.id} className={`bg-[#1c2636] border p-3 rounded-xl relative transition-all animate-in slide-in-from-right-2 ${warning ? 'border-orange-500/30' : 'border-white/5'}`}>
+                <div key={item.id} className={`bg-[#1c2636] border p-3 rounded-xl relative transition-all animate-in slide-in-from-right-2 ${warning ? 'border-orange-500/30 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : 'border-white/5'}`}>
                   <button onClick={() => removeItem(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-white transition-colors z-20">
                     <X size={14} />
                   </button>
                   
                   <div className="flex items-center gap-2 mb-1">
                      <p className="text-[10px] text-slate-400 font-black uppercase italic tracking-tighter truncate w-[70%]">{item.matchName}</p>
-                     {warning && <span className="text-[8px] text-orange-500 font-black animate-pulse flex items-center gap-1"><Clock size={8}/> LOCKING</span>}
+                     {warning && (
+                        <span className="text-[8px] text-orange-500 font-black animate-pulse flex items-center gap-1">
+                          <Clock size={8}/> {timeLeft > 60 ? 'LOCKING' : 'PURGING'}
+                        </span>
+                     )}
                   </div>
 
                   <div className="flex justify-between items-end">
