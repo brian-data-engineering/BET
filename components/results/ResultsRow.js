@@ -1,22 +1,30 @@
 export default function ResultsRow({ match }) {
-  const isBasketball = match.sport_type === 'basketball';
-  const isTableTennis = match.sport_type === 'table-tennis';
+  const sport = match.sport_type;
+  const isBasketball = sport === 'basketball';
+  const isTableTennis = sport === 'table-tennis';
+  const isIceHockey = sport === 'ice-hockey';
   
+  const p = match.periods || {};
+
   // Helper to extract period/set scores
   const renderPeriods = () => {
     if (!match.periods) return null;
-    const p = match.periods;
     
-    // Logic for Table Tennis (Sets)
-    if (isTableTennis) {
-      const sets = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']
-        .filter(s => p[s] && p[s].home !== null)
-        .map(s => `${p[s].home}:${p[s].away}`);
+    // --- Table Tennis (Sets) & Ice Hockey (Periods) ---
+    // Both use a horizontal badge layout for multiple scores
+    if (isTableTennis || isIceHockey) {
+      const keys = isTableTennis 
+        ? ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'] 
+        : ['p1', 'p2', 'p3'];
+
+      const scores = keys
+        .filter(k => p[k] && p[k].home !== null)
+        .map(k => `${p[k].home}:${p[k].away}`);
       
-      return sets.length > 0 ? (
+      return scores.length > 0 ? (
         <div className="flex gap-1 mt-1 justify-end">
-          {sets.map((score, i) => (
-            <span key={i} className="text-[8px] bg-white/5 px-1 rounded text-slate-500 font-medium">
+          {scores.map((score, i) => (
+            <span key={i} className="text-[8px] bg-white/5 px-1.5 py-0.5 rounded border border-white/5 text-slate-400 font-bold">
               {score}
             </span>
           ))}
@@ -24,7 +32,7 @@ export default function ResultsRow({ match }) {
       ) : null;
     }
 
-    // Logic for Basketball (Quarters)
+    // --- Basketball (Quarters) ---
     if (isBasketball) {
       const quarters = ['p1', 'p2', 'p3', 'p4']
         .filter(q => p[q] && p[q].home !== null)
@@ -37,7 +45,7 @@ export default function ResultsRow({ match }) {
       ) : null;
     }
 
-    // Logic for Soccer (Halftime)
+    // --- Soccer (Halftime) ---
     if (match.half_time_home !== null) {
       return (
         <span className="text-[#ffcc00]/60 text-[10px] font-bold">
@@ -48,7 +56,9 @@ export default function ResultsRow({ match }) {
     return null;
   };
 
-  const isOT = isBasketball && match.periods?.overtime?.home !== null;
+  // Status Checkers
+  const hasOT = p.overtime && p.overtime.home !== null;
+  const hasPenalties = p.penalties && p.penalties.home !== null;
 
   return (
     <div className="flex justify-between items-center px-4 py-3 border-b border-black/20 bg-[#16211b] hover:bg-[#1d2b23] transition-colors group">
@@ -60,22 +70,29 @@ export default function ResultsRow({ match }) {
         </div>
         <div className="text-[10px] text-slate-500 font-semibold italic flex items-center gap-1">
           <span className="w-1 h-1 bg-[#10b981] rounded-full opacity-50"></span>
-          <span className="truncate">{match.league_name}</span>
+          <span className="truncate uppercase tracking-wider text-[9px]">{match.league_name}</span>
         </div>
       </div>
 
       {/* Right side: Scores and Status */}
       <div className="text-right flex flex-col items-end shrink-0">
-        <div className={`flex items-center gap-2 ${isTableTennis ? 'flex-col items-end' : 'flex-row'}`}>
+        <div className={`flex items-center gap-2 ${(isTableTennis || isIceHockey) ? 'flex-col items-end' : 'flex-row'}`}>
           <div className="text-[16px] font-black text-[#ffcc00] flex gap-1.5 items-center tracking-tighter">
-            {isOT && (
+            {/* OT Badge for Hockey/Basketball */}
+            {hasOT && !hasPenalties && (
               <span className="text-[8px] bg-red-600 text-white px-1 py-0.5 rounded-sm font-black uppercase leading-none">OT</span>
             )}
+            {/* Shootout Badge for Hockey */}
+            {hasPenalties && (
+              <span className="text-[8px] bg-purple-600 text-white px-1 py-0.5 rounded-sm font-black uppercase leading-none">SO</span>
+            )}
+            
             <span>{match.home_score}:{match.away_score}</span>
-            {!isTableTennis && renderPeriods()}
+            {(!isTableTennis && !isIceHockey) && renderPeriods()}
           </div>
-          {/* Render Table Tennis sets below the main set score for better spacing */}
-          {isTableTennis && renderPeriods()}
+          
+          {/* Sub-scores for Hockey and Table Tennis */}
+          {(isTableTennis || isIceHockey) && renderPeriods()}
         </div>
         
         <div className="text-[9px] text-slate-500 font-black mt-1 uppercase flex gap-2 items-center">
