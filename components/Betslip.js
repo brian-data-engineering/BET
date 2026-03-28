@@ -1,4 +1,4 @@
-import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle, Lock } from 'lucide-react';
+import { Ticket, X, Trash2, Zap, CheckCircle2, Copy, Smartphone, AlertTriangle, Clock } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -11,36 +11,43 @@ export default function Betslip({ items = [], setItems }) {
 
   const MAX_GAMES = 20;
 
-  // 1. Precise Clock Sync (Every 5 seconds for snappier removal)
+  // 1. Precise Clock Sync
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 5000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. Robust Time Parsing Helper
-  const isExpired = (startTime) => {
+  /**
+   * 2. NAIROBI ABSOLUTE TIME CHECK
+   * Strips offsets and checks if we are within the 60-second lock window.
+   */
+  const isLocked = (startTime) => {
     if (!startTime) return false;
     try {
+      // Strip +00 or Z to treat as local Nairobi time
       const cleanTime = startTime.replace('+00', '').replace('Z', '').replace(' ', 'T');
       const matchDate = new Date(cleanTime);
-      return currentTime >= matchDate;
+      
+      // Lock 60 seconds before start
+      const lockTime = matchDate.getTime() - 60000;
+      return currentTime.getTime() >= lockTime;
     } catch (e) {
       return false;
     }
   };
 
   /**
-   * 3. AUTO-VANISH LOGIC (Optimized)
-   * Uses functional updates to prevent race conditions when multiple games start.
+   * 3. AUTO-PURGE LOGIC
+   * Removes matches from the slip 1 minute before they start.
    */
   useEffect(() => {
-    const hasStartedGames = items.some(item => isExpired(item.startTime));
+    const expiredExist = items.some(item => isLocked(item.startTime));
     
-    if (hasStartedGames) {
+    if (expiredExist) {
       setItems(prevItems => {
-        const filtered = prevItems.filter(item => !isExpired(item.startTime));
+        const filtered = prevItems.filter(item => !isLocked(item.startTime));
         
-        // If the slip becomes empty after auto-removal, clear booking state
+        // Clear booking state if the slip becomes empty via auto-purge
         if (filtered.length === 0 && bookingCode) {
           setBookingCode(null);
         }
@@ -80,7 +87,6 @@ export default function Betslip({ items = [], setItems }) {
     setIsBooking(true);
 
     try {
-      // Cleanup old codes (older than 10 mins)
       const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       await supabase.from('betsnow').delete().lt('created_at', tenMinsAgo);
 
@@ -88,7 +94,6 @@ export default function Betslip({ items = [], setItems }) {
       let isUnique = false;
       let attempts = 0;
 
-      // Unique Code Generator
       while (!isUnique && attempts < 15) {
         finalCode = Math.floor(1000 + Math.random() * 9000).toString();
         const { data } = await supabase.from('betsnow')
@@ -149,7 +154,6 @@ export default function Betslip({ items = [], setItems }) {
             <p className="text-slate-500 text-[10px] font-black uppercase italic tracking-widest">Your slip is empty</p>
           </div>
         ) : bookingCode ? (
-          /* SUCCESS STATE */
           <div className="py-4 text-center animate-in fade-in zoom-in-95">
             <div className="w-14 h-14 bg-[#10b981]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#10b981]/20">
               <CheckCircle2 size={28} className="text-[#10b981]" />
@@ -165,25 +169,36 @@ export default function Betslip({ items = [], setItems }) {
             <button onClick={clearAll} className="w-full bg-[#1c2636] text-white font-black py-3 rounded-lg text-[10px] uppercase italic hover:bg-slate-700 transition-all">Start New Slip</button>
           </div>
         ) : (
-          /* ACTIVE ITEMS STATE */
           <div className="space-y-2">
-            {items.map((item) => (
-              <div key={item.id} className="bg-[#1c2636] border border-white/5 p-3 rounded-xl relative transition-all animate-in slide-in-from-right-2">
-                <button onClick={() => removeItem(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-white transition-colors z-20">
-                  <X size={14} />
-                </button>
-                <p className="text-[10px] text-slate-400 font-black uppercase italic tracking-tighter truncate w-[85%] mb-1">{item.matchName}</p>
-                <div className="flex justify-between items-end">
-                  <div>
-                    <p className="text-xs font-black text-white italic">{item.selection}</p>
-                    <p className="text-[9px] text-[#10b981] font-bold uppercase italic">{item.marketName}</p>
+            {items.map((item) => {
+              // Calculate time remaining for this specific item
+              const cleanTime = item.startTime?.replace('+00', '').replace('Z', '').replace(' ', 'T');
+              const timeLeft = Math.floor((new Date(cleanTime) - currentTime) / 1000);
+              const warning = timeLeft < 300; // 5 min warning
+
+              return (
+                <div key={item.id} className={`bg-[#1c2636] border p-3 rounded-xl relative transition-all animate-in slide-in-from-right-2 ${warning ? 'border-orange-500/30' : 'border-white/5'}`}>
+                  <button onClick={() => removeItem(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-white transition-colors z-20">
+                    <X size={14} />
+                  </button>
+                  
+                  <div className="flex items-center gap-2 mb-1">
+                     <p className="text-[10px] text-slate-400 font-black uppercase italic tracking-tighter truncate w-[70%]">{item.matchName}</p>
+                     {warning && <span className="text-[8px] text-orange-500 font-black animate-pulse flex items-center gap-1"><Clock size={8}/> LOCKING</span>}
                   </div>
-                  <span className="text-sm font-black text-[#f59e0b] italic">
-                    {(parseFloat(item.odds) || 0).toFixed(2)}
-                  </span>
+
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-xs font-black text-white italic">{item.selection}</p>
+                      <p className="text-[9px] text-[#10b981] font-bold uppercase italic">{item.marketName}</p>
+                    </div>
+                    <span className="text-sm font-black text-[#f59e0b] italic">
+                      {(parseFloat(item.odds) || 0).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
