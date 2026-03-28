@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Clock, Trophy, List, X } from 'lucide-react';
+import { Clock, Trophy, List, X, LayoutGrid } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -23,18 +23,10 @@ export default function Home({ initialMatches = [] }) {
     return () => clearInterval(timer);
   }, []);
 
-  const getMatchDate = (dateString) => {
-    if (!dateString) return null;
-    try {
-      const localString = dateString.replace('Z', '').replace(/\+\d{2}(:?\d{2})?/, '').replace(' ', 'T');
-      const d = new Date(localString);
-      return isNaN(d.getTime()) ? null : d;
-    } catch (e) { return null; }
-  };
-
   const isMatchStarted = (commenceTime) => {
-    const matchDate = getMatchDate(commenceTime);
-    return matchDate ? currentTime >= matchDate : false;
+    if (!commenceTime) return false;
+    const matchDate = new Date(commenceTime.replace(' ', 'T'));
+    return currentTime >= matchDate;
   };
 
   const formatFixedTime = (dateString) => {
@@ -55,14 +47,13 @@ export default function Home({ initialMatches = [] }) {
 
   const toggleBet = (selection, value, match) => {
     if (isMatchStarted(match.commence_time)) return;
-    const matchId = match.id; 
-    const betId = `${matchId}-${selection}`;
+    const betId = `${match.id}-${selection}`;
     setSlipItems(prev => {
       if (prev.find(item => item.id === betId)) return prev.filter(item => item.id !== betId);
-      const otherMatches = prev.filter(item => item.matchId !== matchId);
+      const otherMatches = prev.filter(item => item.matchId !== match.id);
       return [...otherMatches, {
         id: betId,
-        matchId: matchId,
+        matchId: match.id,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         selection: selection,
         marketName: '1X2',
@@ -79,16 +70,15 @@ export default function Home({ initialMatches = [] }) {
       return !/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league);
     });
 
-    // AUTO-SWITCH LOGIC
     if (selectedLeague) {
-        // If we picked a league, find its sport first
-        const sampleMatch = initialMatches.find(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
-        if (sampleMatch && sampleMatch.sport_key !== activeTab) {
-            setActiveTab(sampleMatch.sport_key);
-        }
-        filtered = filtered.filter(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
+      // Find the sport associated with this league to keep tabs in sync
+      const sample = initialMatches.find(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
+      if (sample && sample.sport_key !== activeTab) {
+        setActiveTab(sample.sport_key);
+      }
+      filtered = filtered.filter(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
     } else {
-        filtered = filtered.filter(m => m.sport_key === activeTab);
+      filtered = filtered.filter(m => m.sport_key === activeTab);
     }
 
     if (searchQuery) {
@@ -104,104 +94,149 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans pb-20 lg:pb-0">
       <Navbar onSearch={setSearchQuery} />
 
-      {/* Mobile Sidebar Overlay */}
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/80 lg:hidden">
-            <div className="w-[80%] h-full bg-[#111926] relative">
-                <button onClick={() => setIsMobileSidebarOpen(false)} className="absolute top-4 right-[-40px] text-white"><X /></button>
-                <Sidebar 
-                    onSelectLeague={(league, sport) => {
-                        if (sport) setActiveTab(sport);
-                        setSelectedLeague(league);
-                        setIsMobileSidebarOpen(false);
-                    }} 
-                    onClearFilter={() => setSelectedLeague(null)} 
-                />
-            </div>
+      {/* MOBILE LEAGUE DRAWER */}
+      <div className={`fixed inset-0 z-[100] transition-transform duration-300 lg:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="w-[85%] h-full bg-[#111926] shadow-2xl relative overflow-y-auto">
+          <button onClick={() => setIsMobileSidebarOpen(false)} className="absolute top-4 right-4 text-slate-400 p-2"><X size={24}/></button>
+          <Sidebar 
+            onSelectLeague={(league, sport) => {
+              if (sport) setActiveTab(sport);
+              setSelectedLeague(league);
+              setIsMobileSidebarOpen(false);
+            }} 
+            onClearFilter={() => { setSelectedLeague(null); setIsMobileSidebarOpen(false); }} 
+          />
         </div>
-      )}
+        <div className="flex-1 bg-black/60" onClick={() => setIsMobileSidebarOpen(false)} />
+      </div>
 
-      {/* Mobile Slip Overlay */}
+      {/* MOBILE SLIP OVERLAY */}
       {isMobileSlipOpen && (
-        <div className="fixed inset-0 z-[60] bg-[#0b0f1a] lg:hidden p-4 overflow-y-auto">
-            <button onClick={() => setIsMobileSlipOpen(false)} className="mb-4 flex items-center gap-2 text-[#10b981] font-bold"><X size={18}/> Close Slip</button>
+        <div className="fixed inset-0 z-[110] bg-[#0b0f1a] lg:hidden animate-in slide-in-from-bottom duration-300">
+          <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#111926]">
+            <h3 className="font-black uppercase italic text-[#10b981] flex items-center gap-2"><Trophy size={18}/> Your Betslip</h3>
+            <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-full"><X size={20}/></button>
+          </div>
+          <div className="p-4 h-[calc(100vh-80px)] overflow-y-auto">
             <Betslip items={slipItems} setItems={setSlipItems} />
+          </div>
         </div>
       )}
 
       <div className="max-w-[1440px] mx-auto grid grid-cols-12">
-        <aside className="hidden lg:col-span-2 lg:block border-r border-white/5">
+        <aside className="hidden lg:col-span-2 lg:block border-r border-white/5 h-screen sticky top-0">
           <Sidebar onSelectLeague={(l, s) => { if(s) setActiveTab(s); setSelectedLeague(l); }} onClearFilter={() => setSelectedLeague(null)} />
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* Sport Tabs */}
+          {/* Top Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }} className={`py-4 px-5 text-[11px] font-black uppercase tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'}`}>
-                <span className={activeTab === tab.id ? 'grayscale-0' : 'grayscale'}>{tab.icon}</span>
-                {tab.name}
+                <span>{tab.icon}</span> {tab.name}
                 {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#10b981]" />}
               </button>
             ))}
           </div>
 
-          {/* Match List rendering logic remains same as your provided code... */}
+          {/* Event Header */}
+          <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 uppercase italic bg-[#0b0f1a]/30">
+            <div className="col-span-7 flex items-center gap-2">
+              Event {selectedLeague && <span className="text-[#10b981] ml-2">/ {selectedLeague}</span>}
+            </div>
+            <div className="col-span-5 grid grid-cols-3 text-center"><span>1</span><span>X</span><span>2</span></div>
+          </div>
+
+          {/* Match List */}
           <div className="divide-y divide-white/5">
-            {displayMatches.map((match) => {
-                const currentSelection = slipItems.find(item => item.matchId === match.id);
-                return (
-                    <div key={match.id} className="grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors border-b border-white/5">
-                        <div className="col-span-7 pr-4">
-                            <Link href={`/${match.id}`}>
-                                <div className="text-[10px] text-[#10b981] font-black uppercase italic mb-1">{match.display_league || match.league_name}</div>
-                                <div className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.home_team)}</div>
-                                <div className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.away_team)}</div>
-                            </Link>
-                        </div>
-                        <div className="col-span-5 grid grid-cols-3 gap-1.5 h-10">
-                            {[match.home_odds, match.draw_odds, match.away_odds].map((val, idx) => {
-                                const labels = ['1', 'X', '2'];
-                                return (
-                                    <button key={idx} onClick={() => toggleBet(labels[idx], val, match)} className={`rounded text-[10px] font-black border ${currentSelection?.selection === labels[idx] ? 'bg-[#10b981] text-white border-[#10b981]' : 'bg-[#1c2636] border-white/5 text-slate-300'}`}>
-                                        {val ? parseFloat(val).toFixed(2) : '—'}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    </div>
-                )
-            })}
+            {displayMatches.length > 0 ? displayMatches.map((match) => {
+              const currentSelection = slipItems.find(item => item.matchId === match.id);
+              return (
+                <div key={match.id} className="grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors">
+                  <div className="col-span-7 pr-4">
+                    <Link href={`/${match.id}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] text-[#10b981] font-black uppercase italic truncate max-w-[120px]">
+                          {match.display_league || match.league_name}
+                        </span>
+                        <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1 italic">
+                          <Clock size={10} /> {formatFixedTime(match.commence_time)}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.home_team)}</span>
+                        <span className="text-sm font-black text-slate-200 uppercase truncate">{cleanName(match.away_team)}</span>
+                      </div>
+                    </Link>
+                  </div>
+                  <div className="col-span-5 grid grid-cols-3 gap-1.5 h-10">
+                    {[{l:'1', v:match.home_odds}, {l:'X', v:match.draw_odds}, {l:'2', v:match.away_odds}].map((odd) => (
+                      <button key={odd.l} onClick={() => toggleBet(odd.l, odd.v, match)} className={`rounded font-black text-[10px] border transition-all ${currentSelection?.selection === odd.l ? 'bg-[#10b981] border-[#10b981] text-white' : 'bg-[#1c2636] border-white/5 text-slate-300'}`}>
+                        {odd.v ? parseFloat(odd.v).toFixed(2) : '—'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            }) : (
+                <div className="py-20 text-center text-slate-600 text-[10px] font-black uppercase italic tracking-widest">No Matches Available</div>
+            )}
           </div>
         </main>
 
-        <aside className="hidden lg:col-span-3 lg:block p-4">
+        <aside className="hidden lg:col-span-3 lg:block p-4 sticky top-0 h-screen overflow-y-auto">
           <Betslip items={slipItems} setItems={setSlipItems} />
         </aside>
       </div>
 
-      {/* MOBILE BOTTOM NAVIGATION */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a] border-t border-white/10 h-16 flex lg:hidden z-50 items-center justify-around px-4">
-        <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-400">
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <div className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a] border-t border-white/10 h-16 flex lg:hidden z-[90] items-center justify-around px-2">
+        <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-400 active:text-[#10b981]">
           <List size={20} />
-          <span className="text-[9px] uppercase font-bold">Leagues</span>
+          <span className="text-[8px] uppercase font-black italic">A-Z Sports</span>
         </button>
         
-        {/* Floating Slip Button */}
-        <button onClick={() => setIsMobileSlipOpen(true)} className="relative bg-[#10b981] w-14 h-14 rounded-full -mt-10 border-4 border-[#0b0f1a] flex items-center justify-center text-white shadow-xl shadow-[#10b981]/20">
-            <Trophy size={24} />
-            {slipItems.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-white text-[#10b981] w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center">
-                    {slipItems.length}
-                </span>
-            )}
+        <button onClick={() => {setSelectedLeague(null); window.scrollTo({top: 0, behavior: 'smooth'});}} className="flex flex-col items-center gap-1 text-slate-400 active:text-[#10b981]">
+          <LayoutGrid size={20} />
+          <span className="text-[8px] uppercase font-black italic">Home</span>
         </button>
 
-        <button onClick={() => {setSelectedLeague(null); setSearchQuery(''); window.scrollTo(0,0);}} className="flex flex-col items-center gap-1 text-slate-400">
+        {/* Floating Slip Button */}
+        <div className="relative">
+            <button onClick={() => setIsMobileSlipOpen(true)} className="bg-[#10b981] w-14 h-14 rounded-full -mt-10 border-4 border-[#0b0f1a] flex items-center justify-center text-white shadow-xl shadow-[#10b981]/20 transform active:scale-95 transition-transform">
+                <Trophy size={24} />
+            </button>
+            {slipItems.length > 0 && (
+                <div className="absolute -top-11 -right-1 bg-red-500 text-white w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center animate-bounce border-2 border-[#0b0f1a]">
+                    {slipItems.length}
+                </div>
+            )}
+        </div>
+
+        <button className="flex flex-col items-center gap-1 text-slate-400">
           <Clock size={20} />
-          <span className="text-[9px] uppercase font-bold">Today</span>
+          <span className="text-[8px] uppercase font-black italic">In-Play</span>
         </button>
+
+        <Link href="/profile" className="flex flex-col items-center gap-1 text-slate-400">
+          <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[8px] font-bold">ME</div>
+          <span className="text-[8px] uppercase font-black italic">Account</span>
+        </Link>
       </div>
     </div>
   );
+}
+
+export async function getServerSideProps() {
+  try {
+    const now = new Date(Date.now() - 60000).toISOString();
+    const { data } = await supabase
+      .from('api_events')
+      .select('*')
+      .in('sport_key', ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'])
+      .gt('commence_time', now)
+      .order('commence_time', { ascending: true })
+      .limit(500); 
+    return { props: { initialMatches: data || [] } };
+  } catch (err) { return { props: { initialMatches: [] } }; }
 }
