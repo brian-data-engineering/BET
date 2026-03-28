@@ -21,19 +21,24 @@ export default function Home({ initialMatches = [] }) {
   }, []);
 
   // 2. PARSING LOGIC: Ensures scraped UTC strings match Local Time correctly
-  const getMatchDate = (dateString) => {
-    if (!dateString) return null;
-    try {
-      // If the string doesn't end in Z, we append it to force UTC interpretation
-      const isoString = dateString.includes('Z') || dateString.includes('+') 
-        ? dateString.replace(' ', 'T') 
-        : dateString.replace(' ', 'T') + 'Z';
-      
-      const d = new Date(isoString);
-      return isNaN(d.getTime()) ? null : d;
-    } catch (e) { return null; }
-  };
-
+ const getMatchDate = (dateString) => {
+  if (!dateString) return null;
+  try {
+    // 1. Replace space with 'T' (e.g., "2026-03-28 19:00" -> "2026-03-28T19:00")
+    let iso = dateString.replace(' ', 'T');
+    
+    // 2. FORCE UTC: If it doesn't have a Z or an offset, add 'Z'
+    // This tells the browser: "This is London time, please add 3 hours for Nairobi"
+    if (!iso.includes('Z') && !iso.includes('+')) {
+      iso += 'Z';
+    }
+    
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+  } catch (e) {
+    return null;
+  }
+};
   const isMatchStarted = (commenceTime) => {
     const matchDate = getMatchDate(commenceTime);
     // Hide game the instant matchDate is in the past
