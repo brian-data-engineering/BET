@@ -157,7 +157,7 @@ export default function Home({ initialMatches = [] }) {
           {/* Top Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
-              <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }} className={`py-4 px-5 text-[11px] font-black uppercase tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'}`}>
+              <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }} className={`py-4 px-5 text-[11px] font-black tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'}`}>
                 <span>{tab.icon}</span> {tab.name}
                 {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#10b981]" />}
               </button>
