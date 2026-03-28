@@ -4,23 +4,22 @@ import Navbar from '../components/Navbar';
 import MobileFooter from '../components/MobileFooter'; 
 import ResultsHeader from '../components/results/ResultsHeader';
 import ResultsRow from '../components/results/ResultsRow';
-import { AlertCircle } from 'lucide-react';
+import { useBets } from '../context/BetContext';
 
 export default function ResultsPage() {
   const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { slipItems } = useBets();
 
   useEffect(() => {
-    async function fetchResults() {
+    async function getResults() {
       const { data } = await supabase
         .from('results')
         .select('*')
         .order('match_date', { ascending: false })
-        .limit(60);
+        .limit(100);
       setResults(data || []);
-      setLoading(false);
     }
-    fetchResults();
+    getResults();
   }, []);
 
   return (
@@ -28,23 +27,16 @@ export default function ResultsPage() {
       <Navbar />
       
       <main className="max-w-[800px] mx-auto min-h-screen border-x border-white/5 bg-[#111926]">
-        <ResultsHeader />
+        <ResultsHeader count={results.length} />
 
-        <div className="flex flex-col">
-          {loading ? (
-             <div className="p-10 text-center animate-pulse text-slate-500 font-bold italic">Loading Results...</div>
-          ) : results.length > 0 ? (
-            results.map((match) => <ResultsRow key={match.id} match={match} />)
-          ) : (
-            <div className="py-20 text-center text-slate-600 text-[10px] font-black uppercase flex flex-col items-center gap-2">
-              <AlertCircle size={20} className="opacity-20" />
-              No Results Found
-            </div>
-          )}
+        <div className="flex flex-col divide-y divide-black/10">
+          {results.map((m) => (
+            <ResultsRow key={m.id} match={m} />
+          ))}
         </div>
       </main>
 
-      <MobileFooter activePage="results" />
+      <MobileFooter slipCount={slipItems.length} />
     </div>
   );
 }
