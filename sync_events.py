@@ -1,5 +1,6 @@
 import os
 import requests
+import json
 from supabase import create_client
 from datetime import datetime, timedelta
 
@@ -13,11 +14,11 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def clean_text(text):
     if not text: return ""
-    # Removing quotes to prevent frontend/code errors as requested
+    # Remove quotes to prevent frontend breaking as requested
     return str(text).replace('"', '').replace("'", "").strip()
 
 def sync_betika_only():
-    # Define only the sports you want to allow in Lucra
+    # Matches the sportTabs in your Next.js Home component
     ALLOWED_SPORTS = ['soccer', 'basketball', 'tennis', 'ice hockey', 'table tennis']
     
     print(f"📡 Requesting fresh matches from Betika...")
@@ -41,18 +42,20 @@ def sync_betika_only():
         synced_ids = [] 
 
         for item in data:
-            # 1. STRICT SPORT FILTER
+            # 1. SPORT FILTER & STANDARDIZATION
             raw_sport = str(item.get('sport_name', '')).lower()
             if raw_sport not in ALLOWED_SPORTS:
                 continue
 
-            # 2. CAPTURE THE PARENT ID (Critical for Deep Odds)
-            # Betika sometimes uses 'parent_match_id' or 'parent_id'
-            parent_id = str(item.get('parent_id') or item.get('parent_match_id') or item.get('match_id'))
-            event_id = str(item.get('match_id'))
+            # Standardize for frontend (ice hockey -> ice-hockey)
+            sport_key = raw_sport.replace(' ', '-')
             
+            # 2. IDENTIFIERS
+            event_id = str(item.get('match_id'))
+            parent_id = str(item.get('parent_id') or item.get('parent_match_id') or event_id)
             synced_ids.append(event_id)
             
+            # 3. ODDS PARSING
             try:
                 h_odd = float(item.get('home_odd') or 0)
                 d_odd = float(item.get('neutral_odd') or 0)
@@ -60,46 +63,54 @@ def sync_betika_only():
             except (ValueError, TypeError):
                 h_odd, d_odd, a_odd = 0.0, 0.0, 0.0
 
-            # Ignore matches with invalid odds
-            if h_odd <= 1.01:
-                continue
+            if h_odd <= 1.01: continue # Skip locked/invalid games
 
-            # Clean names for your Lucra project
+            # 4. LEAGUE & COUNTRY MAPPING
+            raw_league = clean_text(item.get('competition_name'))
+            raw_country = clean_text(item.get('category_name') or "International")
+            
+            # Create a clean "Display League" (e.g., "England - Premier League")
+            display_league = f"{raw_country} - {raw_league}" if raw_country != "International" else raw_league
+
+            # 5. SCHEMA-COMPLIANT OBJECT
             batch_to_upsert.append({
                 "id": event_id,
-                "parent_id": parent_id, # This is what you'll use for deep odds fetch
-                "sport_key": raw_sport.replace(' ', '-'), # Standardizing keys (e.g., ice-hockey)
-                "league_name": clean_text(item.get('competition_name')),
+                "parent_id": parent_id,
+                "sport_key": sport_key,
+                "league_name": raw_league,
+                "display_league": display_league,
+                "country": raw_country,
                 "home_team": clean_text(item.get('home_team')),
                 "away_team": clean_text(item.get('away_team')),
-                "commence_time": item.get('start_time'),
+                "commence_time": item.get('start_time'), # Raw Nairobi time
                 "status": "pending",
                 "home_odds": h_odd,
                 "draw_odds": d_odd,
-                "away_odds": a_odd
+                "away_odds": a_odd,
+                "raw_data": item, # Storing full JSON for future deep-odds usage
+                "last_updated": datetime.now().isoformat()
             })
 
-        # 3. UPSERT TO SUPABASE
+        # 6. UPSERT TO SUPABASE
         if batch_to_upsert:
             supabase.table("api_events").upsert(batch_to_upsert, on_conflict="id").execute()
-            print(f"✅ Success! {len(batch_to_upsert)} filtered matches updated.")
+            print(f"✅ Success! {len(batch_to_upsert)} matches synced to Lucra.")
 
-            # 4. CLEANUP (Remove matches not in current sync or older than 3 hours)
+            # 7. CLEANUP
+            # Remove games that ended 3+ hours ago
             cutoff = (datetime.now() - timedelta(hours=3)).isoformat()
             try:
-                # Delete by time first (highly efficient)
                 supabase.table("api_events").delete().lt("commence_time", cutoff).execute()
                 
-                # Delete items that are 'pending' but weren't in this fetch
-                # (Only if the list isn't massive to avoid URL length errors)
+                # Delete 'pending' games that vanished from the API (expired/cancelled)
                 if len(synced_ids) < 800:
                     supabase.table("api_events").delete().eq("status", "pending").not_.in_("id", synced_ids).execute()
                 
-                print(f"🧹 Cleanup complete.")
+                print(f"🧹 Database cleanup complete.")
             except Exception as clean_err:
                 print(f"⚠️ Cleanup note: {clean_err}")
         else:
-            print("⚠️ No matches passed the sport filters.")
+            print("⚠️ No matches passed the filters.")
 
     except Exception as e:
         print(f"🚨 Critical Failure: {str(e)}")
