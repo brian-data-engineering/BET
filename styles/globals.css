@@ -4,10 +4,10 @@
 
 :root {
   --foreground-rgb: 255, 255, 255;
-  /* Updated to your specific Lucra dark theme */
   --background-rgb: 11, 15, 26; 
 }
 
+/* --- Core Layout Fixes --- */
 html, body {
   height: 100%;
   margin: 0;
@@ -16,22 +16,28 @@ html, body {
   color: rgb(var(--foreground-rgb));
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  /* Prevents the horizontal "wiggle" on zoom */
-  overflow-x: hidden;
+  
+  /* FIXED: Changed from hidden to auto. 
+     This allows you to scroll right to see the betslip when zoomed in 
+     instead of it just vanishing. */
+  overflow-x: auto;
+  
+  /* Prevents text from resizing weirdly on mobile rotation */
+  -webkit-text-size-adjust: 100%;
 }
 
-/* Ensure the root Next.js div fills the screen 
-   so the background never cuts off 
-*/
 #__next {
   min-height: 100vh;
   display: flex;
-  flex-col: column;
+  flex-direction: column;
+  /* Ensures the container stays at least as wide as the content on zoom */
+  min-width: fit-content;
 }
 
-/* --- Professional Scrollbar (Global) --- */
+/* --- Global Scrollbar Styling --- */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px; /* Added height for horizontal zoom scrolling */
 }
 
 ::-webkit-scrollbar-track {
@@ -41,33 +47,47 @@ html, body {
 ::-webkit-scrollbar-thumb {
   background: #1c2636;
   border-radius: 10px;
+  border: 1px solid #0b0f1a;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #10b981; /* Lucra Green */
 }
 
-/* --- Sidebar Specific Scrollbar --- */
+/* --- Custom Utility Scrollbar --- */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #10b981;
 }
 
-/* --- Component Classes --- */
-.odds-button {
-  @apply bg-[#111926] border border-white/5 transition-all duration-200;
+/* Hide scrollbars for specific clean containers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.odds-button:hover {
-  @apply border-[#10b981] bg-[#1c2636] text-[#10b981];
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+/* --- Betting UI Components --- */
+.odds-button {
+  @apply bg-[#111926] border border-white/5 transition-all duration-300 relative overflow-hidden;
+}
+
+.odds-button:hover:not(:disabled) {
+  @apply border-[#10b981]/50 bg-[#1c2636] text-[#10b981];
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+}
+
+.odds-button:active {
+  @apply scale-95;
 }
 
 /* --- Print/Receipt Logic --- */
@@ -89,8 +109,9 @@ html, body {
     left: 0;
     top: 0;
     width: 100%;
-    background: white;
-    color: black;
+    background: white !important;
+    color: black !important;
+    padding: 20px;
   }
   @page {
     size: 80mm auto;
