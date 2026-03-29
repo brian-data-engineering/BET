@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock } from 'lucide-react'; // Add this for the visual cue
+import { Lock } from 'lucide-react'; 
 
 export default function OddsTable({ 
   odds = [], 
@@ -8,7 +8,7 @@ export default function OddsTable({
   marketType = "1X2",
   homeTeam, 
   awayTeam,
-  locked = false // <-- NEW PROP: Pass true if match has started
+  locked = false 
 }) {
   
   const selectedMarket = odds.find(m => 
@@ -46,7 +46,7 @@ export default function OddsTable({
   }
 
   return (
-    <div className={`grid gap-1.5 w-full ${displayConfig.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+    <div className={`grid gap-2 w-full items-center ${displayConfig.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
       {displayConfig.map((item, idx) => {
         const odd = item.data;
         const isSelected = odd && selectedId === odd.odd_key;
@@ -55,17 +55,21 @@ export default function OddsTable({
         return (
           <button 
             key={idx} 
-            // Disable if odd is missing OR if the match is locked
             disabled={!odd || locked} 
             onClick={() => odd && !locked && onSelect(odd)}
-            className={`h-11 flex flex-col items-center justify-center rounded-md transition-all border font-black text-xs italic relative overflow-hidden ${
-              !odd ? 'opacity-20 bg-transparent border-white/5' :
-              locked 
-                ? 'bg-[#0b0f1a]/50 border-white/5 text-slate-600 grayscale cursor-not-allowed' // Locked Style
-                : isSelected 
-                  ? 'bg-[#10b981] border-[#10b981] text-white shadow-lg' 
-                  : 'bg-[#1c2636] border-white/5 text-slate-200 hover:bg-[#253247]'
-            }`}
+            className={`
+              /* Pill Shape: h-10 on mobile, h-11 on desktop */
+              h-10 sm:h-11 rounded-full flex flex-col items-center justify-center 
+              transition-all duration-200 border-none font-bold text-xs relative overflow-hidden px-1
+              ${
+                !odd ? 'opacity-20 bg-transparent' :
+                locked 
+                  ? 'bg-[#0b0f1a]/50 text-slate-600 grayscale cursor-not-allowed' 
+                  : isSelected 
+                    ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' 
+                    : 'bg-[#1e293b] text-slate-200 hover:bg-[#2d3a4f]'
+              }
+            `}
           >
             {/* Show Lock Icon if match started */}
             {locked && odd && (
@@ -75,10 +79,10 @@ export default function OddsTable({
             )}
 
             {marketType !== "1X2" && !locked && (
-               <span className="text-[8px] uppercase opacity-60 not-italic mb-0.5">{item.label}</span>
+               <span className="text-[7px] sm:text-[8px] uppercase opacity-60 mb-0.5 font-black">{item.label}</span>
             )}
             
-            <span className={`tabular-nums ${locked ? 'blur-[1px] opacity-40' : ''}`}>
+            <span className={`tabular-nums tracking-tight ${locked ? 'blur-[1px] opacity-40' : ''}`}>
               {price}
             </span>
           </button>
