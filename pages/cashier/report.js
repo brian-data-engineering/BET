@@ -20,28 +20,36 @@ export default function CashierReport() {
     today.setHours(0, 0, 0, 0);
     const isoToday = today.toISOString();
 
-    // 1. Fetch Total Sales (All tickets created today)
-    const { data: salesData } = await supabase
-      .from('betsnow')
-      .select('stake')
-      .gte('created_at', isoToday);
+    try {
+      // 1. Fetch Sales (Stakes) from BOTH tables
+      const [salesNow, salesSettled] = await Promise.all([
+        supabase.from('betsnow').select('stake').gte('created_at', isoToday),
+        supabase.from('tickets').select('stake').gte('created_at', isoToday)
+      ]);
 
-    // 2. Fetch Total Payouts (All tickets paid today)
-    const { data: payoutData } = await supabase
-      .from('betsnow')
-      .select('potential_payout')
-      .eq('is_paid', true)
-      .gte('paid_at', isoToday);
+      // 2. Fetch Payouts (Paid tickets) from BOTH tables
+      const [payoutsNow, payoutsSettled] = await Promise.all([
+        supabase.from('betsnow').select('potential_payout').eq('is_paid', true).gte('paid_at', isoToday),
+        supabase.from('tickets').select('potential_payout').eq('is_paid', true).gte('paid_at', isoToday)
+      ]);
 
-    const totalSales = salesData?.reduce((acc, curr) => acc + parseFloat(curr.stake || 0), 0) || 0;
-    const totalPayouts = payoutData?.reduce((acc, curr) => acc + parseFloat(curr.potential_payout || 0), 0) || 0;
+      // Combine Data
+      const allSales = [...(salesNow.data || []), ...(salesSettled.data || [])];
+      const allPayouts = [...(payoutsNow.data || []), ...(payoutsSettled.data || [])];
 
-    setStats({
-      sales: totalSales,
-      payouts: totalPayouts,
-      count: salesData?.length || 0
-    });
-    setLoading(false);
+      const totalSales = allSales.reduce((acc, curr) => acc + parseFloat(curr.stake || 0), 0);
+      const totalPayouts = allPayouts.reduce((acc, curr) => acc + parseFloat(curr.potential_payout || 0), 0);
+
+      setStats({
+        sales: totalSales,
+        payouts: totalPayouts,
+        count: allSales.length
+      });
+    } catch (error) {
+      console.error("Financial Audit Error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -65,7 +73,8 @@ export default function CashierReport() {
           </div>
           <button 
             onClick={fetchTodayStats}
-            className="p-4 bg-[#111926] border border-white/5 rounded-2xl hover:bg-white hover:text-black transition-all"
+            disabled={loading}
+            className="p-4 bg-[#111926] border border-white/5 rounded-2xl hover:bg-white hover:text-black transition-all disabled:opacity-50"
           >
             <RefreshCcw size={20} className={loading ? "animate-spin" : ""} />
           </button>
@@ -90,7 +99,6 @@ export default function CashierReport() {
             label="Net Balance" 
             value={netBalance} 
             color={netBalance >= 0 ? "text-[#10b981]" : "text-red-500"}
-            isBalance
           />
         </div>
 
@@ -124,7 +132,7 @@ export default function CashierReport() {
   );
 }
 
-function StatCard({ icon, label, value, color, isBalance = false }) {
+function StatCard({ icon, label, value, color }) {
   return (
     <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 shadow-xl relative overflow-hidden group">
       <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -132,8 +140,8 @@ function StatCard({ icon, label, value, color, isBalance = false }) {
       </div>
       <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic mb-2">{label}</p>
       <h3 className={`text-3xl font-black italic tracking-tighter ${color}`}>
-        <span className="text-xs mr-2 opacity-50">KES</span>
-        {parseFloat(value).toLocaleString()}
+        <span className="text-xs mr-1 opacity-50">KES</span>
+        {parseFloat(value || 0).toLocaleString()}
       </h3>
     </div>
   );
