@@ -125,8 +125,8 @@ export default function Home({ initialMatches = [] }) {
         </div>
       )}
 
-      {/* MAIN LAYOUT WRAPPER: Removed max-w to fill screen */}
-      <div className="flex w-full flex-1 overflow-hidden h-[calc(100vh-64px)]">
+      {/* MAIN CONTENT AREA */}
+      <div className="flex w-full flex-1 overflow-x-auto h-[calc(100vh-64px)]">
         
         {/* LEFT ANCHOR: Sidebar */}
         <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-white/5 bg-[#111926] flex-col overflow-hidden">
@@ -136,9 +136,8 @@ export default function Home({ initialMatches = [] }) {
           />
         </aside>
 
-        {/* CENTER COLUMN: Match List (fills space) */}
-        <main className="flex-1 overflow-y-auto custom-scrollbar bg-[#0b0f1a] flex flex-col">
-          
+        {/* CENTER COLUMN: Match List */}
+        <main className="flex-1 min-w-[600px] overflow-y-auto custom-scrollbar bg-[#0b0f1a] flex flex-col">
           {/* Sticky Sport Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
@@ -149,8 +148,7 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          <div className="p-4 lg:p-6 w-full max-w-[1600px] mx-auto">
-            {/* Market Headers */}
+          <div className="p-4 lg:p-6 w-full max-w-[1200px] mx-auto">
             <div className="flex items-center justify-between px-4 py-3 text-[10px] font-black text-slate-500 italic bg-[#111926]/50 rounded-t-xl border border-white/5 border-b-0">
                <div>Event {selectedLeague && <span className="text-[#10b981] ml-2">/ {selectedLeague}</span>}</div>
                <div className="flex gap-2 w-[280px] text-center">
@@ -187,7 +185,6 @@ export default function Home({ initialMatches = [] }) {
                       </Link>
                     </div>
 
-                    {/* ODDS SECTION: Home/Draw/Away Stacked Buttons */}
                     <div className="flex items-center gap-2 w-full md:w-[280px] mt-4 md:mt-0">
                       {[
                         {l:'1', lab:'HOME', v:match.home_odds}, 
@@ -197,19 +194,10 @@ export default function Home({ initialMatches = [] }) {
                         <button 
                           key={odd.l} 
                           onClick={() => toggleBet(odd.l, odd.v, match)} 
-                          className={`
-                            flex-1 h-12 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border border-white/5
-                            ${currentSelection?.selection === odd.l 
-                              ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20 border-[#10b981]' 
-                              : 'bg-[#0b0f1a] hover:bg-[#1c2636] text-slate-200'}
-                          `}
+                          className={`flex-1 h-12 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border border-white/5 ${currentSelection?.selection === odd.l ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20 border-[#10b981]' : 'bg-[#0b0f1a] hover:bg-[#1c2636] text-slate-200'}`}
                         >
-                          <span className={`text-[8px] font-black mb-0.5 opacity-50 ${currentSelection?.selection === odd.l ? 'text-white' : 'text-[#10b981]'}`}>
-                            {odd.lab}
-                          </span>
-                          <span className="text-[13px] font-black italic tracking-tighter leading-none">
-                            {odd.v ? parseFloat(odd.v).toFixed(2) : '—'}
-                          </span>
+                          <span className={`text-[8px] font-black mb-0.5 opacity-50 ${currentSelection?.selection === odd.l ? 'text-white' : 'text-[#10b981]'}`}>{odd.lab}</span>
+                          <span className="text-[13px] font-black italic tracking-tighter leading-none">{odd.v ? parseFloat(odd.v).toFixed(2) : '—'}</span>
                         </button>
                       ))}
                     </div>
@@ -225,10 +213,13 @@ export default function Home({ initialMatches = [] }) {
           </div>
         </main>
 
-        {/* RIGHT ANCHOR: Betslip */}
-        <aside className="hidden xl:flex w-80 flex-shrink-0 border-l border-white/5 bg-[#111926] p-4 flex-col overflow-y-auto custom-scrollbar">
-          <Betslip items={slipItems} setItems={setSlipItems} />
+        {/* RIGHT ANCHOR: Betslip Sidebar (FIXED ZOOM ISSUE) */}
+        <aside className="hidden xl:block w-80 flex-shrink-0 bg-[#0b0f1a] p-4 relative border-l border-white/5">
+          <div className="sticky top-6 min-w-[320px]">
+            <Betslip items={slipItems} setItems={setSlipItems} />
+          </div>
         </aside>
+
       </div>
 
       {/* MOBILE NAV BAR */}
