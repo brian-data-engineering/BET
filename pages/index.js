@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Clock, Trophy, List, X, LayoutGrid, AlertCircle } from 'lucide-react';
+import { Clock, Trophy, List, X, LayoutGrid, AlertCircle, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -94,7 +94,7 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen w-full bg-[#0b0f1a] text-white font-sans flex flex-col overflow-hidden">
       <Navbar onSearch={setSearchQuery} />
 
-      {/* MOBILE SIDEBAR */}
+      {/* Mobile Sidebar Overlay */}
       <div className={`fixed inset-0 z-[100] flex transition-transform duration-300 lg:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="w-[280px] h-full bg-[#111926] shadow-2xl relative overflow-y-auto">
           <Sidebar 
@@ -109,11 +109,11 @@ export default function Home({ initialMatches = [] }) {
         <div className="flex-1 bg-black/60" onClick={() => setIsMobileSidebarOpen(false)} />
       </div>
 
-      {/* MOBILE BETSLIP */}
+      {/* Mobile Betslip Overlay */}
       {isMobileSlipOpen && (
         <div className="fixed inset-0 z-[110] bg-[#0b0f1a] lg:hidden flex flex-col">
           <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#111926]">
-            <h3 className="font-black uppercase italic text-[#10b981] flex items-center gap-2"><Trophy size={18}/> Betslip</h3>
+            <h3 className="font-bold text-[#10b981] flex items-center gap-2"><Trophy size={18}/> Betslip</h3>
             <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-full"><X size={20}/></button>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
@@ -123,15 +123,18 @@ export default function Home({ initialMatches = [] }) {
       )}
 
       <div className="flex w-full flex-1 h-[calc(100vh-64px)]">
+        {/* Desktop Sidebar */}
         <aside className="hidden lg:flex w-64 border-r border-white/5 bg-[#111926] flex-col overflow-y-auto shrink-0">
           <Sidebar onSelectLeague={(l, s) => { if(s) setActiveTab(s); setSelectedLeague(l); }} onClearFilter={() => setSelectedLeague(null)} />
         </aside>
 
+        {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto bg-[#0b0f1a] relative custom-scrollbar">
+          {/* Sport Tabs - No Uppercase */}
           <div className="sticky top-0 z-20 bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar">
             {sportTabs.map((tab) => (
               <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }} 
-                className={`py-4 px-5 text-[10px] font-black uppercase italic tracking-wider transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-[#10b981]' : 'text-slate-500 hover:text-white'}`}>
+                className={`py-4 px-5 text-xs font-semibold transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
                 <span>{tab.icon}</span> {tab.name}
                 {activeTab === tab.id && <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-[#10b981]" />}
               </button>
@@ -146,30 +149,46 @@ export default function Home({ initialMatches = [] }) {
                 const closingSoon = secondsLeft < 300; 
 
                 return (
-                  <div key={match.id} className="bg-[#111926]/60 border border-white/5 rounded-xl p-3 sm:p-4 hover:border-[#10b981]/30 transition-all">
+                  <div key={match.id} className="bg-[#111926]/40 border border-white/5 rounded-xl p-3 sm:p-4 hover:border-[#10b981]/20 transition-all">
                     <div className="flex flex-col gap-3">
+                      {/* Event Header */}
                       <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
-                        <span className="text-[9px] font-black italic px-2 py-0.5 rounded bg-[#10b981]/10 text-[#10b981] uppercase truncate max-w-[180px]">
-                          {match.display_league || match.league_name}
-                        </span>
-                        <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1 italic shrink-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#10b981]/10 text-[#10b981] truncate">
+                            {match.display_league || match.league_name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1 shrink-0">
                           <Clock size={10} /> {formatFixedTime(match.commence_time)}
                         </span>
                       </div>
 
-                      <Link href={`/${match.id}`} className="block min-w-0">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[13px] sm:text-sm font-black text-white uppercase italic truncate">{cleanName(match.home_team)}</span>
-                          <span className="text-[13px] sm:text-sm font-black text-white uppercase italic truncate">{cleanName(match.away_team)}</span>
+                      {/* Teams Section */}
+                      <Link href={`/${match.id}`} className="group block">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold text-white group-hover:text-[#10b981] transition-colors truncate">
+                              {cleanName(match.home_team)}
+                            </span>
+                            <ChevronRight size={14} className="text-slate-600 group-hover:text-[#10b981]" />
+                          </div>
+                          <span className="text-sm font-bold text-white group-hover:text-[#10b981] transition-colors truncate">
+                            {cleanName(match.away_team)}
+                          </span>
                         </div>
                       </Link>
 
+                      {/* Odds Row - Grid Style */}
                       <div className="grid grid-cols-3 gap-2 mt-1">
-                        {[{l:'1', lab:'HOME', v:match.home_odds}, {l:'X', lab:'DRAW', v:match.draw_odds}, {l:'2', lab:'AWAY', v:match.away_odds}].map((odd) => (
+                        {[{l:'1', lab:'Home', v:match.home_odds}, {l:'X', lab:'Draw', v:match.draw_odds}, {l:'2', lab:'Away', v:match.away_odds}].map((odd) => (
                           <button key={odd.l} onClick={() => toggleBet(odd.l, odd.v, match)} 
-                            className={`h-[48px] rounded-lg flex flex-col items-center justify-center border transition-all ${currentSelection?.selection === odd.l ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' : 'bg-[#0b0f1a] border-white/5 text-white'}`}>
-                            <span className={`text-[7px] font-black mb-0.5 ${currentSelection?.selection === odd.l ? 'text-[#0b0f1a]' : 'text-[#10b981]'}`}>{odd.lab}</span>
-                            <span className="text-[13px] font-black italic">{odd.v ? parseFloat(odd.v).toFixed(2) : '—'}</span>
+                            className={`h-[52px] rounded-lg flex flex-col items-center justify-center border transition-all ${
+                              currentSelection?.selection === odd.l 
+                                ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/10' 
+                                : 'bg-[#0b0f1a] border-white/5 text-white hover:bg-[#1c2636]'
+                            }`}>
+                            <span className={`text-[8px] font-bold mb-0.5 ${currentSelection?.selection === odd.l ? 'text-[#0b0f1a]/60' : 'text-[#10b981]'}`}>{odd.lab}</span>
+                            <span className="text-[14px] font-bold tracking-tight">{odd.v ? parseFloat(odd.v).toFixed(2) : '—'}</span>
                           </button>
                         ))}
                       </div>
@@ -177,14 +196,16 @@ export default function Home({ initialMatches = [] }) {
                   </div>
                 );
               }) : (
-                <div className="py-20 text-center text-slate-600 text-[10px] font-black uppercase italic flex flex-col items-center gap-2">
-                  <AlertCircle size={24} className="opacity-10" /> No Active Markets
+                <div className="py-20 text-center text-slate-600 text-sm font-medium flex flex-col items-center gap-2">
+                  <AlertCircle size={32} className="opacity-10" />
+                  No matches found in this category
                 </div>
               )}
             </div>
           </div>
         </main>
 
+        {/* Desktop Betslip Sidebar */}
         <aside className="hidden xl:block w-80 bg-[#111926] p-4 border-l border-white/5 shrink-0">
           <div className="sticky top-6">
             <Betslip items={slipItems} setItems={setSlipItems} />
@@ -192,30 +213,34 @@ export default function Home({ initialMatches = [] }) {
         </aside>
       </div>
 
-      {/* MOBILE NAV BAR */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a] border-t border-white/10 h-16 flex lg:hidden z-[90] items-center justify-around px-2 pb-safe">
-        <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-500">
+      {/* Mobile Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#111926] border-t border-white/10 h-16 flex lg:hidden z-[90] items-center justify-around px-2 pb-safe">
+        <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-400">
           <List size={20} />
-          <span className="text-[8px] uppercase font-black italic">A-Z Sports</span>
+          <span className="text-[10px] font-medium">Sports</span>
         </button>
         <button onClick={() => {setSelectedLeague(null); window.scrollTo({top: 0, behavior: 'smooth'});}} className="flex flex-col items-center gap-1 text-[#10b981]">
           <LayoutGrid size={20} />
-          <span className="text-[8px] uppercase font-black italic">Home</span>
+          <span className="text-[10px] font-medium">Home</span>
         </button>
         <div className="relative">
           <button onClick={() => setIsMobileSlipOpen(true)} className="bg-[#10b981] w-14 h-14 rounded-full -mt-8 border-4 border-[#0b0f1a] flex items-center justify-center text-[#0b0f1a] shadow-xl">
             <Trophy size={24} />
           </button>
-          {slipItems.length > 0 && <div className="absolute -top-9 -right-1 bg-red-500 text-white w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center border-2 border-[#0b0f1a]">{slipItems.length}</div>}
+          {slipItems.length > 0 && (
+            <div className="absolute -top-9 -right-1 bg-red-500 text-white w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border-2 border-[#0b0f1a]">
+              {slipItems.length}
+            </div>
+          )}
         </div>
-        <button className="flex flex-col items-center gap-1 text-slate-500">
+        <button className="flex flex-col items-center gap-1 text-slate-400">
           <Clock size={20} />
-          <span className="text-[8px] uppercase font-black italic">In-Play</span>
+          <span className="text-[10px] font-medium">In-Play</span>
         </button>
-        <div className="flex flex-col items-center gap-1 text-slate-500">
-          <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[8px] font-bold">ME</div>
-          <span className="text-[8px] uppercase font-black italic">Account</span>
-        </div>
+        <button className="flex flex-col items-center gap-1 text-slate-400">
+          <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold">ME</div>
+          <span className="text-[10px] font-medium">Profile</span>
+        </button>
       </nav>
     </div>
   );
