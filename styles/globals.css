@@ -4,45 +4,73 @@
 
 :root {
   --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 11, 22, 27; /* #0b161b */
+  /* Updated to your specific Lucra dark theme */
+  --background-rgb: 11, 15, 26; 
 }
 
-body {
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: rgb(var(--background-rgb));
   color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-start-rgb));
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Prevents the horizontal "wiggle" on zoom */
+  overflow-x: hidden;
 }
 
-/* Custom Scrollbar for that pro look */
+/* Ensure the root Next.js div fills the screen 
+   so the background never cuts off 
+*/
+#__next {
+  min-height: 100vh;
+  display: flex;
+  flex-col: column;
+}
+
+/* --- Professional Scrollbar (Global) --- */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b161b;
+  background: #0b0f1a;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #1c2636;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #00ff88; /* Lucra Green on hover */
+  background: #10b981; /* Lucra Green */
 }
 
-/* Glass effect for the odds buttons */
+/* --- Sidebar Specific Scrollbar --- */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
+}
+
+/* --- Component Classes --- */
 .odds-button {
-  @apply bg-slate-900/50 border border-transparent transition-all duration-200;
+  @apply bg-[#111926] border border-white/5 transition-all duration-200;
 }
 
 .odds-button:hover {
-  @apply border-lucra-green bg-slate-800 text-lucra-green;
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+  @apply border-[#10b981] bg-[#1c2636] text-[#10b981];
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
 }
 
-
+/* --- Print/Receipt Logic --- */
 @media screen {
   .print-only {
     display: none !important;
@@ -61,8 +89,9 @@ body {
     left: 0;
     top: 0;
     width: 100%;
+    background: white;
+    color: black;
   }
-  /* Force a small receipt-sized page */
   @page {
     size: 80mm auto;
     margin: 0;
