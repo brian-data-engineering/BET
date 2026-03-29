@@ -6,7 +6,7 @@ import ResultsHeader from '../components/results/ResultsHeader';
 import ResultsRow from '../components/results/ResultsRow';
 import ResultsSidebar from '../components/results/ResultsSidebar';
 import { useBets } from '../context/BetContext';
-import { AlertCircle, Loader2, ChevronRight, Trophy, Calendar } from 'lucide-react';
+import { AlertCircle, Loader2, ChevronRight, Trophy } from 'lucide-react';
 
 export default function ResultsPage() {
   const [results, setResults] = useState([]);
@@ -57,12 +57,13 @@ export default function ResultsPage() {
       
       <div className="relative z-10 max-w-[1400px] mx-auto flex flex-col lg:flex-row gap-6 px-4 pt-4 lg:pt-8 pb-32">
         
-        {/* Sidebar with Sticky logic */}
+        {/* Sidebar Area */}
         <aside className="w-full lg:w-72 shrink-0">
-          <div className="lg:sticky lg:top-24">
+          {/* Use h-fit to prevent the sidebar container from stretching the whole page height */}
+          <div className="lg:sticky lg:top-24 lg:h-fit">
              <ResultsSidebar activeSport={activeSport} setActiveSport={setActiveSport} />
              
-             {/* Quick Stats Card - New Visual Element */}
+             {/* Quick Stats Card */}
              <div className="hidden lg:block mt-6 p-5 rounded-2xl bg-[#111926] border border-white/5 bg-gradient-to-br from-transparent to-white/[0.02]">
                 <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4 flex items-center gap-2">
                   <Trophy size={12} className="text-[#10b981]" /> match summary
@@ -81,10 +82,11 @@ export default function ResultsPage() {
           </div>
         </aside>
 
-        <main className="flex-1 rounded-3xl bg-[#111926]/80 backdrop-blur-md border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden">
+        {/* Main Content Area - REMOVED overflow-hidden to enable scroll */}
+        <main className="flex-1 rounded-3xl bg-[#111926]/80 backdrop-blur-md border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col">
           
-          {/* Sticky Header with Glass Effect */}
-          <div className="sticky top-0 z-30 bg-[#111926]/90 backdrop-blur-md border-b border-white/5">
+          {/* Main Results Header - Sticks to top of main container */}
+          <div className="sticky top-0 lg:top-[64px] z-30 bg-[#111926] rounded-t-3xl overflow-hidden">
             <ResultsHeader count={results.length} activeSport={activeSport} />
           </div>
 
@@ -103,8 +105,8 @@ export default function ResultsPage() {
               Object.keys(groupedResults).map((league) => (
                 <div key={league} className="flex flex-col">
                   
-                  {/* Enhanced League Sub-header */}
-                  <div className="bg-[#1a231f]/60 px-6 py-3 flex items-center gap-4 border-y border-white/5 sticky top-[52px] z-20 backdrop-blur-md">
+                  {/* League Header - Sticky offset adjusted to sit below ResultsHeader */}
+                  <div className="bg-[#1a231f]/90 px-6 py-3 flex items-center gap-4 border-y border-white/5 sticky top-[44px] lg:top-[112px] z-20 backdrop-blur-md">
                     <div className="p-1.5 bg-[#10b981]/10 rounded-lg">
                       <ChevronRight size={14} className="text-[#10b981]" />
                     </div>
@@ -146,7 +148,6 @@ export default function ResultsPage() {
       <MobileFooter 
         itemCount={slipItems.length} 
         onGoHome={() => window.location.href = '/'}
-        onOpenSlip={() => {}} 
       />
     </div>
   );
