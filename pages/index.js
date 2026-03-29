@@ -91,33 +91,17 @@ export default function Home({ initialMatches = [] }) {
   }, [initialMatches, selectedLeague, searchQuery, activeTab, currentTime]);
 
   return (
-    <div className="min-h-screen w-full bg-[#0b0f1a] text-white font-sans flex flex-col overflow-hidden">
+    <div className="min-h-screen w-full bg-[#0b0f1a] text-white font-sans flex flex-col overflow-hidden max-w-[100vw]">
       <Navbar onSearch={setSearchQuery} />
 
-      {/* Mobile Overlays */}
-      <div className={`fixed inset-0 z-[100] flex transition-transform duration-300 lg:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="w-[280px] h-full bg-[#111926] shadow-2xl relative overflow-y-auto">
-          <Sidebar onSelectLeague={(l, s) => { if (s) setActiveTab(s); setSelectedLeague(l); setIsMobileSidebarOpen(false); }} onClearFilter={() => { setSelectedLeague(null); setIsMobileSidebarOpen(false); }} />
-        </div>
-        <div className="flex-1 bg-black/60" onClick={() => setIsMobileSidebarOpen(false)} />
-      </div>
-
-      {isMobileSlipOpen && (
-        <div className="fixed inset-0 z-[110] bg-[#0b0f1a] lg:hidden flex flex-col">
-          <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#111926]">
-            <h3 className="font-bold text-[#10b981] flex items-center gap-2"><Trophy size={18}/> Betslip</h3>
-            <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-full"><X size={20}/></button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4"><Betslip items={slipItems} setItems={setSlipItems} /></div>
-        </div>
-      )}
-
-      <div className="flex w-full flex-1 h-[calc(100vh-64px)]">
-        <aside className="hidden lg:flex w-64 border-r border-white/5 bg-[#111926] flex-col overflow-y-auto shrink-0">
+      <div className="flex w-full flex-1 h-[calc(100vh-64px)] overflow-hidden">
+        {/* DESKTOP SIDEBAR */}
+        <aside className="hidden lg:flex w-64 border-r border-white/5 bg-[#111926] flex-col overflow-y-auto shrink-0 no-scrollbar">
           <Sidebar onSelectLeague={(l, s) => { if(s) setActiveTab(s); setSelectedLeague(l); }} onClearFilter={() => setSelectedLeague(null)} />
         </aside>
 
-        <main className="flex-1 overflow-y-auto bg-[#0b0f1a] relative custom-scrollbar">
+        {/* MAIN CONTENT */}
+        <main className="flex-1 overflow-y-auto bg-[#0b0f1a] relative no-scrollbar">
           <div className="sticky top-0 z-20 bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar">
             {sportTabs.map((tab) => (
               <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }} 
@@ -128,27 +112,20 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          <div className="p-2 sm:p-4 w-full max-w-5xl mx-auto pb-24 lg:pb-6">
-            <div className="space-y-1">
+          <div className="p-2 sm:p-4 pb-24 lg:pb-8">
+            <div className="space-y-0.5">
               {displayMatches.length > 0 ? displayMatches.map((match) => {
                 const currentSelection = slipItems.find(item => item.matchId === match.id);
-
                 return (
                   <div key={match.id} className="bg-[#111926]/40 border-b border-white/5 p-3 hover:bg-[#1c2636]/50 transition-all">
-                    {/* Top League Row */}
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                          {match.display_league || match.league_name}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                         Starts {formatFixedTime(match.commence_time)}
+                      <span className="text-[10px] uppercase font-bold text-slate-500 truncate max-w-[60%]">
+                        {match.display_league || match.league_name}
                       </span>
+                      <span className="text-[10px] font-bold text-slate-500">{formatFixedTime(match.commence_time)}</span>
                     </div>
 
-                    <div className="flex items-center justify-between gap-4">
-                      {/* Left Side: Teams */}
+                    <div className="flex items-center justify-between gap-3">
                       <Link href={`/${match.id}`} className="flex-1 min-w-0 group">
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-white group-hover:text-[#10b981] truncate leading-tight">
@@ -160,8 +137,7 @@ export default function Home({ initialMatches = [] }) {
                         </div>
                       </Link>
 
-                      {/* Right Side: Odds Pills */}
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {[
                           { l: '1', v: match.home_odds },
                           { l: 'X', v: match.draw_odds },
@@ -170,15 +146,13 @@ export default function Home({ initialMatches = [] }) {
                           <button
                             key={odd.l}
                             onClick={() => toggleBet(odd.l, odd.v, match)}
-                            className={`w-[68px] h-[38px] rounded-md flex items-center justify-center transition-all ${
+                            className={`w-[64px] h-[38px] rounded flex items-center justify-center transition-all ${
                               currentSelection?.selection === odd.l
                                 ? 'bg-[#10b981] text-[#0b0f1a] font-black'
-                                : 'bg-[#1c2636] text-white hover:bg-[#253041] font-bold'
+                                : 'bg-[#1c2636] text-white font-bold'
                             }`}
                           >
-                            <span className="text-sm tabular-nums">
-                              {odd.v ? parseFloat(odd.v).toFixed(2) : '—'}
-                            </span>
+                            <span className="text-sm tabular-nums">{odd.v ? parseFloat(odd.v).toFixed(2) : '—'}</span>
                           </button>
                         ))}
                       </div>
@@ -186,26 +160,29 @@ export default function Home({ initialMatches = [] }) {
                   </div>
                 );
               }) : (
-                <div className="py-20 text-center text-slate-600 text-sm font-medium flex flex-col items-center gap-2">
+                <div className="py-20 text-center text-slate-600 text-sm flex flex-col items-center gap-2">
                   <AlertCircle size={32} className="opacity-10" />
-                  No events available
+                  No events found
                 </div>
               )}
             </div>
           </div>
         </main>
 
-        <aside className="hidden xl:block w-80 bg-[#111926] p-4 border-l border-white/5 shrink-0">
-          <div className="sticky top-6"><Betslip items={slipItems} setItems={setSlipItems} /></div>
+        {/* DESKTOP BETSLIP */}
+        <aside className="hidden xl:flex w-85 border-l border-white/5 bg-[#111926] shrink-0 overflow-y-auto no-scrollbar">
+          <div className="p-4 w-full h-full">
+             <Betslip items={slipItems} setItems={setSlipItems} />
+          </div>
         </aside>
       </div>
 
-      {/* Navigation */}
+      {/* MOBILE FOOTER NAV */}
       <nav className="fixed bottom-0 left-0 right-0 bg-[#111926] border-t border-white/10 h-16 flex lg:hidden z-[90] items-center justify-around px-2 pb-safe">
         <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-400">
-          <List size={20} /> <span className="text-[10px] font-medium">A-Z Sports</span>
+          <List size={20} /> <span className="text-[10px] font-medium">A-Z</span>
         </button>
-        <button onClick={() => {setSelectedLeague(null); window.scrollTo({top: 0, behavior: 'smooth'});}} className="flex flex-col items-center gap-1 text-[#10b981]">
+        <button onClick={() => {setSelectedLeague(null); window.scrollTo({top: 0});}} className="flex flex-col items-center gap-1 text-[#10b981]">
           <LayoutGrid size={20} /> <span className="text-[10px] font-medium">Home</span>
         </button>
         <div className="relative">
@@ -222,6 +199,26 @@ export default function Home({ initialMatches = [] }) {
           <span className="text-[10px] font-medium">Account</span>
         </div>
       </nav>
+
+      {/* OVERLAYS */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-[100] flex lg:hidden animate-in slide-in-from-left duration-300">
+          <div className="w-[280px] h-full bg-[#111926] shadow-2xl relative overflow-y-auto">
+             <Sidebar onSelectLeague={(l, s) => { if (s) setActiveTab(s); setSelectedLeague(l); setIsMobileSidebarOpen(false); }} onClearFilter={() => { setSelectedLeague(null); setIsMobileSidebarOpen(false); }} />
+          </div>
+          <div className="flex-1 bg-black/60" onClick={() => setIsMobileSidebarOpen(false)} />
+        </div>
+      )}
+
+      {isMobileSlipOpen && (
+        <div className="fixed inset-0 z-[110] bg-[#0b0f1a] lg:hidden flex flex-col">
+          <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#111926]">
+            <h3 className="font-bold text-[#10b981] flex items-center gap-2"><Trophy size={18}/> Betslip</h3>
+            <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-full"><X size={20}/></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4"><Betslip items={slipItems} setItems={setSlipItems} /></div>
+        </div>
+      )}
     </div>
   );
 }
