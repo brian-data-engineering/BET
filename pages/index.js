@@ -17,7 +17,6 @@ export default function Home({ initialMatches = [] }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
-  // Sync time for match-locking logic (1-minute buffer)
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 10000);
     return () => clearInterval(timer);
@@ -84,7 +83,7 @@ export default function Home({ initialMatches = [] }) {
   }, [initialMatches, selectedLeague, searchQuery, activeTab, currentTime]);
 
   return (
-    <div className="min-h-screen w-full bg-[#0b0f1a] text-white flex flex-col overflow-hidden selection:bg-[#10b981]/30">
+    <div className="min-h-screen w-full bg-[#0b0f1a] text-white flex flex-col overflow-hidden">
       <Navbar onSearch={setSearchQuery} />
 
       <div className="flex w-full flex-1 h-[calc(100vh-64px)] overflow-hidden">
@@ -97,8 +96,8 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-[#0b0f1a] no-scrollbar flex flex-col relative">
-          {/* HORIZONTAL SPORT SELECTOR (STALKING TOP) */}
-          <div className="sticky top-0 z-20 bg-[#0b0f1a]/90 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 overflow-x-auto no-scrollbar gap-2 shrink-0">
+          {/* STICKY SPORT NAV */}
+          <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 overflow-x-auto no-scrollbar gap-2 shrink-0">
             {sportTabs.map((tab) => (
               <button 
                 key={tab.id} 
@@ -114,7 +113,7 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* MATCH FEED */}
+          {/* MATCH LIST */}
           <div className="p-3 sm:p-6 pb-32 lg:pb-10 flex-1">
             <div className="max-w-4xl mx-auto space-y-6">
               {displayMatches.length > 0 ? displayMatches.map((match) => {
@@ -127,7 +126,6 @@ export default function Home({ initialMatches = [] }) {
 
                 return (
                   <div key={match.id} className="group border-b border-white/5 pb-6 last:border-0">
-                    {/* Meta: League & Time */}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="bg-[#10b981]/10 text-[#10b981] text-[9px] font-black px-2 py-0.5 rounded uppercase italic tracking-widest">
@@ -138,24 +136,22 @@ export default function Home({ initialMatches = [] }) {
                         </div>
                       </div>
                       <Link href={`/${match.id}`} className="text-[10px] font-black italic text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity">
-                        + Stats
+                        + Markets
                       </Link>
                     </div>
 
-                    {/* MATCH CONTENT (MOBILE OPTIMIZED) */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <Link href={`/${match.id}`} className="flex-1">
                         <div className="space-y-1">
-                          <h2 className="text-[16px] md:text-lg font-black italic leading-tight tracking-tight uppercase">
+                          <h2 className="text-[16px] md:text-lg font-black italic uppercase tracking-tight">
                             {cleanName(match.home_team)}
                           </h2>
-                          <h2 className="text-[16px] md:text-lg font-black italic leading-tight tracking-tight uppercase text-white/90">
+                          <h2 className="text-[16px] md:text-lg font-black italic uppercase tracking-tight text-white/90">
                             {cleanName(match.away_team)}
                           </h2>
                         </div>
                       </Link>
 
-                      {/* ODDS GRID - 3 COLUMNS ALWAYS */}
                       <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
                         {oddsData.map((o) => (
                           <button
@@ -164,7 +160,7 @@ export default function Home({ initialMatches = [] }) {
                             className={`h-14 md:w-24 md:h-12 rounded-xl flex flex-col items-center justify-center transition-all border-2 ${
                               currentSelection?.selection === o.label 
                                 ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-xl scale-[1.03]' 
-                                : 'bg-[#1c2636]/60 border-white/5 text-white active:scale-95 hover:border-white/20'
+                                : 'bg-[#1c2636]/60 border-white/5 text-white active:scale-95'
                             }`}
                           >
                             <span className="text-[8px] font-black opacity-30 uppercase">{o.label}</span>
@@ -180,7 +176,7 @@ export default function Home({ initialMatches = [] }) {
               }) : (
                 <div className="py-32 text-center opacity-20 flex flex-col items-center">
                   <AlertCircle size={48} className="mb-4 text-[#10b981]" />
-                  <p className="text-xs font-black italic uppercase tracking-[0.3em]">No Active Events</p>
+                  <p className="text-xs font-black italic uppercase tracking-[0.3em]">No Events Available</p>
                 </div>
               )}
             </div>
@@ -193,20 +189,19 @@ export default function Home({ initialMatches = [] }) {
         </aside>
       </div>
 
-      {/* MOBILE NAV PILL (FLOATING) */}
-      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#111926]/95 backdrop-blur-2xl border border-white/10 h-16 w-[92%] max-w-md rounded-2xl lg:hidden z-[100] flex items-center justify-around px-2 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-        <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-500 hover:text-white transition-colors">
-          <List size={20} /> <span className="text-[8px] font-black uppercase italic">A-Z</span>
+      {/* MOBILE NAV PILL */}
+      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#111926]/95 backdrop-blur-2xl border border-white/10 h-16 w-[92%] max-w-md rounded-2xl lg:hidden z-[100] flex items-center justify-around px-2 shadow-2xl">
+        <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-500">
+          <List size={20} /> <span className="text-[8px] font-black uppercase italic">A-Z List</span>
         </button>
         <button className="flex flex-col items-center gap-1 text-slate-500">
           <Activity size={20} /> <span className="text-[8px] font-black italic uppercase">Live</span>
         </button>
         
-        {/* CENTER ACTION BUTTON */}
         <div className="relative">
           <button 
             onClick={() => setIsMobileSlipOpen(true)} 
-            className="bg-[#10b981] w-14 h-14 rounded-2xl -mt-10 flex items-center justify-center text-[#0b0f1a] shadow-xl shadow-[#10b981]/20 border-4 border-[#0b0f1a] active:scale-90 transition-all"
+            className="bg-[#10b981] w-14 h-14 rounded-2xl -mt-10 flex items-center justify-center text-[#0b0f1a] shadow-xl border-4 border-[#0b0f1a] active:scale-90 transition-all"
           >
             <Trophy size={24} />
           </button>
@@ -223,10 +218,10 @@ export default function Home({ initialMatches = [] }) {
         <div className="w-9 h-9 rounded-xl bg-[#1c2636] flex items-center justify-center text-[10px] font-black border border-white/10 text-slate-400 italic">ME</div>
       </nav>
 
-      {/* MOBILE OVERLAYS */}
+      {/* OVERLAYS */}
       {isMobileSidebarOpen && (
         <div className="fixed inset-0 z-[120] flex lg:hidden">
-          <div className="w-[280px] h-full bg-[#111926] shadow-2xl animate-in slide-in-from-left duration-300">
+          <div className="w-[280px] h-full bg-[#111926] animate-in slide-in-from-left duration-300">
              <Sidebar 
                 onSelectLeague={(l, s) => { if (s) setActiveTab(s); setSelectedLeague(l); setIsMobileSidebarOpen(false); }} 
                 onClearFilter={() => { setSelectedLeague(null); setIsMobileSidebarOpen(false); }} 
@@ -239,9 +234,7 @@ export default function Home({ initialMatches = [] }) {
       {isMobileSlipOpen && (
         <div className="fixed inset-0 z-[130] bg-[#0b0f1a] lg:hidden flex flex-col p-4 animate-in slide-in-from-bottom duration-300">
           <div className="flex justify-between items-center mb-6 shrink-0">
-             <h3 className="font-black italic text-[#10b981] flex items-center gap-2 uppercase tracking-tighter text-xl">
-               <Trophy size={22}/> BETSLIP
-             </h3>
+             <h3 className="font-black italic text-[#10b981] flex items-center gap-2 uppercase tracking-tighter text-xl"><Trophy size={22}/> BETSLIP</h3>
              <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-xl text-slate-400"><X size={24}/></button>
           </div>
           <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
