@@ -139,12 +139,12 @@ export default function MatchDetail({ match }) {
           </div>
 
           <div className={`px-4 lg:px-0 space-y-4 pb-10 ${locked ? 'pointer-events-none' : ''}`}>
-            {/* 1X2 Market */}
+            {/* 1X2 Market - UPDATED LAYOUT */}
             <div className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
               <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter flex items-center gap-2">
                 Match Result (1X2) {locked && <Lock size={10} />}
               </h4>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {mainMarkets.map((odd, idx) => {
                   const uniqueId = `${match.id}-main-1x2-${odd.label}`;
                   const isSelected = slipItems.find(item => item.id === uniqueId);
@@ -153,25 +153,31 @@ export default function MatchDetail({ match }) {
                       key={idx}
                       disabled={locked}
                       onClick={() => toggleBet('1X2', odd.display, odd.val, uniqueId)}
-                      className={`flex flex-col items-center justify-center h-10 sm:h-14 rounded-full border-none transition-all duration-200 px-1 ${
+                      className={`flex flex-row items-center justify-between h-10 sm:h-12 rounded-full border-none transition-all duration-200 px-5 ${
                         isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'
                       }`}
                     >
-                      <span className="text-[7px] sm:text-[9px] font-black uppercase mb-0.5 opacity-60 leading-none">{odd.display}</span>
-                      <span className="font-black text-[11px] sm:text-sm italic tracking-tight">{odd.val ? parseFloat(odd.val).toFixed(2) : '—'}</span>
+                      {/* Odds Far Left */}
+                      <span className="font-black text-[12px] sm:text-sm italic tracking-tighter leading-none">
+                        {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
+                      </span>
+                      {/* Market Name Far Right */}
+                      <span className="text-[9px] font-black uppercase opacity-60 italic tracking-tight leading-none">
+                        {odd.display}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Deep Markets */}
+            {/* Deep Markets - UPDATED LAYOUT */}
             {match.deep_markets?.map((market, mIdx) => (
               <div key={mIdx} className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
                 <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 flex items-center gap-2">
                   {cleanName(market.name)} {locked && <Lock size={10} />}
                 </h4>
-                <div className={`grid gap-2 ${market.odds?.length > 3 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                <div className={`grid gap-2 ${market.odds?.length > 3 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
                   {market.odds?.map((odd, oIdx) => {
                     const uniqueId = `${match.id}-${market.name}-${odd.display}-${oIdx}`;
                     const isSelected = slipItems.find(item => item.id === uniqueId);
@@ -181,12 +187,18 @@ export default function MatchDetail({ match }) {
                         key={oIdx}
                         disabled={locked}
                         onClick={() => toggleBet(market.name, odd.display, val, uniqueId)}
-                        className={`flex flex-col items-center justify-center h-10 sm:h-12 rounded-full border-none transition-all duration-200 px-1 ${
+                        className={`flex flex-row items-center justify-between h-10 sm:h-12 rounded-full border-none transition-all duration-200 px-5 ${
                           isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'
                         }`}
                       >
-                        <span className="text-[7px] sm:text-[8px] font-black uppercase mb-0.5 leading-none opacity-60 truncate w-full px-2">{odd.display}</span>
-                        <span className="font-black text-[11px] sm:text-xs italic tracking-tight">{val ? parseFloat(val).toFixed(2) : '—'}</span>
+                        {/* Odds Far Left */}
+                        <span className="font-black text-[12px] sm:text-xs italic tracking-tighter leading-none">
+                          {val ? parseFloat(val).toFixed(2) : '—'}
+                        </span>
+                        {/* Selection Far Right */}
+                        <span className="text-[8px] font-black uppercase opacity-60 italic truncate max-w-[60%] text-right leading-none">
+                          {odd.display}
+                        </span>
                       </button>
                     );
                   })}
