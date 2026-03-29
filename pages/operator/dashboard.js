@@ -1,42 +1,58 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
 import ProtectedRoute from '../../components/auth/ProtectedRoute';
-import { Wallet, Users, LayoutDashboard, ArrowUpRight, TrendingUp, Activity } from 'lucide-react';
+import { Wallet, Users, TrendingUp, Activity, Loader2 } from 'lucide-react';
 
 export default function OperatorDashboard() {
   const [stats, setStats] = useState({ balance: 0, staffCount: 0, totalBets: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+  const fetchStats = useCallback(async (userId) => {
+    try {
+      // 1. Fetch Operator Profile for Balance
+      const { data: profile, error: pError } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', userId)
+        .single();
       
-      if (user) {
-        // 1. Fetch Operator Profile for Balance
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('balance')
-          .eq('id', user.id)
-          .single();
-        
-        // 2. Count Cashiers owned by this Operator (Parent Link)
-        const { count } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('parent_id', user.id)
-          .eq('role', 'cashier');
+      if (pError) console.error("Balance Fetch Error:", pError);
 
-        setStats({
-          balance: profile?.balance || 0,
-          staffCount: count || 0,
-          totalBets: 0 // We will link this to the 'bets' table once data scraping is live
-        });
-      }
+      // 2. Count Cashiers owned by this Operator
+      const { count, error: cError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('parent_id', userId)
+        .eq('role', 'cashier');
+
+      if (cError) console.error("Staff Count Error:", cError);
+
+      console.log(`Dashboard Sync: Found ${count} nodes for Operator ${userId}`);
+
+      setStats({
+        balance: parseFloat(profile?.balance || 0),
+        staffCount: count || 0,
+        totalBets: 0 
+      });
+    } catch (err) {
+      console.error("Dashboard Logic Crash:", err);
+    } finally {
       setLoading(false);
-    };
-    fetchStats();
+    }
   }, []);
+
+  useEffect(() => {
+    const initDashboard = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await fetchStats(user.id);
+      } else {
+        setLoading(false);
+      }
+    };
+    initDashboard();
+  }, [fetchStats]);
 
   return (
     <ProtectedRoute allowedRoles={['operator']}>
@@ -50,8 +66,10 @@ export default function OperatorDashboard() {
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 italic">Real-time Terminal Overview</p>
             </div>
             <div className="bg-[#111926] p-2 rounded-2xl border border-white/5 flex items-center gap-3 px-4">
-               <div className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse" />
-               <span className="text-[10px] font-black uppercase italic text-slate-400 tracking-widest">System Live</span>
+               <div className={`w-2 h-2 rounded-full animate-pulse ${loading ? 'bg-yellow-500' : 'bg-[#10b981]'}`} />
+               <span className="text-[10px] font-black uppercase italic text-slate-400 tracking-widest">
+                 {loading ? "Synchronizing..." : "System Live"}
+               </span>
             </div>
           </div>
 
@@ -59,7 +77,7 @@ export default function OperatorDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <StatCard 
               title="Available Shop Float" 
-              value={`KES ${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} 
+              value={loading ? "---" : `KES ${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} 
               subtitle="Ready for Distribution"
               icon={<Wallet size={24} className="text-[#10b981]" />} 
               color="border-[#10b981]/10" 
@@ -67,7 +85,7 @@ export default function OperatorDashboard() {
             />
             <StatCard 
               title="Active Terminals" 
-              value={stats.staffCount} 
+              value={loading ? "..." : stats.staffCount} 
               subtitle="Provisioned Cashier Nodes"
               icon={<Users size={24} className="text-blue-500" />} 
               color="border-blue-500/10" 
@@ -83,11 +101,19 @@ export default function OperatorDashboard() {
             />
           </div>
 
-          {/* Activity Placeholder */}
+          {/* Main Feed Section */}
           <div className="bg-[#111926] rounded-[2.5rem] border border-white/5 p-12 flex flex-col items-center justify-center text-center">
-              <TrendingUp size={48} className="text-slate-800 mb-4 opacity-30" />
-              <h3 className="text-slate-700 font-black uppercase text-xs tracking-[0.3em] italic">Live Market Feed Initializing...</h3>
-              <p className="text-[10px] text-slate-800 font-bold uppercase mt-2 italic tracking-widest">Connect Scraper to begin data visualization</p>
+              {loading ? (
+                <Loader2 className="animate-spin text-blue-500 mb-4" size={48} />
+              ) : (
+                <TrendingUp size={48} className="text-slate-800 mb-4 opacity-30" />
+              )}
+              <h3 className="text-slate-700 font-black uppercase text-xs tracking-[0.3em] italic">
+                {loading ? "Fetching Node Data..." : "Live Market Feed Initializing..."}
+              </h3>
+              <p className="text-[10px] text-slate-800 font-bold uppercase mt-2 italic tracking-widest">
+                Connect Scraper to begin data visualization
+              </p>
           </div>
 
         </div>
