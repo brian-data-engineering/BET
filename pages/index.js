@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import { useBets } from '../context/BetContext'; 
-import { Clock, Trophy, List, X, LayoutGrid, AlertCircle, Zap } from 'lucide-react';
+import { Clock, Trophy, List, X, LayoutGrid, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -101,7 +101,7 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-[#0b0f1a] relative no-scrollbar flex flex-col">
-          {/* TOP NAV PILLS */}
+          {/* SPORT TABS */}
           <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-md border-b border-white/5 flex items-center px-4 py-3 overflow-x-auto no-scrollbar gap-2 shrink-0">
             {sportTabs.map((tab) => (
               <button 
@@ -125,68 +125,71 @@ export default function Home({ initialMatches = [] }) {
                 const currentSelection = slipItems.find(item => item.matchId === match.id);
                 return (
                   <div key={match.id} className="bg-[#111926]/70 border border-white/5 rounded-2xl p-4 transition-all">
-                    {/* League Info */}
+                    {/* Header: League & Time */}
                     <div className="flex items-center justify-between mb-3 opacity-60">
-                       <span className="text-[9px] uppercase font-black italic tracking-widest truncate max-w-[200px]">
+                       <span className="text-[9px] uppercase font-black italic tracking-widest truncate max-w-[70%]">
                           {match.display_league || match.league_name}
                        </span>
-                       <span className="text-[10px] font-black italic">{formatFixedTime(match.commence_time)}</span>
+                       <span className="text-[10px] font-black italic tabular-nums">{formatFixedTime(match.commence_time)}</span>
                     </div>
 
-                    {/* Team Names (Full Width on Mobile) */}
-                    <Link href={`/${match.id}`} className="block mb-4">
-                      <div className="flex flex-col gap-0.5">
-                        <h2 className="text-base font-black uppercase italic text-white group-hover:text-[#10b981] truncate">
+                    {/* Team Names (Linked) */}
+                    <Link href={`/${match.id}`} className="block mb-4 group">
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-base font-black uppercase italic text-white group-hover:text-[#10b981] truncate transition-colors">
                           {cleanName(match.home_team)}
                         </h2>
-                        <h2 className="text-base font-black uppercase italic text-white group-hover:text-[#10b981] truncate">
+                        <h2 className="text-base font-black uppercase italic text-white group-hover:text-[#10b981] truncate transition-colors">
                           {cleanName(match.away_team)}
                         </h2>
                       </div>
                     </Link>
 
-                    {/* Odds Container (Always visible, stacked below teams on mobile) */}
-                    <div className="grid grid-cols-3 gap-2">
+                    {/* Odds Grid (3 Columns ensure 1, X, 2 all show) */}
+                    <div className="grid grid-cols-3 gap-2 w-full">
                       {[
-                        { l: '1', v: match.home_odds },
-                        { l: 'X', v: match.draw_odds },
-                        { l: '2', v: match.away_odds }
-                      ].map((odd) => (
+                        { label: '1', val: match.home_odds },
+                        { label: 'X', val: match.draw_odds },
+                        { label: '2', val: match.away_odds }
+                      ].map((odd, i) => (
                         <button
-                          key={odd.l}
-                          onClick={() => toggleBet(odd.l, odd.v, match)}
-                          className={`h-[48px] rounded-xl flex flex-col items-center justify-center transition-all border-2 ${
-                            currentSelection?.selection === odd.l
-                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg scale-[1.02]'
+                          key={i}
+                          onClick={() => toggleBet(odd.label, odd.val, match)}
+                          className={`h-[50px] rounded-xl flex flex-col items-center justify-center transition-all border-2 ${
+                            currentSelection?.selection === odd.label
+                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20 scale-[1.02]'
                               : 'bg-[#1c2636] border-white/5 text-white active:scale-95'
                           }`}
                         >
-                          <span className="text-[8px] font-black opacity-50 mb-0.5">{odd.l}</span>
-                          <span className="text-sm font-black italic">{odd.v ? parseFloat(odd.v).toFixed(2) : '—'}</span>
+                          <span className="text-[8px] font-black opacity-50 uppercase mb-0.5">{odd.label}</span>
+                          <span className="text-sm font-black italic tabular-nums">
+                            {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
+                          </span>
                         </button>
                       ))}
                     </div>
                   </div>
                 );
               }) : (
-                <div className="py-20 text-center opacity-20">
-                  <AlertCircle size={40} className="mx-auto mb-2" />
-                  <p className="text-[10px] font-black uppercase italic">No matches scheduled</p>
+                <div className="py-24 text-center opacity-20 flex flex-col items-center">
+                  <AlertCircle size={48} className="mb-2" />
+                  <p className="text-xs font-black uppercase italic tracking-widest">No Events Found</p>
                 </div>
               )}
             </div>
           </div>
         </main>
 
+        {/* DESKTOP SIDEBARS */}
         <aside className="hidden xl:flex w-96 border-l border-white/5 bg-[#111926] shrink-0 p-4">
             <Betslip items={slipItems} setItems={setSlipItems} />
         </aside>
       </div>
 
-      {/* MOBILE NAV */}
-      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#111926]/90 backdrop-blur-2xl border border-white/10 h-16 w-[92%] rounded-2xl lg:hidden z-[100] flex items-center justify-around px-2 shadow-2xl">
+      {/* MOBILE NAV PILL */}
+      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#111926]/90 backdrop-blur-2xl border border-white/10 h-16 w-[92%] max-w-md rounded-2xl lg:hidden z-[100] flex items-center justify-around px-2 shadow-2xl">
         <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-500">
-          <List size={20} /> <span className="text-[8px] font-black uppercase italic">A-Z</span>
+          <List size={20} /> <span className="text-[8px] font-black uppercase italic">Menu</span>
         </button>
         <button onClick={() => {setSelectedLeague(null); window.scrollTo({top: 0, behavior: 'smooth'});}} className="flex flex-col items-center gap-1 text-[#10b981]">
           <LayoutGrid size={20} /> <span className="text-[8px] font-black uppercase italic">Home</span>
@@ -200,10 +203,10 @@ export default function Home({ initialMatches = [] }) {
         <button className="flex flex-col items-center gap-1 text-slate-500">
           <Clock size={20} /> <span className="text-[8px] font-black uppercase italic">Live</span>
         </button>
-        <div className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[8px] font-black border border-white/10 text-slate-500">ME</div>
+        <div className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[8px] font-black border border-white/10 text-slate-600">ME</div>
       </nav>
 
-      {/* SIDEBAR OVERLAY */}
+      {/* OVERLAYS */}
       {isMobileSidebarOpen && (
         <div className="fixed inset-0 z-[120] flex lg:hidden">
           <div className="w-[280px] h-full bg-[#111926] animate-in slide-in-from-left duration-300">
@@ -213,11 +216,10 @@ export default function Home({ initialMatches = [] }) {
         </div>
       )}
 
-      {/* SLIP OVERLAY */}
       {isMobileSlipOpen && (
         <div className="fixed inset-0 z-[130] bg-[#0b0f1a] lg:hidden flex flex-col p-4 animate-in slide-in-from-bottom duration-300">
           <div className="flex justify-between items-center mb-4">
-             <h3 className="font-black italic text-[#10b981] flex items-center gap-2 uppercase tracking-tighter"><Trophy size={20}/> SLIP</h3>
+             <h3 className="font-black italic text-[#10b981] flex items-center gap-2 uppercase"><Trophy size={20}/> SLIP</h3>
              <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-xl"><X size={22}/></button>
           </div>
           <div className="flex-1 overflow-y-auto"><Betslip items={slipItems} setItems={setSlipItems} /></div>
@@ -235,7 +237,7 @@ export async function getServerSideProps() {
       .in('sport_key', ['soccer', 'basketball', 'ice-hockey', 'tennis', 'table-tennis'])
       .gt('commence_time', new Date().toISOString())
       .order('commence_time', { ascending: true })
-      .limit(500); 
+      .limit(1000); 
 
     return { props: { initialMatches: data || [] } };
   } catch (err) { 
