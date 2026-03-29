@@ -1,66 +1,91 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
 import ProtectedRoute from '../../components/auth/ProtectedRoute';
-import { Monitor, BadgeCheck, PlusCircle, LayoutDashboard, Database } from 'lucide-react';
+import { Monitor, PlusCircle, LayoutDashboard, Database, Ticket, Loader2 } from 'lucide-react';
 
 export default function ManageStaff() {
   const [staff, setStaff] = useState([]);
   const [operatorId, setOperatorId] = useState(null);
   const [form, setForm] = useState({ email: '', password: '', username: '' });
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
 
-  // 1. Fetch only THIS operator's cashiers
-  const fetchStaff = async (id) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('parent_id', id)
-      .eq('role', 'cashier')
-      .order('created_at', { ascending: false });
-    
-    if (!error) setStaff(data || []);
-  };
+  const fetchStaffWithStats = useCallback(async (id) => {
+    setFetching(true);
+    try {
+      // 1. Fetch Cashiers
+      const { data: profiles, error: pError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('parent_id', id)
+        .eq('role', 'cashier');
+
+      if (pError) throw pError;
+
+      // 2. Fetch Ticket Counts for each cashier from BOTH tables
+      const staffWithCounts = await Promise.all(profiles.map(async (cashier) => {
+        const [resNow, resSettled] = await Promise.all([
+          supabase.from('betsnow').select('id', { count: 'exact', head: true }).eq('cashier_id', cashier.id),
+          supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('cashier_id', cashier.id)
+        ]);
+
+        return {
+          ...cashier,
+          ticketCount: (resNow.count || 0) + (resSettled.count || 0)
+        };
+      }));
+
+      setStaff(staffWithCounts);
+    } catch (err) {
+      console.error("Staff Fetch Error:", err);
+    } finally {
+      setFetching(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const initSession = async () => {
+    const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setOperatorId(user.id);
-        fetchStaff(user.id);
+        fetchStaffWithStats(user.id);
       }
     };
-    initSession();
-  }, []);
+    init();
+  }, [fetchStaffWithStats]);
 
   const handleCreateCashier = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
-    // 2. Register Cashier linked to this Operator via metadata
-    const { error } = await supabase.auth.signUp({ 
-      email: form.email, 
-      password: form.password,
-      options: {
-        data: { 
-          username: form.username,
-          role: 'cashier',      
-          parent_id: operatorId     
+
+    try {
+      // NOTE: Using signUp will log the operator out unless you have an Edge Function.
+      // For now, we manually handle the metadata.
+      const { data, error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            username: form.username,
+            role: 'cashier',
+            parent_id: operatorId
+          }
         }
-      }
-    });
-    
-    if (error) {
-      alert("System Error: " + error.message);
-    } else {
-      alert(`Terminal ${form.username} has been deployed successfully.`);
+      });
+
+      if (error) throw error;
+
+      alert(`Terminal ${form.username} deployed. Note: Check email confirmation if enabled.`);
       setForm({ email: '', password: '', username: '' });
-      fetchStaff(operatorId);
+      fetchStaffWithStats(operatorId);
+    } catch (error) {
+      alert("Deployment Error: " + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // Logic: Calculate total float distributed across all terminals in this shop
   const totalShopFloat = staff.reduce((acc, s) => acc + parseFloat(s.balance || 0), 0);
 
   return (
@@ -68,107 +93,83 @@ export default function ManageStaff() {
       <AdminLayout>
         <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
           
-          {/* Header with Shop Stats */}
+          {/* Stats Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex flex-col">
-              <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">Staff & Terminals</h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 italic">Deploy and Control Cashier Nodes</p>
+              <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Network Nodes</h1>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 italic">Active Terminal Overview</p>
             </div>
 
-            <div className="flex gap-4">
-              <div className="bg-[#111926] px-6 py-4 rounded-2xl border border-white/5 flex flex-col items-end">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic mb-1">Total Deployed Float</span>
-                <span className="text-xl font-black text-blue-400 italic tracking-tighter">
-                  KES {totalShopFloat.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+            <div className="bg-[#111926] px-8 py-5 rounded-[2rem] border border-white/5 flex flex-col items-end shadow-2xl">
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic mb-1">Total Shop Liquidity</span>
+              <span className="text-2xl font-black text-[#10b981] italic tracking-tighter">
+                KES {totalShopFloat.toLocaleString()}
+              </span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Registration Form */}
+            {/* Form */}
             <div className="lg:col-span-4">
-              <form onSubmit={handleCreateCashier} className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 space-y-6 shadow-2xl sticky top-8 backdrop-blur-md">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                      <PlusCircle size={18} />
-                  </div>
-                  <h2 className="font-black uppercase text-xs italic tracking-widest text-white">Provision Terminal</h2>
+              <form onSubmit={handleCreateCashier} className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 space-y-6 sticky top-8">
+                <div className="flex items-center gap-3">
+                  <PlusCircle size={20} className="text-blue-500" />
+                  <h2 className="font-black uppercase text-xs italic tracking-widest">New Terminal</h2>
                 </div>
                 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Terminal Identity (e.g. COUNTER_01)</label>
-                  <input value={form.username} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 focus:border-blue-500 outline-none text-sm font-bold uppercase text-white transition-all" placeholder="LUCRA_T1" onChange={e => setForm({...form, username: e.target.value})} required />
-                </div>
+                <input value={form.username} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold uppercase" placeholder="NODE NAME" onChange={e => setForm({...form, username: e.target.value})} required />
+                <input value={form.email} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold" placeholder="EMAIL" onChange={e => setForm({...form, email: e.target.value})} required />
+                <input value={form.password} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold" type="password" placeholder="PIN/PASSWORD" onChange={e => setForm({...form, password: e.target.value})} required />
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Cashier Login Email</label>
-                  <input value={form.email} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 focus:border-blue-500 outline-none text-sm font-bold text-white transition-all" placeholder="staff@lucra.shop" onChange={e => setForm({...form, email: e.target.value})} required />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Terminal Access Pin</label>
-                  <input value={form.password} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 focus:border-blue-500 outline-none text-sm font-bold text-white transition-all" type="password" placeholder="••••••••" onChange={e => setForm({...form, password: e.target.value})} required />
-                </div>
-
-                <button disabled={loading} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl hover:bg-white hover:text-black transition-all active:scale-95 italic text-sm uppercase tracking-tighter shadow-xl shadow-blue-900/20">
-                  {loading ? "PROVISIONING..." : "ACTIVATE TERMINAL"}
+                <button disabled={loading} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl hover:scale-105 transition-all italic text-xs uppercase">
+                  {loading ? <Loader2 className="animate-spin mx-auto" /> : "DEPROY TERMINAL"}
                 </button>
               </form>
             </div>
 
-            {/* Staff List */}
+            {/* List */}
             <div className="lg:col-span-8">
-              <div className="bg-[#111926] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-                <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center gap-2">
-                   <LayoutDashboard size={16} className="text-blue-500" />
-                   <span className="text-[10px] font-black uppercase italic text-slate-400">Terminal Network Status</span>
-                </div>
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-[#0b0f1a]/50 text-slate-500 uppercase text-[9px] font-black tracking-[0.2em] italic">
+              <div className="bg-[#111926] rounded-[2.5rem] border border-white/5 overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-black/20 text-slate-500 uppercase text-[9px] font-black italic">
                     <tr>
-                      <th className="p-8">Node Identity</th>
-                      <th className="p-8 text-center">Current Float</th>
-                      <th className="p-8 text-right">Connectivity</th>
+                      <th className="p-8">Terminal Node</th>
+                      <th className="p-8 text-center">Tickets</th>
+                      <th className="p-8 text-center">Balance</th>
+                      <th className="p-8 text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {staff.map(s => (
-                      <tr key={s.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <tr key={s.id} className="hover:bg-white/[0.01] transition-all group">
                         <td className="p-8">
                           <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-[#0b0f1a] rounded-2xl flex items-center justify-center border border-white/5 group-hover:border-blue-500/30 transition-all">
-                              <Monitor size={20} className="text-slate-600 group-hover:text-blue-500 transition-colors" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-black text-white uppercase italic tracking-tighter text-base">{s.username}</span>
-                              <span className="text-[9px] text-slate-500 font-bold tracking-widest italic uppercase">Terminal ID: {s.id.slice(0, 8)}</span>
+                            <Monitor size={20} className="text-slate-600 group-hover:text-blue-500" />
+                            <div>
+                              <p className="font-black uppercase italic text-lg leading-none">{s.username}</p>
+                              <p className="text-[8px] text-slate-600 font-bold uppercase mt-1">ID: {s.id.split('-')[0]}</p>
                             </div>
                           </div>
                         </td>
                         <td className="p-8 text-center">
-                          <span className="bg-blue-500/10 text-blue-400 px-5 py-2.5 rounded-2xl font-mono font-black text-xs italic border border-blue-500/20">
-                            KES {parseFloat(s.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </span>
+                          <div className="flex flex-col items-center">
+                            <div className="flex items-center gap-1 text-slate-400">
+                              <Ticket size={12} />
+                              <span className="text-sm font-black italic">{s.ticketCount}</span>
+                            </div>
+                            <span className="text-[8px] font-bold uppercase opacity-30 tracking-tighter">Total Lifetime</span>
+                          </div>
+                        </td>
+                        <td className="p-8 text-center">
+                          <span className="text-sm font-black italic text-blue-400">KES {parseFloat(s.balance || 0).toLocaleString()}</span>
                         </td>
                         <td className="p-8 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                             <span className="text-[10px] font-black text-emerald-500 uppercase italic tracking-widest">Online</span>
-                          </div>
+                           <span className="text-[9px] font-black uppercase italic text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full">Active</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {staff.length === 0 && (
-                  <div className="p-32 text-center">
-                    <Database size={48} className="mx-auto text-slate-800 mb-4 opacity-20" />
-                    <p className="text-slate-700 font-black uppercase text-xs tracking-[0.4em] italic opacity-20">
-                      Waiting for Terminal Deployment
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
