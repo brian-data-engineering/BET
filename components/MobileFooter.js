@@ -1,68 +1,71 @@
-import { List, LayoutGrid, Trophy, Clock, User } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
+import React from 'react';
+import { List, LayoutGrid, Activity, Trophy, User } from 'lucide-react';
 
-export default function MobileFooter({ slipCount = 0, onOpenSidebar, onOpenSlip }) {
-  const router = useRouter();
-  
-  // Helper to highlight the active icon based on the current page
-  const isActive = (path) => router.pathname === path;
-
+const MobileFooter = ({ 
+  itemCount = 0, 
+  onOpenSidebar, 
+  onOpenSlip, 
+  onGoHome 
+}) => {
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a] border-t border-white/10 h-16 flex lg:hidden z-[90] items-center justify-around px-2 shadow-2xl">
-      
-      {/* A-Z Sports / Sidebar Trigger */}
-      <button 
-        onClick={onOpenSidebar} 
-        className="flex flex-col items-center gap-1 text-slate-400 active:text-[#10b981] transition-colors"
-      >
-        <List size={20} />
-        <span className="text-[9px] font-bold italic">A-Z Sports</span>
-      </button>
-      
-      {/* Home Link */}
-      <Link 
-        href="/" 
-        className={`flex flex-col items-center gap-1 transition-colors ${isActive('/') ? 'text-[#10b981]' : 'text-slate-400'}`}
-      >
-        <LayoutGrid size={20} />
-        <span className="text-[9px] font-bold italic">Home</span>
-      </Link>
-
-      {/* Center Floating Trophy (Betslip) */}
-      <div className="relative">
+    <nav className="fixed bottom-0 left-0 right-0 z-[100] lg:hidden">
+      {/* Glossy Backdrop Blur Container */}
+      <div className="bg-[#111926]/95 backdrop-blur-2xl border-t border-white/5 h-16 flex items-center justify-around px-2 relative">
+        
+        {/* A-Z List */}
         <button 
-          onClick={onOpenSlip} 
-          className="bg-[#10b981] w-14 h-14 rounded-full -mt-10 border-4 border-[#0b0f1a] flex items-center justify-center text-white shadow-xl shadow-[#10b981]/20 transform active:scale-95 transition-transform"
+          onClick={onOpenSidebar}
+          className="flex flex-col items-center gap-1 text-slate-400 active:text-white transition-colors flex-1"
         >
-          <Trophy size={24} />
+          <List size={20} />
+          <span className="text-[9px] font-black uppercase italic tracking-tighter">A-Z Sports</span>
         </button>
-        {slipCount > 0 && (
-          <div className="absolute -top-11 -right-1 bg-red-500 text-white w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center animate-bounce border-2 border-[#0b0f1a]">
-            {slipCount}
-          </div>
-        )}
-      </div>
 
-      {/* Results Link */}
-      <Link 
-        href="/results" 
-        className={`flex flex-col items-center gap-1 transition-colors ${isActive('/results') ? 'text-[#10b981]' : 'text-slate-400'}`}
-      >
-        <Clock size={20} />
-        <span className="text-[9px] font-bold italic">Results</span>
-      </Link>
-
-      {/* Account Link */}
-      <Link 
-        href="/profile" 
-        className={`flex flex-col items-center gap-1 transition-colors ${isActive('/profile') ? 'text-[#10b981]' : 'text-slate-400'}`}
-      >
-        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${isActive('/profile') ? 'bg-[#10b981] text-[#0b0f1a]' : 'bg-slate-700 text-white'}`}>
-          ME
+        {/* Home */}
+        <button 
+          onClick={onGoHome}
+          className="flex flex-col items-center gap-1 text-[#10b981] flex-1"
+        >
+          <LayoutGrid size={20} />
+          <span className="text-[9px] font-black uppercase italic tracking-tighter">Home</span>
+        </button>
+        
+        {/* Center Betslip Button - Raised Design */}
+        <div className="relative flex-1 flex justify-center">
+          <button 
+            onClick={onOpenSlip}
+            className="bg-[#10b981] w-14 h-14 rounded-full -mt-12 flex items-center justify-center text-[#0b0f1a] shadow-[0_8px_20px_rgba(16,185,129,0.3)] border-[6px] border-[#0b0f1a] active:scale-90 transition-all"
+          >
+            <Trophy size={26} strokeWidth={2.5} />
+          </button>
+          
+          {itemCount > 0 && (
+            <div className="absolute -top-14 right-2 bg-red-600 text-white w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center border-2 border-[#0b0f1a] animate-pulse">
+              {itemCount}
+            </div>
+          )}
         </div>
-        <span className="text-[9px] font-bold italic">Account</span>
-      </Link>
-    </div>
+
+        {/* In-Play/Live */}
+        <button className="flex flex-col items-center gap-1 text-slate-400 active:text-white transition-colors flex-1">
+          <Activity size={20} />
+          <span className="text-[9px] font-black uppercase italic tracking-tighter">In-Play</span>
+        </button>
+
+        {/* Account Profile */}
+        <button className="flex flex-col items-center gap-1 text-slate-400 flex-1">
+          <div className="w-8 h-8 rounded-lg bg-[#1c2636] flex items-center justify-center border border-white/10 group-active:border-[#10b981] transition-colors">
+            <User size={16} />
+          </div>
+          <span className="text-[9px] font-black uppercase italic tracking-tighter">Account</span>
+        </button>
+
+      </div>
+      
+      {/* Safe Area Spacer for modern iPhones */}
+      <div className="h-safe-bottom bg-[#111926]/95 w-full" />
+    </nav>
   );
-}
+};
+
+export default MobileFooter;
