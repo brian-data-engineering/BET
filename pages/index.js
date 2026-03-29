@@ -14,7 +14,6 @@ export default function Home({ initialMatches = [] }) {
   const { slipItems, setSlipItems } = useBets(); 
   const [currentTime, setCurrentTime] = useState(new Date());
   
-  // Mobile UI States
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
@@ -29,7 +28,6 @@ export default function Home({ initialMatches = [] }) {
     const matchDate = new Date(cleanTime);
     const lockTime = matchDate.getTime() - 60000;
     const isLocked = currentTime.getTime() >= lockTime;
-
     return {
       isLocked: isLocked,
       secondsLeft: Math.floor((matchDate.getTime() - currentTime.getTime()) / 1000)
@@ -55,7 +53,6 @@ export default function Home({ initialMatches = [] }) {
   const toggleBet = (selection, value, match) => {
     const { isLocked } = getMatchStatus(match.commence_time);
     if (isLocked) return;
-
     const betId = `${match.id}-${selection}`;
     setSlipItems(prev => {
       if (prev.find(item => item.id === betId)) return prev.filter(item => item.id !== betId);
@@ -79,17 +76,13 @@ export default function Home({ initialMatches = [] }) {
       const league = (m.league_name || '').toLowerCase();
       return !/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league);
     });
-
     if (selectedLeague) {
       const sample = initialMatches.find(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
-      if (sample && sample.sport_key !== activeTab) {
-        setActiveTab(sample.sport_key);
-      }
+      if (sample && sample.sport_key !== activeTab) setActiveTab(sample.sport_key);
       filtered = filtered.filter(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
     } else {
       filtered = filtered.filter(m => m.sport_key === activeTab);
     }
-
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
@@ -146,10 +139,10 @@ export default function Home({ initialMatches = [] }) {
           </div>
 
           <div className="grid grid-cols-12 px-4 py-3 text-[10px] font-black text-slate-500 italic bg-[#0b0f1a]/30">
-            <div className="col-span-7 flex items-center gap-2">
+            <div className="col-span-6 flex items-center gap-2">
               Event {selectedLeague && <span className="text-[#10b981] ml-2">/ {selectedLeague}</span>}
             </div>
-            <div className="col-span-5 grid grid-cols-3 text-center"><span>1</span><span>X</span><span>2</span></div>
+            <div className="col-span-6 grid grid-cols-3 text-center"><span>1</span><span>X</span><span>2</span></div>
           </div>
 
           <div className="divide-y divide-white/5">
@@ -162,34 +155,33 @@ export default function Home({ initialMatches = [] }) {
                 <div key={match.id} className="grid grid-cols-12 p-3 items-center hover:bg-[#161f2e] transition-colors relative overflow-hidden">
                   {closingSoon && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-orange-500 animate-pulse" />}
                   
-                  <div className="col-span-7 pr-4">
+                  <div className="col-span-6 pr-2">
                     <Link href={`/${match.id}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-[10px] font-black italic truncate max-w-[120px] ${closingSoon ? 'text-orange-500' : 'text-[#10b981]'}`}>
+                        <span className={`text-[10px] font-black italic truncate max-w-[100px] ${closingSoon ? 'text-orange-500' : 'text-[#10b981]'}`}>
                           {match.display_league || match.league_name}
                         </span>
                         <span className={`text-[9px] font-bold flex items-center gap-1 italic ${closingSoon ? 'text-orange-400' : 'text-slate-500'}`}>
                           <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                          {closingSoon && <span className="ml-1 text-[8px] animate-pulse">STARTING</span>}
                         </span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-black text-slate-200 truncate">{cleanName(match.home_team)}</span>
-                        <span className="text-sm font-black text-slate-200 truncate">{cleanName(match.away_team)}</span>
+                        <span className="text-sm font-black text-slate-200 truncate leading-tight">{cleanName(match.home_team)}</span>
+                        <span className="text-sm font-black text-slate-200 truncate leading-tight">{cleanName(match.away_team)}</span>
                       </div>
                     </Link>
                   </div>
 
-                  {/* ODDS SECTION REWRITTEN FOR PILL LOOK */}
-                  <div className="col-span-5 grid grid-cols-3 gap-2 items-center">
+                  {/* ODDS SECTION: Adjusted col-span and padding to fix "circle-ish" look */}
+                  <div className="col-span-6 grid grid-cols-3 gap-1.5 items-center">
                     {[{l:'1', v:match.home_odds}, {l:'X', v:match.draw_odds}, {l:'2', v:match.away_odds}].map((odd) => (
                       <button 
                         key={odd.l} 
                         onClick={() => toggleBet(odd.l, odd.v, match)} 
                         className={`
-                          h-11 rounded-full font-bold text-[13px] transition-all duration-200 border-none
+                          h-10 sm:h-11 rounded-full font-bold text-[11px] sm:text-[13px] transition-all duration-200 border-none
                           ${currentSelection?.selection === odd.l 
-                            ? 'bg-[#10b981] text-white' 
+                            ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' 
                             : 'bg-[#1e293b] hover:bg-[#2d3a4f] text-slate-200'}
                         `}
                       >
@@ -218,12 +210,10 @@ export default function Home({ initialMatches = [] }) {
           <List size={20} />
           <span className="text-[8px] uppercase font-black italic">A-Z Sports</span>
         </button>
-        
         <button onClick={() => {setSelectedLeague(null); window.scrollTo({top: 0, behavior: 'smooth'});}} className="flex flex-col items-center gap-1 text-slate-400 active:text-[#10b981]">
           <LayoutGrid size={20} />
           <span className="text-[8px] uppercase font-black italic">Home</span>
         </button>
-
         <div className="relative">
             <button onClick={() => setIsMobileSlipOpen(true)} className="bg-[#10b981] w-14 h-14 rounded-full -mt-10 border-4 border-[#0b0f1a] flex items-center justify-center text-white shadow-xl shadow-[#10b981]/20 transform active:scale-95 transition-transform">
                 <Trophy size={24} />
@@ -234,12 +224,10 @@ export default function Home({ initialMatches = [] }) {
                 </div>
             )}
         </div>
-
         <button className="flex flex-col items-center gap-1 text-slate-400">
           <Clock size={20} />
           <span className="text-[8px] uppercase font-black italic">In-Play</span>
         </button>
-
         <Link href="/profile" className="flex flex-col items-center gap-1 text-slate-400">
           <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[8px] font-bold">ME</div>
           <span className="text-[8px] uppercase font-black italic">Account</span>
@@ -259,7 +247,6 @@ export async function getServerSideProps() {
       .gt('commence_time', nowLocalAsUTC)
       .order('commence_time', { ascending: true })
       .limit(500); 
-
     return { props: { initialMatches: data || [] } };
   } catch (err) { return { props: { initialMatches: [] } }; }
 }
