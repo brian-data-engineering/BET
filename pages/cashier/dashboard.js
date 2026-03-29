@@ -4,7 +4,7 @@ import CashierLayout from '../../components/cashier/CashierLayout';
 import MatchCard from '../../components/cashier/MatchCard';
 import BetSlip from '../../components/cashier/BetSlip';
 import PrintableTicket from '../../components/cashier/PrintableTicket';
-import { Loader2, ReceiptText, Wallet, AlertTriangle } from 'lucide-react';
+import { Loader2, ReceiptText, Wallet } from 'lucide-react';
 
 export default function UnifiedTerminal() {
   const [matches, setMatches] = useState([]);
@@ -13,6 +13,10 @@ export default function UnifiedTerminal() {
   const [activeTicketId, setActiveTicketId] = useState(null);
   const [currentTicket, setCurrentTicket] = useState(null);
   const [cashierBalance, setCashierBalance] = useState(0); 
+  
+  // FIX: Added the missing searchQuery state that caused the Vercel build error
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -21,14 +25,13 @@ export default function UnifiedTerminal() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Get the REAL balance from profiles
     const { data: profile } = await supabase
       .from('profiles')
       .select('balance')
       .eq('id', user.id)
       .single();
 
-    if (profile) setCashierBalance(parseFloat(profile.balance));
+    if (profile) setCashierBalance(parseFloat(profile.balance || 0));
   }, []);
 
   useEffect(() => { 
@@ -46,41 +49,48 @@ export default function UnifiedTerminal() {
     setIsSearching(true);
     const cleanCode = searchQuery.trim().toUpperCase();
 
-    const { data: ticket, error } = await supabase
-      .from('betsnow')
-      .select('*')
-      .eq('booking_code', cleanCode)
-      .is('ticket_serial', null) // Only find UNPLACED bookings
-      .single();
+    try {
+      const { data: ticket, error } = await supabase
+        .from('betsnow')
+        .select('*')
+        .eq('booking_code', cleanCode)
+        .is('ticket_serial', null) // Only find UNPLACED bookings
+        .single();
 
-    if (error || !ticket) {
-      alert("⚠️ INVALID OR ALREADY PLACED CODE");
-    } else {
-      setCart(ticket.selections);
-      setActiveTicketId(ticket.id);
-      setStake(ticket.stake || 100); 
-      setSearchQuery('');
+      if (error || !ticket) {
+        alert("⚠️ INVALID OR ALREADY PLACED CODE");
+      } else {
+        setCart(ticket.selections || []);
+        setActiveTicketId(ticket.id);
+        setStake(ticket.stake || 100); 
+        setSearchQuery(''); // Clear search after success
+      }
+    } catch (err) {
+      console.error("Booking load error:", err);
+    } finally {
+      setIsSearching(false);
     }
-    setIsSearching(false);
   };
 
-  // 3. ATOMIC PRINT & DEDUCT (THE CORE ENGINE)
+  // 3. ATOMIC PRINT & DEDUCT
   const handlePrintBet = async () => {
     if (cart.length === 0 || !stake || stake <= 0) return;
+    if (cashierBalance < stake) {
+      alert("INSUFFICIENT FLOAT BALANCE");
+      return;
+    }
+    
     setIsProcessing(true);
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const betStake = parseFloat(stake);
 
-      // STEP A: The Handshake - Generate a unique Serial
       const serial = `LCR-${Math.random().toString(36).toUpperCase().substring(2, 10)}`;
       const totalOdds = cart.reduce((acc, item) => acc * (item.odds || 1), 1);
 
-      // STEP B: RPC CALL (Crucial for "In Tandem" Balance)
-      // We will create this SQL function below to handle the update + deduction in 1 go
       const { data, error: rpcError } = await supabase.rpc('place_and_deduct_bet', {
-        p_ticket_id: activeTicketId, // NULL if new bet, ID if booking
+        p_ticket_id: activeTicketId, 
         p_cashier_id: user.id,
         p_stake: betStake,
         p_selections: cart,
@@ -91,10 +101,10 @@ export default function UnifiedTerminal() {
 
       if (rpcError) throw new Error(rpcError.message);
 
-      // STEP C: SUCCESS ACTIONS
       setCashierBalance(prev => prev - betStake);
-      setCurrentTicket(data); // The function returns the full ticket row
+      setCurrentTicket(data); 
       
+      // Delay printing slightly to ensure state is set
       setTimeout(() => {
         window.print();
         setCart([]);
@@ -111,7 +121,6 @@ export default function UnifiedTerminal() {
 
   return (
     <CashierLayout>
-      {/* UI remains mostly the same, but with stricter state control */}
       <div className="flex h-[calc(100vh-64px)] bg-[#0b0f1a] text-white overflow-hidden font-sans">
         <div className="flex-1 p-6 overflow-y-auto border-r border-white/5 custom-scrollbar">
           
@@ -143,11 +152,20 @@ export default function UnifiedTerminal() {
           {/* MATCH GRID */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {matches.map(m => (
-              <MatchCard key={m.id} match={m} onSelect={(match, selection, odd) => {
-                if(!cart.find(i => i.matchId === m.id)) {
-                  setCart([...cart, { matchId: m.id, matchName: `${m.home_team} vs ${m.away_team}`, selection, odds: parseFloat(odd) }]);
-                }
-              }} />
+              <MatchCard 
+                key={m.id} 
+                match={m} 
+                onSelect={(match, selection, odd) => {
+                  if(!cart.find(i => i.matchId === m.id)) {
+                    setCart([...cart, { 
+                      matchId: m.id, 
+                      matchName: `${m.home_team} vs ${m.away_team}`, 
+                      selection, 
+                      odds: parseFloat(odd) 
+                    }]);
+                  }
+                }} 
+              />
             ))}
           </div>
         </div>
