@@ -14,7 +14,6 @@ export default function ManageStaff() {
   const fetchStaffWithStats = useCallback(async (id) => {
     setFetching(true);
     try {
-      // 1. Fetch Cashiers
       const { data: profiles, error: pError } = await supabase
         .from('profiles')
         .select('*')
@@ -23,7 +22,6 @@ export default function ManageStaff() {
 
       if (pError) throw pError;
 
-      // 2. Fetch Ticket Counts for each cashier from BOTH tables
       const staffWithCounts = await Promise.all(profiles.map(async (cashier) => {
         const [resNow, resSettled] = await Promise.all([
           supabase.from('betsnow').select('id', { count: 'exact', head: true }).eq('cashier_id', cashier.id),
@@ -60,25 +58,23 @@ export default function ManageStaff() {
     setLoading(true);
 
     try {
-      // NOTE: Using signUp will log the operator out unless you have an Edge Function.
-      // For now, we manually handle the metadata.
-      const { data, error } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: {
-          data: {
-            username: form.username,
-            role: 'cashier',
-            parent_id: operatorId
-          }
-        }
+      // FIX: Calling your custom SQL function instead of auth.signUp
+      // This happens on the server, keeping your Operator session intact.
+      const { error } = await supabase.rpc('admin_create_cashier', {
+        target_email: form.email,
+        target_password: form.password,
+        target_username: form.username,
+        op_id: operatorId
       });
 
       if (error) throw error;
 
-      alert(`Terminal ${form.username} deployed. Note: Check email confirmation if enabled.`);
+      alert(`Terminal ${form.username} deployed successfully.`);
       setForm({ email: '', password: '', username: '' });
+      
+      // Refresh list to show the new node
       fetchStaffWithStats(operatorId);
+      
     } catch (error) {
       alert("Deployment Error: " + error.message);
     } finally {
@@ -93,7 +89,6 @@ export default function ManageStaff() {
       <AdminLayout>
         <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
           
-          {/* Stats Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex flex-col">
               <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Network Nodes</h1>
@@ -109,7 +104,6 @@ export default function ManageStaff() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Form */}
             <div className="lg:col-span-4">
               <form onSubmit={handleCreateCashier} className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 space-y-6 sticky top-8">
                 <div className="flex items-center gap-3">
@@ -117,17 +111,16 @@ export default function ManageStaff() {
                   <h2 className="font-black uppercase text-xs italic tracking-widest">New Terminal</h2>
                 </div>
                 
-                <input value={form.username} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold uppercase" placeholder="NODE NAME" onChange={e => setForm({...form, username: e.target.value})} required />
-                <input value={form.email} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold" placeholder="EMAIL" onChange={e => setForm({...form, email: e.target.value})} required />
-                <input value={form.password} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold" type="password" placeholder="PIN/PASSWORD" onChange={e => setForm({...form, password: e.target.value})} required />
+                <input value={form.username} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold uppercase text-white" placeholder="NODE NAME" onChange={e => setForm({...form, username: e.target.value})} required />
+                <input value={form.email} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold text-white" placeholder="EMAIL" onChange={e => setForm({...form, email: e.target.value})} required />
+                <input value={form.password} className="w-full bg-[#0b0f1a] p-4 rounded-2xl border border-white/5 text-sm font-bold text-white" type="password" placeholder="PIN/PASSWORD" onChange={e => setForm({...form, password: e.target.value})} required />
 
                 <button disabled={loading} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl hover:scale-105 transition-all italic text-xs uppercase">
-                  {loading ? <Loader2 className="animate-spin mx-auto" /> : "DEPROY TERMINAL"}
+                  {loading ? <Loader2 className="animate-spin mx-auto" /> : "DEPLOY TERMINAL"}
                 </button>
               </form>
             </div>
 
-            {/* List */}
             <div className="lg:col-span-8">
               <div className="bg-[#111926] rounded-[2.5rem] border border-white/5 overflow-hidden">
                 <table className="w-full text-left">
@@ -170,6 +163,7 @@ export default function ManageStaff() {
                     ))}
                   </tbody>
                 </table>
+                {fetching && <div className="p-10 text-center text-slate-500 italic text-xs uppercase font-bold">Synchronizing Network...</div>}
               </div>
             </div>
           </div>
