@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import Navbar from '../components/Navbar';
 import MobileFooter from '../components/MobileFooter'; 
-import ResultsHeader from '../components/results/ResultsHeader'; // Header is back
+import ResultsHeader from '../components/results/ResultsHeader';
 import ResultsRow from '../components/results/ResultsRow';
 import ResultsSidebar from '../components/results/ResultsSidebar';
 import { useBets } from '../context/BetContext';
@@ -30,7 +30,7 @@ export default function ResultsPage() {
         if (error) throw error;
         setResults(data || []);
       } catch (err) {
-        console.error('Error fetching results:', err.message);
+        console.error('error fetching results:', err.message);
       } finally {
         setIsLoading(false);
       }
@@ -39,7 +39,7 @@ export default function ResultsPage() {
   }, [activeSport]);
 
   const groupedResults = results.reduce((acc, match) => {
-    const league = match.league_name || 'Other Leagues';
+    const league = match.league_name || 'other leagues';
     if (!acc[league]) acc[league] = [];
     acc[league].push(match);
     return acc;
@@ -55,10 +55,10 @@ export default function ResultsPage() {
            <ResultsSidebar activeSport={activeSport} setActiveSport={setActiveSport} />
         </div>
 
-        <main className="flex-1 min-h-[600px] rounded-lg overflow-hidden bg-[#111926] border border-white/5 shadow-2xl flex flex-col">
+        <main className="flex-1 min-h-[600px] rounded-2xl overflow-hidden bg-[#111926] border border-white/5 shadow-2xl flex flex-col">
           
-          {/* FIX 1: Sticky Header with z-index to stay above league headers */}
-          <div className="sticky top-[0px] lg:top-[64px] z-30">
+          {/* Sticky Header */}
+          <div className="sticky top-0 z-30">
             <ResultsHeader count={results.length} activeSport={activeSport} />
           </div>
 
@@ -66,20 +66,18 @@ export default function ResultsPage() {
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-32 text-slate-500 gap-3">
                 <Loader2 className="animate-spin text-[#10b981]" size={40} />
-                <span className="text-[11px] font-bold italic tracking-widest uppercase mt-2">
-                  Syncing {activeSport.replace('-', ' ')}...
+                <span className="text-[11px] font-bold italic tracking-widest capitalize mt-2">
+                  syncing {activeSport.replace('-', ' ')}...
                 </span>
               </div>
             ) : Object.keys(groupedResults).length > 0 ? (
               Object.keys(groupedResults).map((league) => (
                 <div key={league} className="flex flex-col">
                   
-                  {/* FIX 2: Increased sticky top so it sits BELOW the ResultsHeader */}
-                  {/* Mobile top: height of ResultsHeader (~44px) */}
-                  {/* Desktop top: Navbar (64px) + ResultsHeader (44px) = 108px */}
-                  <div className="bg-[#1a231f] px-4 py-2.5 flex items-center gap-3 border-y border-black/40 sticky top-[44px] lg:top-[108px] z-20 shadow-lg backdrop-blur-md">
+                  {/* League Sub-header */}
+                  <div className="bg-[#1a231f] px-4 py-2.5 flex items-center gap-3 border-y border-black/40 sticky top-[48px] z-20 shadow-lg backdrop-blur-md">
                     <ChevronRight size={14} className="text-[#10b981] opacity-70" />
-                    <span className="text-[10px] font-black text-slate-100 uppercase tracking-widest">
+                    <span className="text-[10px] font-black text-slate-100 capitalize tracking-widest">
                       {league}
                     </span>
                     <span className="ml-auto text-[8px] bg-white/5 px-1.5 rounded-full text-slate-500 font-bold">
@@ -97,8 +95,8 @@ export default function ResultsPage() {
             ) : (
               <div className="py-40 text-center text-slate-600 flex flex-col items-center gap-5">
                 <AlertCircle size={48} className="opacity-10 text-[#ffcc00]" />
-                <span className="text-sm font-black italic uppercase tracking-widest text-slate-400">
-                  No {activeSport} results found
+                <span className="text-sm font-black italic capitalize tracking-widest text-slate-400">
+                  no {activeSport} results found
                 </span>
               </div>
             )}
@@ -106,7 +104,12 @@ export default function ResultsPage() {
         </main>
       </div>
 
-      <MobileFooter slipCount={slipItems.length} />
+      {/* Consistent with Home/Detail footer props */}
+      <MobileFooter 
+        itemCount={slipItems.length} 
+        onGoHome={() => window.location.href = '/'}
+        onOpenSlip={() => {}} // You can add logic here if you want to open the slip on the results page
+      />
     </div>
   );
 }
