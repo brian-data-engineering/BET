@@ -23,33 +23,18 @@ export default function Home({ initialMatches = [] }) {
     return () => clearInterval(timer);
   }, []);
 
-  /**
-   * BUSINESS LOGIC: 
-   * Strips +00 to fix the 3-hour Nairobi offset.
-   * Locks betting 60 seconds before commence_time.
-   */
   const getMatchStatus = (commenceTime) => {
-  if (!commenceTime) return { isLocked: true, secondsLeft: 0 };
+    if (!commenceTime) return { isLocked: true, secondsLeft: 0 };
+    const cleanTime = commenceTime.split('+')[0].replace(' ', 'T');
+    const matchDate = new Date(cleanTime);
+    const lockTime = matchDate.getTime() - 60000;
+    const isLocked = currentTime.getTime() >= lockTime;
 
-  // 1. Force the string into a very specific ISO format: YYYY-MM-DDTHH:MM:SS
-  // This tells JS: "Do NOT adjust for UTC. Read this exactly as written."
-  const cleanTime = commenceTime.split('+')[0].replace(' ', 'T');
-  const matchDate = new Date(cleanTime);
-  
-  // 2. We must also ensure 'currentTime' is treated the same way
-  // We use a 60-second buffer (60000ms)
-  const lockTime = matchDate.getTime() - 60000;
-  
-  // 3. DEBUG: Check your console to see the exact numbers being compared
-  // console.log(`Match: ${matchDate.getTime()} vs Now: ${currentTime.getTime()}`);
-
-  const isLocked = currentTime.getTime() >= lockTime;
-
-  return {
-    isLocked: isLocked,
-    secondsLeft: Math.floor((matchDate.getTime() - currentTime.getTime()) / 1000)
+    return {
+      isLocked: isLocked,
+      secondsLeft: Math.floor((matchDate.getTime() - currentTime.getTime()) / 1000)
+    };
   };
-};
 
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
@@ -91,7 +76,6 @@ export default function Home({ initialMatches = [] }) {
     let filtered = initialMatches.filter(m => {
       const { isLocked } = getMatchStatus(m.commence_time);
       if (isLocked) return false;
-
       const league = (m.league_name || '').toLowerCase();
       return !/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league);
     });
@@ -119,7 +103,6 @@ export default function Home({ initialMatches = [] }) {
     <div className="min-h-screen bg-[#0b0f1a] text-white font-sans pb-20 lg:pb-0">
       <Navbar onSearch={setSearchQuery} />
 
-      {/* MOBILE LEAGUE DRAWER */}
       <div className={`fixed inset-0 z-[100] transition-transform duration-300 lg:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="w-[85%] h-full bg-[#111926] shadow-2xl relative overflow-y-auto">
           <button onClick={() => setIsMobileSidebarOpen(false)} className="absolute top-4 right-4 text-slate-400 p-2"><X size={24}/></button>
@@ -135,7 +118,6 @@ export default function Home({ initialMatches = [] }) {
         <div className="flex-1 bg-black/60" onClick={() => setIsMobileSidebarOpen(false)} />
       </div>
 
-      {/* MOBILE SLIP OVERLAY */}
       {isMobileSlipOpen && (
         <div className="fixed inset-0 z-[110] bg-[#0b0f1a] lg:hidden animate-in slide-in-from-bottom duration-300">
           <div className="p-4 border-b border-white/5 flex justify-between items-center bg-[#111926]">
@@ -154,7 +136,6 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="col-span-12 lg:col-span-7 bg-[#111926] min-h-screen border-r border-white/5">
-          {/* Top Tabs */}
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-2 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }} className={`py-4 px-5 text-[11px] font-black tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'}`}>
@@ -198,9 +179,20 @@ export default function Home({ initialMatches = [] }) {
                       </div>
                     </Link>
                   </div>
-                  <div className="col-span-5 grid grid-cols-3 gap-1.5 h-10">
+
+                  {/* ODDS SECTION REWRITTEN FOR PILL LOOK */}
+                  <div className="col-span-5 grid grid-cols-3 gap-2 items-center">
                     {[{l:'1', v:match.home_odds}, {l:'X', v:match.draw_odds}, {l:'2', v:match.away_odds}].map((odd) => (
-                      <button key={odd.l} onClick={() => toggleBet(odd.l, odd.v, match)} className={`rounded font-black text-[10px] border transition-all ${currentSelection?.selection === odd.l ? 'bg-[#10b981] border-[#10b981] text-white' : 'bg-[#1c2636] border-white/5 text-slate-300'}`}>
+                      <button 
+                        key={odd.l} 
+                        onClick={() => toggleBet(odd.l, odd.v, match)} 
+                        className={`
+                          h-11 rounded-full font-bold text-[13px] transition-all duration-200 border-none
+                          ${currentSelection?.selection === odd.l 
+                            ? 'bg-[#10b981] text-white' 
+                            : 'bg-[#1e293b] hover:bg-[#2d3a4f] text-slate-200'}
+                        `}
+                      >
                         {odd.v ? parseFloat(odd.v).toFixed(2) : '—'}
                       </button>
                     ))}
@@ -221,7 +213,6 @@ export default function Home({ initialMatches = [] }) {
         </aside>
       </div>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a] border-t border-white/10 h-16 flex lg:hidden z-[90] items-center justify-around px-2">
         <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-400 active:text-[#10b981]">
           <List size={20} />
@@ -260,9 +251,7 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    // We create a ISO string that matches the DB format (ignores UTC offset)
     const nowLocalAsUTC = new Date(Date.now() + 60000).toISOString().replace('Z', '');
-    
     const { data } = await supabase
       .from('api_events')
       .select('*')
