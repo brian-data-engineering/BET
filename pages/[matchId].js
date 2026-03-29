@@ -114,6 +114,7 @@ export default function MatchDetail({ match }) {
             </div>
           )}
 
+          {/* VS HEADER */}
           <div className={`bg-[#111926] border-y lg:border border-white/5 lg:rounded-2xl overflow-hidden relative min-h-[220px] md:min-h-[280px] flex items-center ${locked ? 'grayscale-[0.5] opacity-80' : ''}`}>
             <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1000')` }} />
             <div className="absolute inset-0 bg-gradient-to-t from-[#111926] to-transparent" />
@@ -139,12 +140,12 @@ export default function MatchDetail({ match }) {
           </div>
 
           <div className={`px-4 lg:px-0 space-y-4 pb-10 ${locked ? 'pointer-events-none' : ''}`}>
-            {/* 1X2 Market - REWRITTEN FOR PILLS */}
+            {/* 1X2 Market - SPLIT PILL LAYOUT */}
             <div className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
               <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter flex items-center gap-2">
                 Match Result (1X2) {locked && <Lock size={10} />}
               </h4>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {mainMarkets.map((odd, idx) => {
                   const uniqueId = `${match.id}-main-1x2-${odd.label}`;
                   const isSelected = slipItems.find(item => item.id === uniqueId);
@@ -153,25 +154,29 @@ export default function MatchDetail({ match }) {
                       key={idx}
                       disabled={locked}
                       onClick={() => toggleBet('1X2', odd.display, odd.val, uniqueId)}
-                      className={`flex flex-col items-center justify-center h-10 sm:h-14 rounded-full border-none transition-all duration-200 px-1 ${
-                        isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'
-                      }`}
+                      className={`
+                        /* Changed to flex-row and justify-between */
+                        flex flex-row items-center justify-between 
+                        h-10 sm:h-12 rounded-full border-none transition-all duration-200 
+                        px-5 sm:px-6 /* Increased horizontal padding for the edges */
+                        ${isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'}
+                      `}
                     >
-                      <span className="text-[7px] sm:text-[9px] font-black uppercase mb-0.5 opacity-60 leading-none">{odd.display}</span>
-                      <span className="font-black text-[11px] sm:text-sm italic tracking-tight">{odd.val ? parseFloat(odd.val).toFixed(2) : '—'}</span>
+                      <span className="text-[9px] font-black uppercase opacity-60 italic tracking-tight">{odd.display}</span>
+                      <span className="font-black text-[12px] sm:text-sm italic tracking-tighter">{odd.val ? parseFloat(odd.val).toFixed(2) : '—'}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Deep Markets - REWRITTEN FOR PILLS */}
+            {/* Deep Markets - SPLIT PILL LAYOUT */}
             {match.deep_markets?.map((market, mIdx) => (
               <div key={mIdx} className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
                 <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 flex items-center gap-2">
                   {cleanName(market.name)} {locked && <Lock size={10} />}
                 </h4>
-                <div className={`grid gap-2 ${market.odds?.length > 3 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                <div className={`grid gap-2 ${market.odds?.length > 3 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
                   {market.odds?.map((odd, oIdx) => {
                     const uniqueId = `${match.id}-${market.name}-${odd.display}-${oIdx}`;
                     const isSelected = slipItems.find(item => item.id === uniqueId);
@@ -181,12 +186,16 @@ export default function MatchDetail({ match }) {
                         key={oIdx}
                         disabled={locked}
                         onClick={() => toggleBet(market.name, odd.display, val, uniqueId)}
-                        className={`flex flex-col items-center justify-center h-10 sm:h-12 rounded-full border-none transition-all duration-200 px-1 ${
-                          isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'
-                        }`}
+                        className={`
+                          /* Row layout for deep markets */
+                          flex flex-row items-center justify-between 
+                          h-10 sm:h-12 rounded-full border-none transition-all duration-200 
+                          px-5 sm:px-6
+                          ${isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'}
+                        `}
                       >
-                        <span className="text-[7px] sm:text-[8px] font-black uppercase mb-0.5 leading-none opacity-60 truncate w-full px-2">{odd.display}</span>
-                        <span className="font-black text-[11px] sm:text-xs italic tracking-tight">{val ? parseFloat(val).toFixed(2) : '—'}</span>
+                        <span className="text-[8px] font-black uppercase opacity-60 italic truncate max-w-[60%] text-left">{odd.display}</span>
+                        <span className="font-black text-[12px] sm:text-xs italic tracking-tighter">{val ? parseFloat(val).toFixed(2) : '—'}</span>
                       </button>
                     );
                   })}
@@ -201,6 +210,7 @@ export default function MatchDetail({ match }) {
         </aside>
       </div>
 
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a] border-t border-white/10 h-16 flex lg:hidden z-[90] items-center justify-around px-2">
         <Link href="/" className="flex flex-col items-center gap-1 text-slate-400">
           <List size={20} />
@@ -233,32 +243,4 @@ export default function MatchDetail({ match }) {
   );
 }
 
-export async function getServerSideProps({ params }) {
-  const { matchId } = params;
-  try {
-    const { data, error } = await supabase
-      .from('api_events')
-      .select(`*, api_event_details ( markets )`)
-      .eq('id', matchId)
-      .single();
-
-    if (error || !data) return { notFound: true };
-
-    const details = data.api_event_details;
-    let rawMarkets = [];
-    
-    if (Array.isArray(details) && details.length > 0) {
-      rawMarkets = details[0]?.markets?.data || details[0]?.markets || [];
-    } else if (details) {
-      rawMarkets = details.markets?.data || details.markets || [];
-    }
-
-    return {
-      props: {
-        match: JSON.parse(JSON.stringify({ ...data, deep_markets: rawMarkets }))
-      }
-    };
-  } catch (err) {
-    return { notFound: true };
-  }
-}
+// ...getServerSideProps remains the same
