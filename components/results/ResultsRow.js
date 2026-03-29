@@ -3,15 +3,12 @@ export default function ResultsRow({ match }) {
   const isBasketball = sport === 'basketball';
   const isTableTennis = sport === 'table-tennis';
   const isIceHockey = sport === 'ice-hockey';
-  
   const p = match.periods || {};
 
-  // Helper to extract period/set scores
+  // Extraction for sub-scores
   const renderPeriods = () => {
     if (!match.periods) return null;
     
-    // --- Table Tennis (Sets) & Ice Hockey (Periods) ---
-    // Both use a horizontal badge layout for multiple scores
     if (isTableTennis || isIceHockey) {
       const keys = isTableTennis 
         ? ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'] 
@@ -19,90 +16,124 @@ export default function ResultsRow({ match }) {
 
       const scores = keys
         .filter(k => p[k] && p[k].home !== null)
-        .map(k => `${p[k].home}:${p[k].away}`);
+        .map(k => ({ home: p[k].home, away: p[k].away }));
       
       return scores.length > 0 ? (
-        <div className="flex gap-1 mt-1 justify-end">
-          {scores.map((score, i) => (
-            <span key={i} className="text-[8px] bg-white/5 px-1.5 py-0.5 rounded border border-white/5 text-slate-400 font-bold">
-              {score}
-            </span>
+        <div className="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar">
+          {scores.map((s, i) => (
+            <div key={i} className="flex flex-col items-center bg-black/30 px-2 py-0.5 rounded border border-white/5 min-w-[32px]">
+              <span className="text-[7px] text-slate-500 font-black mb-0.5">{i + 1}</span>
+              <span className="text-[9px] text-slate-300 font-bold">{s.home}:{s.away}</span>
+            </div>
           ))}
         </div>
       ) : null;
     }
 
-    // --- Basketball (Quarters) ---
     if (isBasketball) {
       const quarters = ['p1', 'p2', 'p3', 'p4']
         .filter(q => p[q] && p[q].home !== null)
         .map(q => `${p[q].home}:${p[q].away}`);
       
       return quarters.length > 0 ? (
-        <span className="text-[#ffcc00]/40 text-[9px] font-medium ml-1">
-          ({quarters.join(', ')})
+        <span className="text-slate-500 text-[9px] font-bold ml-2 tracking-tighter">
+          Q: {quarters.join(' | ')}
         </span>
       ) : null;
     }
 
-    // --- Soccer (Halftime) ---
     if (match.half_time_home !== null) {
       return (
-        <span className="text-[#ffcc00]/60 text-[10px] font-bold">
-          ({match.half_time_home}:{match.half_time_away})
-        </span>
+        <div className="bg-[#10b981]/10 px-1.5 rounded ml-2 border border-[#10b981]/20">
+          <span className="text-[#10b981] text-[9px] font-black italic">
+            HT {match.half_time_home}:{match.half_time_away}
+          </span>
+        </div>
       );
     }
     return null;
   };
 
-  // Status Checkers
   const hasOT = p.overtime && p.overtime.home !== null;
   const hasPenalties = p.penalties && p.penalties.home !== null;
 
   return (
-    <div className="flex justify-between items-center px-4 py-3 border-b border-black/20 bg-[#16211b] hover:bg-[#1d2b23] transition-colors group">
+    <div className="relative flex items-center px-4 py-4 border-b border-white/[0.03] bg-[#111926]/40 hover:bg-[#1c2636]/60 transition-all duration-300 group overflow-hidden">
       
-      {/* Left side: Teams and League info */}
-      <div className="flex flex-col gap-0.5 max-w-[60%]">
-        <div className="text-[13px] font-bold text-slate-100 group-hover:text-white transition-colors truncate">
-          {match.home_name} - {match.away_name}
+      {/* Background Hover Decoration */}
+      <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#10b981] scale-y-0 group-hover:scale-y-100 transition-transform duration-300" />
+
+      {/* Main Info */}
+      <div className="flex-1 min-w-0">
+        {/* League & Time Header */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[8px] font-black text-[#10b981] uppercase tracking-[0.2em] opacity-80">
+            {match.league_name}
+          </span>
+          <span className="w-1 h-1 bg-slate-700 rounded-full" />
+          <span className="text-[9px] text-slate-500 font-bold">
+             {new Date(match.match_date).toLocaleTimeString('en-GB', {
+               hour: '2-digit', minute: '2-digit'
+             })}
+          </span>
         </div>
-        <div className="text-[10px] text-slate-500 font-semibold italic flex items-center gap-1">
-          <span className="w-1 h-1 bg-[#10b981] rounded-full opacity-50"></span>
-          <span className="truncate uppercase tracking-wider text-[9px]">{match.league_name}</span>
+
+        {/* Teams Area */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+             <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-hover:bg-[#10b981] transition-colors" />
+             <span className="text-[13px] font-bold text-slate-200 group-hover:text-white truncate">
+                {match.home_name}
+             </span>
+          </div>
+          <div className="flex items-center gap-3">
+             <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-hover:bg-[#10b981] transition-colors" />
+             <span className="text-[13px] font-bold text-slate-200 group-hover:text-white truncate">
+                {match.away_name}
+             </span>
+          </div>
         </div>
+
+        {/* Sub-scores (Halftime/Quarters) - Soccer/Basketball */}
+        {!isTableTennis && !isIceHockey && (
+          <div className="mt-2 flex items-center">
+            {renderPeriods()}
+          </div>
+        )}
       </div>
 
-      {/* Right side: Scores and Status */}
-      <div className="text-right flex flex-col items-end shrink-0">
-        <div className={`flex items-center gap-2 ${(isTableTennis || isIceHockey) ? 'flex-col items-end' : 'flex-row'}`}>
-          <div className="text-[16px] font-black text-[#ffcc00] flex gap-1.5 items-center tracking-tighter">
-            {/* OT Badge for Hockey/Basketball */}
-            {hasOT && !hasPenalties && (
-              <span className="text-[8px] bg-red-600 text-white px-1 py-0.5 rounded-sm font-black uppercase leading-none">OT</span>
-            )}
-            {/* Shootout Badge for Hockey */}
+      {/* Score Section */}
+      <div className="flex flex-col items-end pl-4 ml-auto border-l border-white/[0.05]">
+        <div className="flex items-center gap-3">
+          {/* Status Badges */}
+          <div className="flex flex-col gap-1 items-end">
             {hasPenalties && (
-              <span className="text-[8px] bg-purple-600 text-white px-1 py-0.5 rounded-sm font-black uppercase leading-none">SO</span>
+              <span className="text-[7px] bg-indigo-600 text-white px-1 py-0.5 rounded font-black tracking-tighter leading-none">PEN</span>
             )}
-            
-            <span>{match.home_score}:{match.away_score}</span>
-            {(!isTableTennis && !isIceHockey) && renderPeriods()}
+            {hasOT && (
+              <span className="text-[7px] bg-amber-600 text-white px-1 py-0.5 rounded font-black tracking-tighter leading-none">AET</span>
+            )}
           </div>
-          
-          {/* Sub-scores for Hockey and Table Tennis */}
-          {(isTableTennis || isIceHockey) && renderPeriods()}
+
+          {/* Main Score Display */}
+          <div className="flex items-center gap-1">
+             <span className="text-xl font-black italic tracking-tighter text-white">
+               {match.home_score}
+             </span>
+             <span className="text-lg font-black text-slate-700">:</span>
+             <span className="text-xl font-black italic tracking-tighter text-white">
+               {match.away_score}
+             </span>
+          </div>
         </div>
+
+        {/* Sub-scores (Sets/Periods) - Tennis/Hockey */}
+        {(isTableTennis || isIceHockey) && renderPeriods()}
         
-        <div className="text-[9px] text-slate-500 font-black mt-1 uppercase flex gap-2 items-center">
-          <span className="text-[#10b981]/80 italic font-bold capitalize">Settled</span>
-          <span className="opacity-30">|</span>
-          <span>
-            {new Date(match.match_date).toLocaleTimeString('en-GB', {
-              hour: '2-digit', minute: '2-digit'
-            })}
-          </span>
+        <div className="mt-2 px-2 py-0.5 rounded bg-black/20 border border-white/5">
+           <span className="text-[8px] font-black text-[#10b981] uppercase italic tracking-widest">
+             Settled
+           </span>
         </div>
       </div>
     </div>
