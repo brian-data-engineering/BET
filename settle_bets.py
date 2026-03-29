@@ -1,84 +1,86 @@
 import os
 import sys
 from supabase import create_client, Client
-from rapidfuzz import process, fuzz
 
 # --- CONFIGURATION ---
 URL = os.environ.get("SUPABASE_URL")
 SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 if not URL or not SERVICE_KEY:
-    print("❌ ERROR: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.")
+    print("❌ ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.")
     sys.exit(1)
 
-# Initialize with Service Role for "God Mode" access
 supabase: Client = create_client(URL, SERVICE_KEY)
 
-def settle_soccer():
-    print("🚀 Starting Soccer Settlement...")
+def settle_multibets():
+    print("🚀 Starting JSONB Settlement...")
 
-    # 1. Fetch all Pending tickets that are Soccer
-    # Ensure your 'betsnow' table has a 'sport' or 'sport_type' column
-    tickets_query = supabase.table("betsnow").select("*").eq("status", "Pending").execute()
-    tickets = tickets_query.data
+    # 1. Fetch tickets with status 'Pending'
+    # We use .ilike to be safe with case sensitivity (Pending vs pending)
+    tickets = supabase.table("betsnow").select("*").ilike("status", "pending").execute().data
 
     if not tickets:
         print("✅ No pending tickets found.")
         return
 
-    # 2. Fetch all Settled Soccer Results
-    results_query = supabase.table("results").select("*").eq("sport_key", "soccer").execute()
-    results = results_query.data
-
-    if not results:
-        print("⚠️ No soccer results found in database to match against.")
-        return
-
-    # Create a lookup list for fuzzy matching
-    result_names = [f"{r['home_name']} vs {r['away_name']}" for r in results]
-
     for ticket in tickets:
-        ticket_match = f"{ticket['home_team']} vs {ticket['away_team']}"
-        
-        # 3. Fuzzy Match Team Names (Threshold 85%)
-        match = process.extractOne(ticket_match, result_names, scorer=fuzz.WRatio)
-        
-        if match and match[1] >= 85:
-            res = results[result_names.index(match[0])]
-            
-            # --- THE FALLBACK LOGIC ---
-            # Checks fulltime_home first, then home_score if the first is NULL
-            h_score = res.get('fulltime_home') if res.get('fulltime_home') is not None else res.get('home_score')
-            a_score = res.get('fulltime_away') if res.get('fulltime_away') is not None else res.get('away_score')
+        selections = ticket.get('selections', [])
+        all_matches_won = True
+        any_match_lost = False
+        processed_count = 0
 
-            if h_score is None or a_score is None:
-                print(f"⏭️ Skipping {ticket_match}: Match found but scores are still NULL in DB.")
+        for sel in selections:
+            # We use api_match_id if available, otherwise match_id from JSON
+            m_id = sel.get('match_id') or ticket.get('api_match_id')
+            
+            if not m_id:
                 continue
 
-            # 4. Determine Outcome (1, X, 2)
-            actual_outcome = "X"
-            if h_score > a_score:
-                actual_outcome = "1"
-            elif a_score > h_score:
-                actual_outcome = "2"
+            # 2. Look up the result in our 'results' table
+            res_query = supabase.table("results").select("*").eq("id", m_id).execute()
+            
+            if not res_query.data:
+                print(f"🔍 Result not found yet for Match ID: {m_id}")
+                all_matches_won = False # Can't settle as 'Won' yet
+                continue
 
-            # 5. Compare with User's Pick
-            # Assuming ticket['pick'] stores '1', 'X', or '2'
-            final_status = "Won" if str(ticket['pick']) == actual_outcome else "Lost"
+            res = res_query.data[0]
+            
+            # Use fallback for scores
+            h = res.get('fulltime_home') if res.get('fulltime_home') is not None else res.get('home_score')
+            a = res.get('fulltime_away') if res.get('fulltime_away') is not None else res.get('away_score')
 
-            # 6. Update Ticket in Supabase
-            try:
-                supabase.table("betsnow").update({
-                    "status": final_status,
-                    "scoreline": f"{h_score}-{a_score}",
-                    "settled_at": "now()"
-                }).eq("id", ticket['id']).execute()
-                
-                print(f"💰 Settled: {ticket_match} | Pick: {ticket['pick']} | Result: {actual_outcome} | STATUS: {final_status}")
-            except Exception as e:
-                print(f"❌ Failed to update ticket {ticket['id']}: {e}")
+            if h is None:
+                all_matches_won = False
+                continue
+
+            # 3. Determine actual outcome
+            actual = "X"
+            if h > a: actual = "1"
+            elif a > h: actual = "2"
+
+            # 4. Compare with user pick (from JSON)
+            user_pick = str(sel.get('pick'))
+            if user_pick != actual:
+                any_match_lost = True
+            
+            processed_count += 1
+
+        # 5. Final Ticket Decision
+        if any_match_lost:
+            new_status = "Lost"
+        elif all_matches_won and processed_count == len(selections):
+            new_status = "Won"
         else:
-            print(f"🔍 No result found yet for: {ticket_match}")
+            continue # Leave as Pending if some matches aren't finished
+
+        # 6. Update the Ticket
+        supabase.table("betsnow").update({
+            "status": new_status,
+            "paid_at": "now()" if new_status == "Won" else None
+        }).eq("id", ticket['id']).execute()
+
+        print(f"🎫 Ticket {ticket['booking_code']} settled as: {new_status}")
 
 if __name__ == "__main__":
-    settle_soccer()
+    settle_multibets()
