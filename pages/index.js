@@ -3,8 +3,9 @@ import Link from 'next/link';
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
+import MobileFooter from '../components/MobileFooter'; // Your new component
 import { useBets } from '../context/BetContext'; 
-import { Clock, Trophy, List, LayoutGrid, AlertCircle, X, Activity } from 'lucide-react';
+import { Clock, AlertCircle, X, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
@@ -113,9 +114,9 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* MATCH LIST */}
-          <div className="p-3 sm:p-6 pb-32 lg:pb-10 flex-1">
-            <div className="max-w-4xl mx-auto space-y-6">
+          {/* MATCH LIST - REDESIGNED FOR HIGH DENSITY */}
+          <div className="p-3 pb-32 lg:pb-10 flex-1">
+            <div className="max-w-4xl mx-auto">
               {displayMatches.length > 0 ? displayMatches.map((match) => {
                 const currentSelection = slipItems.find(item => item.matchId === match.id);
                 const oddsData = [
@@ -125,51 +126,45 @@ export default function Home({ initialMatches = [] }) {
                 ];
 
                 return (
-                  <div key={match.id} className="group border-b border-white/5 pb-6 last:border-0">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-[#10b981]/10 text-[#10b981] text-[9px] font-black px-2 py-0.5 rounded uppercase italic tracking-widest">
+                  <div key={match.id} className="grid grid-cols-12 gap-2 py-4 border-b border-white/5 items-center hover:bg-white/[0.02] transition-colors px-1">
+                    {/* LEFT SIDE: MATCH INFO */}
+                    <Link href={`/${match.id}`} className="col-span-7 flex flex-col justify-center overflow-hidden">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-tighter truncate">
                           {match.display_league || match.league_name}
                         </span>
-                        <div className="flex items-center gap-1 text-slate-500 text-[10px] font-bold italic">
-                          <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                        </div>
+                        <span className="text-[9px] text-slate-500 font-bold flex items-center gap-0.5 whitespace-nowrap">
+                          <Clock size={8} /> {formatFixedTime(match.commence_time)}
+                        </span>
                       </div>
-                      <Link href={`/${match.id}`} className="text-[10px] font-black italic text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity">
-                        + Markets
-                      </Link>
-                    </div>
-
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <Link href={`/${match.id}`} className="flex-1">
-                        <div className="space-y-1">
-                          <h2 className="text-[16px] md:text-lg font-black italic uppercase tracking-tight">
-                            {cleanName(match.home_team)}
-                          </h2>
-                          <h2 className="text-[16px] md:text-lg font-black italic uppercase tracking-tight text-white/90">
-                            {cleanName(match.away_team)}
-                          </h2>
-                        </div>
-                      </Link>
-
-                      <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
-                        {oddsData.map((o) => (
-                          <button
-                            key={o.label}
-                            onClick={() => toggleBet(o.label, o.val, match)}
-                            className={`h-14 md:w-24 md:h-12 rounded-xl flex flex-col items-center justify-center transition-all border-2 ${
-                              currentSelection?.selection === o.label 
-                                ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-xl scale-[1.03]' 
-                                : 'bg-[#1c2636]/60 border-white/5 text-white active:scale-95'
-                            }`}
-                          >
-                            <span className="text-[8px] font-black opacity-30 uppercase">{o.label}</span>
-                            <span className="text-[14px] font-black italic">
-                              {o.val ? parseFloat(o.val).toFixed(2) : '—'}
-                            </span>
-                          </button>
-                        ))}
+                      <div className="space-y-0.5">
+                        <p className="text-[14px] font-black italic uppercase leading-tight truncate tracking-tight">
+                          {cleanName(match.home_team)}
+                        </p>
+                        <p className="text-[14px] font-black italic uppercase leading-tight truncate tracking-tight text-white/90">
+                          {cleanName(match.away_team)}
+                        </p>
                       </div>
+                      <span className="text-[9px] font-bold text-[#10b981] mt-1 italic">+ Markets</span>
+                    </Link>
+
+                    {/* RIGHT SIDE: ODDS GRID */}
+                    <div className="col-span-5 grid grid-cols-3 gap-1.5">
+                      {oddsData.map((o) => (
+                        <button
+                          key={o.label}
+                          onClick={() => toggleBet(o.label, o.val, match)}
+                          className={`h-11 rounded-xl flex items-center justify-center transition-all border ${
+                            currentSelection?.selection === o.label 
+                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-[0_0_15px_rgba(16,185,129,0.4)]' 
+                              : 'bg-[#1c2636]/60 border-white/5 text-white active:scale-95'
+                          }`}
+                        >
+                          <span className="text-[13px] font-black italic">
+                            {o.val ? parseFloat(o.val).toFixed(2) : '—'}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 );
@@ -189,34 +184,16 @@ export default function Home({ initialMatches = [] }) {
         </aside>
       </div>
 
-      {/* MOBILE NAV PILL */}
-      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#111926]/95 backdrop-blur-2xl border border-white/10 h-16 w-[92%] max-w-md rounded-2xl lg:hidden z-[100] flex items-center justify-around px-2 shadow-2xl">
-        <button onClick={() => setIsMobileSidebarOpen(true)} className="flex flex-col items-center gap-1 text-slate-500">
-          <List size={20} /> <span className="text-[8px] font-black uppercase italic">A-Z List</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-slate-500">
-          <Activity size={20} /> <span className="text-[8px] font-black italic uppercase">Live</span>
-        </button>
-        
-        <div className="relative">
-          <button 
-            onClick={() => setIsMobileSlipOpen(true)} 
-            className="bg-[#10b981] w-14 h-14 rounded-2xl -mt-10 flex items-center justify-center text-[#0b0f1a] shadow-xl border-4 border-[#0b0f1a] active:scale-90 transition-all"
-          >
-            <Trophy size={24} />
-          </button>
-          {slipItems.length > 0 && (
-            <div className="absolute -top-12 -right-1 bg-white text-black w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center border-2 border-[#10b981] animate-bounce">
-              {slipItems.length}
-            </div>
-          )}
-        </div>
-
-        <button onClick={() => {setSelectedLeague(null); window.scrollTo({top:0, behavior:'smooth'})}} className="flex flex-col items-center gap-1 text-[#10b981]">
-          <LayoutGrid size={20} /> <span className="text-[8px] font-black italic uppercase">Home</span>
-        </button>
-        <div className="w-9 h-9 rounded-xl bg-[#1c2636] flex items-center justify-center text-[10px] font-black border border-white/10 text-slate-400 italic">ME</div>
-      </nav>
+      {/* NEW MOBILE FOOTER COMPONENT */}
+      <MobileFooter 
+        itemCount={slipItems.length}
+        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        onOpenSlip={() => setIsMobileSlipOpen(true)}
+        onGoHome={() => {
+          setSelectedLeague(null);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
 
       {/* OVERLAYS */}
       {isMobileSidebarOpen && (
