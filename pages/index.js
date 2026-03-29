@@ -125,11 +125,11 @@ export default function Home({ initialMatches = [] }) {
         </div>
       )}
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex w-full flex-1 overflow-x-auto h-[calc(100vh-64px)]">
+      {/* MAIN CONTENT AREA: overflow-x-auto allows scrolling to the betslip on high zoom */}
+      <div className="flex w-full flex-1 overflow-x-auto h-[calc(100vh-64px)] scroll-smooth">
         
         {/* LEFT ANCHOR: Sidebar */}
-        <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-white/5 bg-[#111926] flex-col overflow-hidden">
+        <aside className="hidden lg:flex w-64 min-w-[256px] flex-shrink-0 border-r border-white/5 bg-[#111926] flex-col overflow-hidden">
           <Sidebar 
             onSelectLeague={(l, s) => { if(s) setActiveTab(s); setSelectedLeague(l); }} 
             onClearFilter={() => setSelectedLeague(null)} 
@@ -137,8 +137,7 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         {/* CENTER COLUMN: Match List */}
-        <main className="flex-1 min-w-[600px] overflow-y-auto custom-scrollbar bg-[#0b0f1a] flex flex-col">
-          {/* Sticky Sport Tabs */}
+        <main className="flex-1 min-w-[500px] overflow-y-auto custom-scrollbar bg-[#0b0f1a] flex flex-col">
           <div className="bg-[#111926] border-b border-white/5 flex items-center px-4 overflow-x-auto no-scrollbar sticky top-0 z-20">
             {sportTabs.map((tab) => (
               <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }} className={`py-4 px-6 text-[11px] font-black tracking-tight transition-all relative whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-white'}`}>
@@ -213,9 +212,9 @@ export default function Home({ initialMatches = [] }) {
           </div>
         </main>
 
-        {/* RIGHT ANCHOR: Betslip Sidebar (FIXED ZOOM ISSUE) */}
-        <aside className="hidden xl:block w-80 flex-shrink-0 bg-[#0b0f1a] p-4 relative border-l border-white/5">
-          <div className="sticky top-6 min-w-[320px]">
+        {/* RIGHT ANCHOR: Betslip Sidebar (FIXED ZOOM & DISAPPEARING) */}
+        <aside className="hidden lg:block w-80 min-w-[320px] flex-shrink-0 bg-[#111926] p-4 relative border-l border-white/5">
+          <div className="sticky top-6">
             <Betslip items={slipItems} setItems={setSlipItems} />
           </div>
         </aside>
