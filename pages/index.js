@@ -128,7 +128,7 @@ export default function Home({ initialMatches = [] }) {
                     {/* DESKTOP ROW (MD+) */}
                     <div className="hidden md:flex items-center justify-between">
                       <Link href={`/${match.id}`} className="flex-1 group">
-                        <div className="text-base font-black uppercase italic leading-tight group-hover:text-[#10b981] transition-colors">
+                        <div className="text-base font-black italic leading-tight group-hover:text-[#10b981] transition-colors">
                           <p>{cleanName(match.home_team)}</p>
                           <p>{cleanName(match.away_team)}</p>
                         </div>
@@ -153,7 +153,7 @@ export default function Home({ initialMatches = [] }) {
                     {/* MOBILE STACKED (Default) */}
                     <div className="md:hidden flex flex-col gap-4">
                       <Link href={`/${match.id}`}>
-                        <h2 className="text-xl font-black uppercase italic leading-[1.1] tracking-tighter">
+                        <h2 className="text-xl font-black italic leading-[1.1] tracking-tighter">
                           {cleanName(match.home_team)} <br /> 
                           <span className="text-slate-400">VS</span> {cleanName(match.away_team)}
                         </h2>
@@ -184,7 +184,7 @@ export default function Home({ initialMatches = [] }) {
               }) : (
                 <div className="py-24 text-center opacity-20 flex flex-col items-center">
                   <AlertCircle size={48} className="mb-2" />
-                  <p className="text-xs font-black uppercase italic tracking-widest">No Events Found</p>
+                  <p className="text-xs font-black italic tracking-widest">No Events Found</p>
                 </div>
               )}
             </div>
@@ -203,7 +203,7 @@ export default function Home({ initialMatches = [] }) {
           <List size={20} /> <span className="text-[8px] font-black uppercase italic">A-Z</span>
         </button>
         <button onClick={() => {setSelectedLeague(null); window.scrollTo({top: 0, behavior: 'smooth'});}} className="flex flex-col items-center gap-1 text-[#10b981]">
-          <LayoutGrid size={20} /> <span className="text-[8px] font-black uppercase italic">HOME</span>
+          <LayoutGrid size={20} /> <span className="text-[8px] font-black italic">HOME</span>
         </button>
         <div className="relative">
           <button onClick={() => setIsMobileSlipOpen(true)} className="bg-[#10b981] w-14 h-14 rounded-2xl -mt-10 flex items-center justify-center text-[#0b0f1a] shadow-xl border-4 border-[#0b0f1a] active:scale-90 transition-transform">
@@ -216,7 +216,7 @@ export default function Home({ initialMatches = [] }) {
           )}
         </div>
         <button className="flex flex-col items-center gap-1 text-slate-500">
-          <Clock size={20} /> <span className="text-[8px] font-black uppercase italic">LIVE</span>
+          <Clock size={20} /> <span className="text-[8px] font-black italic">LIVE</span>
         </button>
         <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-black border border-white/10 text-slate-500 italic">ME</div>
       </nav>
