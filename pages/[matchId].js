@@ -139,7 +139,7 @@ export default function MatchDetail({ match }) {
           </div>
 
           <div className={`px-4 lg:px-0 space-y-4 pb-10 ${locked ? 'pointer-events-none' : ''}`}>
-            {/* 1X2 Market - UPDATED LAYOUT */}
+            {/* 1X2 Market */}
             <div className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
               <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 tracking-tighter flex items-center gap-2">
                 Match Result (1X2) {locked && <Lock size={10} />}
@@ -157,13 +157,13 @@ export default function MatchDetail({ match }) {
                         isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'
                       }`}
                     >
-                      {/* Odds Far Left */}
-                      <span className="font-black text-[12px] sm:text-sm italic tracking-tighter leading-none">
-                        {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
-                      </span>
-                      {/* Market Name Far Right */}
+                      {/* MARKET LABEL ON LEFT */}
                       <span className="text-[9px] font-black uppercase opacity-60 italic tracking-tight leading-none">
                         {odd.display}
+                      </span>
+                      {/* ODDS ON RIGHT */}
+                      <span className="font-black text-[12px] sm:text-sm italic tracking-tighter leading-none">
+                        {odd.val ? parseFloat(odd.val).toFixed(2) : '—'}
                       </span>
                     </button>
                   );
@@ -171,7 +171,7 @@ export default function MatchDetail({ match }) {
               </div>
             </div>
 
-            {/* Deep Markets - UPDATED LAYOUT */}
+            {/* Deep Markets */}
             {match.deep_markets?.map((market, mIdx) => (
               <div key={mIdx} className="bg-[#1c2636] border border-white/5 rounded-xl p-5">
                 <h4 className="text-[10px] font-black uppercase italic text-slate-500 mb-4 flex items-center gap-2">
@@ -191,13 +191,13 @@ export default function MatchDetail({ match }) {
                           isSelected ? 'bg-[#10b981] text-white shadow-lg shadow-[#10b981]/20' : 'bg-[#111926] text-slate-300'
                         }`}
                       >
-                        {/* Odds Far Left */}
+                        {/* SELECTION ON LEFT */}
+                        <span className="text-[8px] font-black uppercase opacity-60 italic truncate max-w-[60%] text-left leading-none">
+                          {odd.display}
+                        </span>
+                        {/* ODDS ON RIGHT */}
                         <span className="font-black text-[12px] sm:text-xs italic tracking-tighter leading-none">
                           {val ? parseFloat(val).toFixed(2) : '—'}
-                        </span>
-                        {/* Selection Far Right */}
-                        <span className="text-[8px] font-black uppercase opacity-60 italic truncate max-w-[60%] text-right leading-none">
-                          {odd.display}
                         </span>
                       </button>
                     );
