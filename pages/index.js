@@ -178,22 +178,33 @@ export default function Home({ initialMatches = [] }) {
                         </div>
                       </Link>
 
-                      {/* Odds Row - Grid Style */}
-                      <div className="grid grid-cols-3 gap-2 mt-1">
-                        {[{l:'1', lab:'Home', v:match.home_odds}, {l:'X', lab:'Draw', v:match.draw_odds}, {l:'2', lab:'Away', v:match.away_odds}].map((odd) => (
-                          <button key={odd.l} onClick={() => toggleBet(odd.l, odd.v, match)} 
-                            className={`h-[52px] rounded-lg flex flex-col items-center justify-center border transition-all ${
-                              currentSelection?.selection === odd.l 
-                                ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/10' 
-                                : 'bg-[#0b0f1a] border-white/5 text-white hover:bg-[#1c2636]'
-                            }`}>
-                            <span className={`text-[8px] font-bold mb-0.5 ${currentSelection?.selection === odd.l ? 'text-[#0b0f1a]/60' : 'text-[#10b981]'}`}>{odd.lab}</span>
-                            <span className="text-[14px] font-bold tracking-tight">{odd.v ? parseFloat(odd.v).toFixed(2) : '—'}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                      {/* Odds Row - Matching the Pills in your reference */}
+<div className="grid grid-cols-3 gap-2 mt-2">
+  {[
+    { l: '1', lab: '1', v: match.home_odds },
+    { l: 'X', lab: 'X', v: match.draw_odds },
+    { l: '2', lab: '2', v: match.away_odds }
+  ].map((odd) => (
+    <button
+      key={odd.l}
+      onClick={() => toggleBet(odd.l, odd.v, match)}
+      className={`h-[40px] px-3 rounded-md flex items-center justify-between transition-all border ${
+        currentSelection?.selection === odd.l
+          ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]'
+          : 'bg-[#1c2636] border-transparent text-white hover:bg-[#253041]'
+      }`}
+    >
+      <span className={`text-xs font-bold ${
+        currentSelection?.selection === odd.l ? 'text-[#0b0f1a]/70' : 'text-slate-400'
+      }`}>
+        {odd.lab}
+      </span>
+      <span className="text-sm font-bold tabular-nums">
+        {odd.v ? parseFloat(odd.v).toFixed(2) : '—'}
+      </span>
+    </button>
+  ))}
+</div>
                 );
               }) : (
                 <div className="py-20 text-center text-slate-600 text-sm font-medium flex flex-col items-center gap-2">
