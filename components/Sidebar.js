@@ -120,7 +120,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                             >
                               <div className="flex items-center gap-2">
                                 <Globe size={10} className={isCountryExpanded ? "text-[#10b981]" : "text-slate-600"} />
-                                <span className={`text-[9px] font-black uppercase italic ${isCountryExpanded ? "text-white" : "text-slate-400"}`}>{country}</span>
+                                <span className={`text-[9px] font-black italic ${isCountryExpanded ? "text-white" : "text-slate-400"}`}>{country}</span>
                               </div>
                               {isCountryExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} className="opacity-30" />}
                             </button>
@@ -132,7 +132,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                                   <button
                                     key={league}
                                     onClick={() => onSelectLeague(league, sportKey)}
-                                    className="w-full text-left px-12 py-2.5 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-[#10b981]/20 transition-all truncate uppercase italic border-l-2 border-transparent hover:border-[#10b981]"
+                                    className="w-full text-left px-12 py-2.5 text-[10px] font-bold text-slate-500 hover:text-white hover:bg-[#10b981]/20 transition-all truncate italic border-l-2 border-transparent hover:border-[#10b981]"
                                   >
                                     {league}
                                   </button>
