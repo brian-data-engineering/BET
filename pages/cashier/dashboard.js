@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
 import PrintableTicket from '../../components/cashier/PrintableTicket';
-import { Loader2, ReceiptText, Wallet, Printer, RefreshCw } from 'lucide-react';
+import { Loader2, ReceiptText, Wallet, Printer, RefreshCw, Search } from 'lucide-react';
 
 export default function UnifiedTerminal() {
   const [cart, setCart] = useState([]);
@@ -14,7 +14,6 @@ export default function UnifiedTerminal() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1. Fetch Cashier Balance
   const fetchCashierData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -24,28 +23,28 @@ export default function UnifiedTerminal() {
 
   useEffect(() => { fetchCashierData(); }, [fetchCashierData]);
 
-  // 2. SMART LOAD: Handles New Bets and Reprints
   const handleLoadBooking = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
-    const cleanCode = searchQuery.trim().toUpperCase();
+    const input = searchQuery.trim().toUpperCase();
 
     try {
-      // Search globally for the code (no longer filtering by ticket_serial here)
+      // SEARCH: Looks in booking_code OR ticket_serial
       const { data: ticket, error } = await supabase
         .from('betsnow')
         .select('*')
-        .eq('booking_code', cleanCode)
+        .or(`booking_code.eq."${input}",ticket_serial.eq."${input}"`)
         .single();
 
       if (error || !ticket) {
-        alert("⚠️ CODE NOT FOUND. Please verify the code.");
+        alert("⚠️ TICKET NOT FOUND OR EXPIRED");
+        setSearchQuery('');
         return;
       }
 
-      // If the ticket is already paid, trigger Reprint Flow
+      // CASE 1: TICKET IS ALREADY PAID (Found via Serial)
       if (ticket.ticket_serial) {
-        const reprint = confirm(`🎟️ TICKET ALREADY PAID\nSerial: ${ticket.ticket_serial}\n\nWould you like to REPRINT the receipt?`);
+        const reprint = confirm(`🎟️ PAID TICKET: ${ticket.ticket_serial}\n\nPrint a duplicate receipt?`);
         if (reprint) {
           setCurrentTicket(ticket);
           setTimeout(() => window.print(), 500);
@@ -54,7 +53,7 @@ export default function UnifiedTerminal() {
         return;
       }
 
-      // If not paid, load it for the cashier to process
+      // CASE 2: FRESH BOOKING (Found via Code)
       setCart(ticket.selections || []);
       setStake(ticket.stake || 0);
       setActiveTicketId(ticket.id);
@@ -62,16 +61,14 @@ export default function UnifiedTerminal() {
 
     } catch (err) {
       console.error(err);
-      alert("Error searching for code.");
+      alert("Error: Ticket processed or invalid.");
     } finally {
       setIsSearching(false);
     }
   };
 
-  // 3. ATOMIC PRINT & DEDUCT
   const handlePrintBet = async () => {
     if (!activeTicketId || cart.length === 0) return;
-    
     if (cashierBalance < stake) {
       alert("⚠️ INSUFFICIENT FLOAT");
       return;
@@ -83,7 +80,6 @@ export default function UnifiedTerminal() {
       const serial = `LCR-${Math.random().toString(36).toUpperCase().substring(2, 10)}`;
       const totalOdds = cart.reduce((acc, item) => acc * (item.odds || 1), 1);
 
-      // Using your new SQL function that preserves the booking_code
       const { data, error: rpcError } = await supabase.rpc('place_and_deduct_bet', {
         p_ticket_id: activeTicketId,
         p_cashier_id: user.id,
@@ -100,7 +96,6 @@ export default function UnifiedTerminal() {
       
       setTimeout(() => {
         window.print();
-        // Clear screen for next customer
         setCart([]);
         setStake(0);
         setActiveTicketId(null);
@@ -109,7 +104,7 @@ export default function UnifiedTerminal() {
       }, 300);
 
     } catch (err) {
-      alert("SYSTEM ERROR: " + err.message);
+      alert("ERROR: " + err.message);
       setIsProcessing(false);
     }
   };
@@ -118,21 +113,20 @@ export default function UnifiedTerminal() {
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#0b0f1a] text-white overflow-hidden font-sans">
         
-        {/* CENTER PANEL: TERMINAL */}
         <div className="flex-1 p-8 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-2xl bg-[#111926] p-8 rounded-[3rem] border border-white/10 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-[#10b981] font-black italic text-3xl tracking-tighter">LUCRA TERMINAL</h1>
+                <h1 className="text-[#10b981] font-black italic text-3xl tracking-tighter uppercase">Lucra Terminal</h1>
                 <button onClick={fetchCashierData} className="p-2 hover:bg-white/5 rounded-full transition-colors">
                     <RefreshCw size={20} className="text-white/40" />
                 </button>
             </div>
             
             <div className="relative flex items-center gap-4 bg-black/40 p-4 rounded-2xl border border-white/5 focus-within:border-[#10b981] transition-all">
-              <ReceiptText className="text-[#10b981]" size={32} />
+              <Search className="text-[#10b981]" size={32} />
               <input 
-                className="bg-transparent flex-1 text-2xl font-black uppercase tracking-widest outline-none placeholder:text-white/10"
-                placeholder="ENTER BOOKING CODE..."
+                className="bg-transparent flex-1 text-2xl font-black uppercase tracking-widest outline-none placeholder:text-white/5"
+                placeholder="BOOKING CODE OR SERIAL..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadBooking()}
@@ -140,68 +134,60 @@ export default function UnifiedTerminal() {
               <button 
                 onClick={handleLoadBooking}
                 disabled={isSearching}
-                className="bg-[#10b981] text-black px-10 py-4 rounded-xl font-black italic hover:scale-105 active:scale-95 transition-all shadow-lg"
+                className="bg-[#10b981] text-black px-10 py-4 rounded-xl font-black italic hover:scale-105 transition-all"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
 
             {activeTicketId && (
-              <div className="mt-10 p-6 bg-white/5 rounded-2xl border border-[#10b981]/20 animate-in fade-in zoom-in duration-300">
-                <div className="flex justify-between items-end mb-6">
+              <div className="mt-10 p-8 bg-white/5 rounded-3xl border border-[#10b981]/20 animate-in fade-in zoom-in">
+                <div className="flex justify-between items-end mb-8">
                     <div>
-                        <p className="text-[10px] font-bold text-[#10b981] uppercase tracking-widest">Amount to Pay</p>
-                        <p className="text-4xl font-black tracking-tighter italic">KES {stake.toLocaleString()}</p>
+                        <p className="text-[10px] font-bold text-[#10b981] uppercase tracking-[0.2em]">Stake Amount</p>
+                        <p className="text-5xl font-black italic">KES {stake.toLocaleString()}</p>
                     </div>
-                    <div className="text-right">
-                        <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Selections</p>
-                        <p className="text-xl font-black">{cart.length}</p>
-                    </div>
+                    <p className="text-sm font-black opacity-30 uppercase">{cart.length} Matches</p>
                 </div>
                 <button 
                   onClick={handlePrintBet}
                   disabled={isProcessing}
-                  className="w-full bg-[#10b981] hover:bg-[#059669] text-black py-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-4 transition-all shadow-[0_0_30px_rgba(16,185,129,0.2)]"
+                  className="w-full bg-[#10b981] hover:bg-[#059669] text-black py-7 rounded-2xl font-black text-2xl flex items-center justify-center gap-4 transition-all shadow-[0_10px_40px_rgba(16,185,129,0.2)]"
                 >
-                  {isProcessing ? <Loader2 className="animate-spin" /> : <><Printer size={32}/> PRINT RECEIPT</>}
+                  {isProcessing ? <Loader2 className="animate-spin" /> : <><Printer size={32}/> PRINT & PAY</>}
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* SIDEBAR: INFO */}
-        <div className="w-[400px] p-8 flex flex-col gap-6 bg-[#111926]/30">
-            <div className="bg-[#10b981] p-6 rounded-[2rem] text-black shadow-xl">
-                <div className="flex items-center gap-3 mb-1">
-                    <Wallet size={16} className="opacity-60" />
-                    <p className="text-[10px] font-black uppercase opacity-60">Float Balance</p>
-                </div>
-                <p className="text-3xl font-black italic leading-none">KES {cashierBalance.toLocaleString()}</p>
+        <div className="w-[420px] p-8 flex flex-col gap-6 bg-[#111926]/30">
+            <div className="bg-[#10b981] p-6 rounded-[2rem] text-black shadow-lg">
+                <p className="text-[10px] font-black uppercase opacity-60 mb-1">Cashier Float</p>
+                <p className="text-3xl font-black italic">KES {cashierBalance.toLocaleString()}</p>
             </div>
 
-            <div className="flex-1 bg-black/20 rounded-[2rem] p-6 border border-white/5 overflow-y-auto custom-scrollbar">
-                <h3 className="text-[#10b981] font-black italic mb-4 tracking-tight">ACTIVE TICKET PREVIEW</h3>
+            <div className="flex-1 bg-black/20 rounded-[2.5rem] p-6 border border-white/5 overflow-y-auto">
+                <h3 className="text-[#10b981] font-black italic mb-6 text-sm tracking-widest uppercase">Selections Preview</h3>
                 {cart.map((item, idx) => (
-                    <div key={idx} className="mb-4 border-b border-white/5 pb-2">
-                        <p className="text-[10px] font-bold text-white/30 uppercase truncate">{item.matchName}</p>
-                        <div className="flex justify-between font-black italic text-sm">
-                            <span className="uppercase text-white/90">{item.selection}</span>
+                    <div key={idx} className="mb-5 border-b border-white/5 pb-3">
+                        <p className="text-[10px] font-bold text-white/30 uppercase mb-1">{item.matchName}</p>
+                        <div className="flex justify-between font-black italic">
+                            <span className="text-sm">{item.selection}</span>
                             <span className="text-[#10b981]">{item.odds}</span>
                         </div>
                     </div>
                 ))}
                 {cart.length === 0 && (
-                  <div className="h-full flex flex-col items-center justify-center opacity-20 italic">
-                    <ReceiptText size={48} className="mb-2" />
-                    <p className="text-xs font-bold uppercase">Waiting for code...</p>
+                  <div className="h-full flex flex-col items-center justify-center opacity-10 py-20">
+                    <ReceiptText size={64} />
+                    <p className="font-black italic uppercase text-xs mt-4">No Ticket Loaded</p>
                   </div>
                 )}
             </div>
         </div>
       </div>
 
-      {/* PRINT LAYER (HIDDEN) */}
       <div className="hidden print:block">
         <PrintableTicket ticket={currentTicket} />
       </div>
