@@ -1,5 +1,5 @@
 import { Ticket, X, Trash2, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Betslip({ items = [], setItems }) {
@@ -7,6 +7,30 @@ export default function Betslip({ items = [], setItems }) {
   const [isBooking, setIsBooking] = useState(false);
   const [stake, setStake] = useState(100);
   const MAX_GAMES = 20;
+
+  // --- THE DISAPPEARING LOGIC ---
+  // Periodically check if any match in the slip has started/locked
+  useEffect(() => {
+    const checkInterval = setInterval(() => {
+      const now = new Date().getTime();
+      
+      setItems(prevItems => {
+        const filtered = prevItems.filter(item => {
+          if (!item.startTime) return true;
+          // Format time to match homepage logic
+          const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
+          const matchTime = new Date(cleanTime).getTime();
+          // Remove if it's 1 minute or less from starting (matching your Home benchmark)
+          return (matchTime - now) > 60000;
+        });
+        
+        // Only update state if something actually disappeared to prevent unnecessary renders
+        return filtered.length !== prevItems.length ? filtered : prevItems;
+      });
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(checkInterval);
+  }, [setItems]);
 
   const totalOdds = useMemo(() => {
     return items.reduce((acc, item) => acc * (parseFloat(item.odds) || 1), 1).toFixed(2);
@@ -18,7 +42,9 @@ export default function Betslip({ items = [], setItems }) {
   }, [totalOdds, stake]);
 
   const handleBookBet = async () => {
-    if (items.length === 0) return;
+    // Prevent booking if empty or exceeding max
+    if (items.length === 0 || items.length > MAX_GAMES) return;
+    
     setIsBooking(true);
     try {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
@@ -41,7 +67,7 @@ export default function Betslip({ items = [], setItems }) {
       <div className="bg-[#0b0f1a]/50 p-4 border-b border-white/5 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <Ticket size={18} className="text-[#10b981]" />
-          <span className="text-[11px] font-black uppercase tracking-wider text-white">
+          <span className={`text-[11px] font-black uppercase tracking-wider ${items.length > MAX_GAMES ? 'text-red-500' : 'text-white'}`}>
             Betslip ({items.length}/{MAX_GAMES})
           </span>
         </div>
@@ -90,8 +116,15 @@ export default function Betslip({ items = [], setItems }) {
                 ))}
               </div>
 
-              {/* FOOTER AREA - ATTACHED TO THE LAST ITEM */}
+              {/* FOOTER AREA */}
               <div className="pt-4 border-t border-white/10 space-y-4">
+                {items.length > MAX_GAMES && (
+                  <div className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg flex items-center gap-2 text-red-500">
+                    <AlertCircle size={14} />
+                    <span className="text-[10px] font-bold uppercase">Max {MAX_GAMES} games allowed</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center px-1">
                   <span className="text-[10px] font-black text-slate-500 uppercase">Total Odds</span>
                   <span className="text-[#f59e0b] text-xl font-black italic">{totalOdds}</span>
@@ -109,11 +142,17 @@ export default function Betslip({ items = [], setItems }) {
 
                 <button 
                   onClick={handleBookBet} 
-                  disabled={isBooking} 
-                  className="w-full bg-[#10b981] text-[#0b0f1a] font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.97] transition-all shadow-lg"
+                  disabled={isBooking || items.length > MAX_GAMES} 
+                  className={`w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg ${
+                    items.length > MAX_GAMES 
+                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-50' 
+                    : 'bg-[#10b981] text-[#0b0f1a] hover:brightness-110 active:scale-[0.97]'
+                  }`}
                 >
                   <Zap size={18} fill="currentColor" />
-                  <span className="uppercase italic tracking-tighter text-[13px]">Book Bet Code</span>
+                  <span className="uppercase italic tracking-tighter text-[13px]">
+                    {items.length > MAX_GAMES ? 'Too many games' : 'Book Bet Code'}
+                  </span>
                 </button>
               </div>
             </div>
