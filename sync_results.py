@@ -62,18 +62,21 @@ def sync_historical_results(batch_limit=80):
     """Step 2: Fetch last 24h results for 80 leagues (Cost: 80 Requests)"""
     from_date, to_date = get_24h_window_utc()
     
-    # FIX: Changed 'ascending=True' to standard positional logic or 'desc=False'
-    # to avoid the TypeError you encountered.
+    # --- CRITICAL FIX ---
+    # We removed 'ascending' and 'nulls_first'. 
+    # By default, Supabase sorts ASCENDING and NULLS FIRST.
+    # This means Priority 1 (England/Brazil) comes before Priority 2,
+    # and leagues never synced (NULL) come before synced ones.
     try:
         leagues_response = supabase.table("soccer_leagues") \
             .select("league_id, league_name") \
             .order("priority") \
-            .order("last_synced_at", nulls_first=True) \
+            .order("last_synced_at") \
             .limit(batch_limit) \
             .execute()
         leagues = leagues_response.data
     except Exception as e:
-        print(f"❌ Query Error: {e}")
+        print(f"❌ Query Error in Step 2: {e}")
         return
 
     print(f"🔄 Processing Results for {len(leagues)} leagues ({from_date} to {to_date})")
@@ -89,6 +92,7 @@ def sync_historical_results(batch_limit=80):
                 if events:
                     formatted_results = []
                     for ev in events:
+                        # Only grab finished games
                         if ev.get('status') != 'settled': continue
                         
                         scores = ev.get('scores', {})
@@ -112,15 +116,21 @@ def sync_historical_results(batch_limit=80):
                         supabase.table("soccer_results").upsert(formatted_results).execute()
                         print(f"✅ {slug}: {len(formatted_results)} games saved.")
                 
-                # Update timestamp so this league moves to the back of the queue
+                # IMPORTANT: Move this league to the end of the line
+                # Next run, .order("last_synced_at") will put the old NULLs first.
                 supabase.table("soccer_leagues").update({
                     "last_synced_at": datetime.now(timezone.utc).isoformat()
                 }).eq("league_id", slug).execute()
+
+            elif res.status_code == 429:
+                print("🛑 Rate limit hit! Stopping current batch.")
+                break
 
         except Exception as e:
             print(f"⚠️ Error on {slug}: {e}")
 
 if __name__ == "__main__":
-    # Run both steps
+    # Step 1: Map (1 request)
     sync_leagues()
+    # Step 2: Results (80 requests)
     sync_historical_results(batch_limit=80)
