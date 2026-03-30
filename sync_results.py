@@ -5,13 +5,17 @@ from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 
 # --- Configuration ---
+# These MUST match the 'env:' keys in your YAML above
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-# Using the Service Role Key as established for write access
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") 
-API_KEY = "394691c0a855a9c21e847bd3600eb8059fc7c57dcfd181c225176ad85973c187"
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+API_KEY = os.environ.get("API_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ ERROR: Supabase credentials missing.", flush=True)
+    print("❌ ERROR: Supabase credentials missing in environment.", flush=True)
+    sys.exit(1)
+
+if not API_KEY:
+    print("❌ ERROR: API_KEY missing in environment.", flush=True)
     sys.exit(1)
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
