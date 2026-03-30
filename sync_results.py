@@ -6,7 +6,8 @@ from supabase import create_client, Client
 
 # --- Configuration ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# Using the Service Role Key as established for write access
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") 
 API_KEY = "394691c0a855a9c21e847bd3600eb8059fc7c57dcfd181c225176ad85973c187"
 
 if not SUPABASE_URL or not SUPABASE_KEY:
@@ -17,7 +18,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def check_quota_window():
     """Returns True if the last sync was more than 60 minutes ago."""
-    # We check the most recently updated league to see when the last batch ended
     res = supabase.table("soccer_leagues") \
         .select("last_synced_at") \
         .order("last_synced_at", desc=True) \
@@ -25,7 +25,7 @@ def check_quota_window():
         .execute()
     
     if not res.data or not res.data[0]['last_synced_at']:
-        return True # Never run before, proceed!
+        return True 
 
     last_sync = datetime.fromisoformat(res.data[0]['last_synced_at'].replace('Z', '+00:00'))
     now = datetime.now(timezone.utc)
@@ -35,54 +35,64 @@ def check_quota_window():
     
     if minutes_passed < 60:
         remaining = 60 - int(minutes_passed)
-        print(f"🛑 QUOTA GUARD: Only {int(minutes_passed)} mins passed since last sync. Wait {remaining} more mins.", flush=True)
+        print(f"🛑 QUOTA GUARD: Only {int(minutes_passed)} mins passed. Wait {remaining} mins.", flush=True)
         return False
     
     return True
 
-def get_24h_window_utc():
+def get_sync_window_utc():
+    """Returns a 48h window to ensure we catch weekend games."""
     now = datetime.now(timezone.utc)
-    yesterday = now - timedelta(hours=24)
+    # 48h ensures that even if a sync fails, we catch it next time
+    yesterday = now - timedelta(hours=48)
     to_date = now.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
     from_date = yesterday.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
     return from_date, to_date
 
-def sync_leagues():
-    """Cost: 1 Request. Updates league list."""
-    url = f"https://api.odds-api.io/v3/leagues?apiKey={API_KEY}&sport=football&all=true"
-    try:
-        data = requests.get(url, timeout=20).json()
-        formatted = []
-        for item in data:
-            l_id = item.get('slug')
-            if not l_id: continue
-            name = item.get('name', 'Unknown')
-            country = name.split(' - ')[0] if ' - ' in name else 'International'
-            prio = 1 if country in ['Brazil', 'England', 'Kenya'] else 2
-            formatted.append({"league_id": l_id, "league_name": name, "country_name": country, "priority": prio})
-        
-        if formatted:
-            supabase.table("soccer_leagues").upsert(formatted).execute()
-            print(f"✨ Mapped {len(formatted)} leagues.", flush=True)
-    except Exception as e:
-        print(f"⚠️ League sync failed: {e}", flush=True)
+def get_active_leagues_from_mappings():
+    """
+    BRAIN OF THE SCRIPT: 
+    Finds API slugs for leagues that have pending games > 140 mins old.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=140)).isoformat()
+    
+    # 1. Get league names from api_events that are pending and finished
+    pending_res = supabase.table("api_events") \
+        .select("league_name") \
+        .eq("status", "pending") \
+        .lt("commence_time", cutoff) \
+        .execute()
+    
+    if not pending_res.data:
+        return []
+
+    pending_names = set(row['league_name'] for row in pending_res.data)
+    
+    # 2. Find the corresponding API slugs in our mapping table
+    mapping_res = supabase.table("league_mappings") \
+        .select("api_slug") \
+        .in_("betika_name", list(pending_names)) \
+        .execute()
+    
+    active_slugs = set(row['api_slug'] for row in mapping_res.data if row['api_slug'])
+    return list(active_slugs)
 
 def sync_results(batch_limit=80):
-    """Cost: 80 Requests. Fetches match scores."""
-    from_date, to_date = get_24h_window_utc()
+    """Cost: Targeted Requests based on your 'Mission Control' logic."""
+    from_date, to_date = get_sync_window_utc()
     
-    # Standard query: Priority 1 first, then NULLs, then oldest synced
-    leagues = supabase.table("soccer_leagues") \
-        .select("league_id") \
-        .order("priority") \
-        .order("last_synced_at") \
-        .limit(batch_limit) \
-        .execute().data
+    # NEW LOGIC: Instead of priority, we hit ONLY the leagues needing settlement
+    target_slugs = get_active_leagues_from_mappings()
 
-    print(f"🔄 Syncing batch of {len(leagues)} leagues...", flush=True)
+    if not target_slugs:
+        print("☕ No active leagues ready for settlement. Standing down.", flush=True)
+        return
 
-    for league in leagues:
-        slug = league['league_id']
+    # Respect the batch limit even for targeted strikes
+    leagues_to_process = target_slugs[:batch_limit]
+    print(f"🎯 Targeted Strike: Syncing {len(leagues_to_process)} active leagues...", flush=True)
+
+    for slug in leagues_to_process:
         url = f"https://api.odds-api.io/v3/historical/events?apiKey={API_KEY}&sport=football&league={slug}&from={from_date}&to={to_date}"
         
         try:
@@ -107,22 +117,24 @@ def sync_results(batch_limit=80):
                             "match_date": ev.get('date'),
                             "status": "settled"
                         })
+                    
                     if results:
                         supabase.table("soccer_results").upsert(results).execute()
+                        # Also update api_events status for these specific games if IDs match
+                        # (Optional: adds a layer of confirmation)
                 
-                # Mark as synced NOW
+                # Update last_synced_at to satisfy the Quota Guard
                 supabase.table("soccer_leagues").update({
                     "last_synced_at": datetime.now(timezone.utc).isoformat()
                 }).eq("league_id", slug).execute()
-                print(f"✅ {slug} synced.", flush=True)
+                print(f"✅ {slug} updated.", flush=True)
 
         except Exception as e:
             print(f"⚠️ Error on {slug}: {e}", flush=True)
 
 if __name__ == "__main__":
-    # The Gatekeeper check
+    # We still check the quota, but now the run is smarter
     if check_quota_window():
-        sync_leagues()
         sync_results(batch_limit=80)
     else:
-        print("⏭️ Skipping sync to protect API quota.")
+        print("⏭️ Quota Guard active. Run postponed.")
