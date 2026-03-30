@@ -15,7 +15,6 @@ if not url or not key:
 supabase: Client = create_client(url, key)
 
 def sync_leagues():
-    # The 'all=true' flag is key to finding the niche leagues
     league_url = f"https://api.odds-api.io/v3/leagues?apiKey={API_KEY}&sport=football&all=true"
     
     print("📡 Fetching all global football leagues...")
@@ -25,18 +24,28 @@ def sync_leagues():
         leagues_data = response.json()
 
         formatted_leagues = []
+        seen_ids = set() # To prevent the '21000' Duplicate Row error
+
         for l in leagues_data:
+            l_id = str(l.get('id'))
+            
+            # Skip if we've already added this ID in this batch
+            if l_id in seen_ids or not l_id:
+                continue
+            
             formatted_leagues.append({
-                "league_id": str(l.get('id')),
+                "league_id": l_id,
                 "league_name": l.get('name'),
                 "country_name": l.get('country', 'International'),
                 "last_synced": "now()"
             })
+            seen_ids.add(l_id)
 
         if formatted_leagues:
-            # Upsert handles the primary key (league_id)
+            print(f"🧹 De-duplicated to {len(formatted_leagues)} unique leagues.")
+            # Upsert into soccer_leagues
             supabase.table("soccer_leagues").upsert(formatted_leagues).execute()
-            print(f"✅ Successfully mapped {len(formatted_leagues)} leagues.")
+            print(f"✅ Successfully mapped {len(formatted_leagues)} leagues to Lucra.")
         
     except Exception as e:
         print(f"❌ Error: {e}")
