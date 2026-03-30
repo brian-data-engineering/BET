@@ -52,6 +52,7 @@ def sync_leagues():
             })
 
         if formatted_leagues:
+            # upsert handles updating priority/name if they already exist
             supabase.table("soccer_leagues").upsert(formatted_leagues).execute()
             print(f"✨ Step 1 Complete: {len(formatted_leagues)} leagues synced to DB.")
     except Exception as e:
@@ -61,13 +62,19 @@ def sync_historical_results(batch_limit=80):
     """Step 2: Fetch last 24h results for 80 leagues (Cost: 80 Requests)"""
     from_date, to_date = get_24h_window_utc()
     
-    # Fetch 80 leagues: prioritize high-prio and those not synced recently
-    leagues = supabase.table("soccer_leagues") \
-        .select("league_id, league_name") \
-        .order("priority", ascending=True) \
-        .order("last_synced_at", nulls_first=True) \
-        .limit(batch_limit) \
-        .execute().data
+    # FIX: Changed 'ascending=True' to standard positional logic or 'desc=False'
+    # to avoid the TypeError you encountered.
+    try:
+        leagues_response = supabase.table("soccer_leagues") \
+            .select("league_id, league_name") \
+            .order("priority") \
+            .order("last_synced_at", nulls_first=True) \
+            .limit(batch_limit) \
+            .execute()
+        leagues = leagues_response.data
+    except Exception as e:
+        print(f"❌ Query Error: {e}")
+        return
 
     print(f"🔄 Processing Results for {len(leagues)} leagues ({from_date} to {to_date})")
 
@@ -105,7 +112,7 @@ def sync_historical_results(batch_limit=80):
                         supabase.table("soccer_results").upsert(formatted_results).execute()
                         print(f"✅ {slug}: {len(formatted_results)} games saved.")
                 
-                # Update timestamp so this league moves to back of queue
+                # Update timestamp so this league moves to the back of the queue
                 supabase.table("soccer_leagues").update({
                     "last_synced_at": datetime.now(timezone.utc).isoformat()
                 }).eq("league_id", slug).execute()
