@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import BetSlip from '../../components/cashier/BetSlip';
 import PrintableTicket from '../../components/cashier/PrintableTicket';
 import { Loader2, ReceiptText, Wallet, Printer } from 'lucide-react';
 
@@ -15,7 +14,6 @@ export default function UnifiedTerminal() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1. Fetch Cashier Balance
   const fetchCashierData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -25,7 +23,6 @@ export default function UnifiedTerminal() {
 
   useEffect(() => { fetchCashierData(); }, [fetchCashierData]);
 
-  // 2. LOAD BOOKING CODE: This is the core fix
   const handleLoadBooking = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
@@ -36,7 +33,7 @@ export default function UnifiedTerminal() {
         .from('betsnow')
         .select('*')
         .eq('booking_code', cleanCode)
-        .is('ticket_serial', null) // Ensure it hasn't been printed/paid yet
+        .is('ticket_serial', null)
         .single();
 
       if (error || !ticket) {
@@ -44,14 +41,10 @@ export default function UnifiedTerminal() {
         return;
       }
 
-      // Populate everything from the booking immediately
       setCart(ticket.selections || []);
       setStake(ticket.stake || 0);
       setActiveTicketId(ticket.id);
-      
-      // Clear the search box so the cashier knows it worked
       setSearchQuery(''); 
-      console.log("Ticket Loaded:", ticket.id);
 
     } catch (err) {
       console.error(err);
@@ -60,7 +53,6 @@ export default function UnifiedTerminal() {
     }
   };
 
-  // 3. FINAL PRINT & DEDUCT
   const handlePrintBet = async () => {
     if (!activeTicketId || cart.length === 0) {
         alert("PLEASE LOAD A VALID BOOKING FIRST");
@@ -77,7 +69,6 @@ export default function UnifiedTerminal() {
       const serial = `LCR-${Math.random().toString(36).toUpperCase().substring(2, 10)}`;
       const totalOdds = cart.reduce((acc, item) => acc * (item.odds || 1), 1);
 
-      // CALL YOUR DATABASE FUNCTION
       const { data, error: rpcError } = await supabase.rpc('place_and_deduct_bet', {
         p_ticket_id: activeTicketId,
         p_cashier_id: user.id,
@@ -92,10 +83,8 @@ export default function UnifiedTerminal() {
 
       setCurrentTicket(data);
       
-      // TRIGGER PHYSICAL PRINT
       setTimeout(() => {
         window.print();
-        // RESET FOR NEXT CUSTOMER
         setCart([]);
         setStake(0);
         setActiveTicketId(null);
@@ -130,15 +119,14 @@ export default function UnifiedTerminal() {
               <button 
                 onClick={handleLoadBooking}
                 disabled={isSearching}
-                className="bg-[#10b981] text-black px-10 py-4 rounded-xl font-black italic hover:scale-105 active:scale-95 transition-all"
+                className="bg-[#10b981] text-black px-10 py-4 rounded-xl font-black italic hover:scale-105 transition-all"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
 
-            {/* QUICK PREVIEW OF LOADED TICKET */}
             {activeTicketId && (
-              <div className="mt-10 p-6 bg-white/5 rounded-2xl border border-[#10b981]/20 animate-in fade-in slide-in-from-bottom-4">
+              <div className="mt-10 p-6 bg-white/5 rounded-2xl border border-[#10b981]/20">
                 <div className="flex justify-between items-end mb-4">
                     <div>
                         <p className="text-[10px] font-bold text-[#10b981] uppercase">Ticket Loaded</p>
@@ -149,7 +137,7 @@ export default function UnifiedTerminal() {
                 <button 
                   onClick={handlePrintBet}
                   disabled={isProcessing}
-                  className="w-full bg-[#10b981] hover:bg-[#059669] text-black py-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-4 transition-all shadow-[0_0_30px_rgba(16,185,129,0.3)]"
+                  className="w-full bg-[#10b981] hover:bg-[#059669] text-black py-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-4 transition-all"
                 >
                   {isProcessing ? <Loader2 className="animate-spin" /> : <><Printer size={32}/> PRINT RECEIPT</>}
                 </button>
@@ -165,4 +153,29 @@ export default function UnifiedTerminal() {
                 <p className="text-3xl font-black italic">KES {cashierBalance.toLocaleString()}</p>
             </div>
 
-            <div className="flex-1 bg-black/20 rounded-[2rem] p-6 border border-white/5
+            <div className="flex-1 bg-black/20 rounded-[2rem] p-6 border border-white/5 overflow-y-auto">
+                <h3 className="text-[#10b981] font-black italic mb-4">ACTIVE SELECTIONS</h3>
+                {cart.map((item, idx) => (
+                    <div key={idx} className="mb-4 border-b border-white/5 pb-2">
+                        <p className="text-xs font-bold text-white/50">{item.matchName}</p>
+                        <div className="flex justify-between font-black italic">
+                            <span>{item.selection}</span>
+                            <span className="text-[#10b981]">{item.odds}</span>
+                        </div>
+                    </div>
+                ))}
+                {cart.length === 0 && (
+                  <p className="text-center text-white/20 font-bold mt-20 italic uppercase text-xs">
+                    Enter code to view matches
+                  </p>
+                )}
+            </div>
+        </div>
+      </div>
+
+      <div className="hidden print:block">
+        <PrintableTicket ticket={currentTicket} />
+      </div>
+    </CashierLayout>
+  );
+}
