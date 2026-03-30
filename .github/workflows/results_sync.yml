@@ -2,7 +2,7 @@ name: Lucra Results Sync
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/30 * * * *' # Runs every 30 minutes
   workflow_dispatch:
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
           pip install supabase requests
 
       - name: Run results sync
-        run: python sync_results.py
         env:
-          # Mapping your actual Secret names to the script's variables
+          # Map Secrets to the names used in sync_results.py
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          API_KEY: ${{ secrets.ODDS_API_KEY }} 
+        run: python sync_results.py
