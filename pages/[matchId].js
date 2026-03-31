@@ -138,33 +138,35 @@ export default function MatchDetail({ match }) {
               </div>
             </div>
 
-            {/* Odds Markets */}
-            <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
-              <section>
-                <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2">Match Winner</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {mainMarkets.map((odd, idx) => {
-                    const uniqueId = `${match.id}-1x2-${idx}`;
-                    const isSelected = slipItems.find(item => item.id === uniqueId);
-                    return (
-                      <button 
-                        key={idx}
-                        disabled={isLocked}
-                        onClick={() => toggleBet('Winner', odd.display, odd.val, uniqueId)}
-                        className={`h-11 rounded-full flex flex-col items-center justify-center transition-all border ${
-                          isSelected 
-                          ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
-                          : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
-                        }`}
-                      >
-                        <span className="text-[8px] font-bold opacity-60 lowercase">{odd.label}</span>
-                        <span className="text-xs font-black italic">{odd.val || '—'}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
+           {/* Odds Markets */}
+<div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
+  <section>
+    <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2">Match Winner</h3>
+    <div className="grid grid-cols-3 gap-2">
+      {mainMarkets.map((odd, idx) => {
+        const uniqueId = `${match.id}-1x2-${idx}`;
+        const isSelected = slipItems.find(item => item.id === uniqueId);
+        return (
+          <button 
+            key={idx}
+            disabled={isLocked}
+            onClick={() => toggleBet('Winner', odd.display, odd.val, uniqueId)}
+            className={`h-11 px-3 rounded-full flex items-center justify-between transition-all border ${
+              isSelected 
+              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
+              : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
+            }`}
+          >
+            {/* Label (1, X, or 2) pushed to the left */}
+            <span className="text-[10px] font-bold opacity-60 lowercase">{odd.label}</span>
+            {/* Odds value pushed to the right */}
+            <span className="text-xs font-black italic">{odd.val || '—'}</span>
+          </button>
+        );
+      })}
+    </div>
+  </section>
+  
               {match.deep_markets?.map((market, mIdx) => (
                 <section key={mIdx}>
                   <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 capitalize">
