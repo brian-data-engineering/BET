@@ -77,7 +77,6 @@ export default function MatchDetail({ match }) {
     <div className="h-screen bg-[#0b0f1a] text-white font-sans flex flex-col overflow-hidden">
       <Navbar />
 
-      {/* Main Scrollable Container */}
       <div className="flex-1 overflow-y-auto no-scrollbar">
         <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-0 lg:gap-8 p-0 lg:p-8">
           
@@ -97,34 +96,34 @@ export default function MatchDetail({ match }) {
               {isLocked && (
                 <div className="flex items-center gap-2 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20">
                   <Lock size={14} className="text-red-500" />
-                  <span className="text-[10px] font-bold italic text-red-500">Markets Closed</span>
+                  <span className="text-[10px] font-bold italic text-red-500">Locked</span>
                 </div>
               )}
             </div>
 
             {/* Hero Section */}
-            <div className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[220px] flex items-center ${isLocked ? 'saturate-50' : ''}`}>
+            <div className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[200px] flex items-center ${isLocked ? 'saturate-50' : ''}`}>
               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10" />
               <div className="w-full flex justify-around items-center px-4 relative z-10">
                 <div className="flex-1 flex flex-col items-center text-center">
-                  <div className="w-14 h-14 bg-[#0b0f1a] rounded-2xl flex items-center justify-center border border-white/5 mb-3 shadow-2xl">
-                    <Shield size={28} className="text-[#10b981]" />
+                  <div className="w-12 h-12 bg-[#0b0f1a] rounded-2xl flex items-center justify-center border border-white/5 mb-3 shadow-2xl">
+                    <Shield size={24} className="text-[#10b981]" />
                   </div>
-                  <h2 className="text-base md:text-2xl font-black italic tracking-tighter leading-none">{cleanName(match.home_team)}</h2>
+                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none">{cleanName(match.home_team)}</h2>
                 </div>
 
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-orange-500 text-3xl font-black italic tracking-tighter">VS</span>
-                  <div className={`px-4 py-1 rounded-full text-[10px] font-bold italic border ${isStartingSoon ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-white/5 border-white/10 text-slate-300'}`}>
+                  <span className="text-orange-500 text-2xl font-black italic tracking-tighter">VS</span>
+                  <div className={`px-3 py-1 rounded-full text-[9px] font-bold italic border ${isStartingSoon ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-white/5 border-white/10 text-slate-300'}`}>
                     {formatFixedTime(match.commence_time)}
                   </div>
                 </div>
 
                 <div className="flex-1 flex flex-col items-center text-center">
-                  <div className="w-14 h-14 bg-[#0b0f1a] rounded-2xl flex items-center justify-center border border-white/5 mb-3 shadow-2xl">
-                    <Shield size={28} className="text-[#10b981]" />
+                  <div className="w-12 h-12 bg-[#0b0f1a] rounded-2xl flex items-center justify-center border border-white/5 mb-3 shadow-2xl">
+                    <Shield size={24} className="text-[#10b981]" />
                   </div>
-                  <h2 className="text-base md:text-2xl font-black italic tracking-tighter leading-none text-white/90">{cleanName(match.away_team)}</h2>
+                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none text-white/90">{cleanName(match.away_team)}</h2>
                 </div>
               </div>
             </div>
@@ -132,8 +131,8 @@ export default function MatchDetail({ match }) {
             {/* Odds Markets */}
             <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
               <section>
-                <h3 className="text-[11px] font-bold italic text-slate-500 mb-4 tracking-widest flex items-center gap-2">MATCH WINNER</h3>
-                <div className="grid grid-cols-3 gap-2.5">
+                <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 tracking-widest flex items-center gap-2 uppercase">Match Winner</h3>
+                <div className="grid grid-cols-3 gap-2">
                   {mainMarkets.map((odd, idx) => {
                     const uniqueId = `${match.id}-1x2-${idx}`;
                     const isSelected = slipItems.find(item => item.id === uniqueId);
@@ -142,14 +141,14 @@ export default function MatchDetail({ match }) {
                         key={idx}
                         disabled={isLocked}
                         onClick={() => toggleBet('Winner', odd.display, odd.val, uniqueId)}
-                        className={`h-12 rounded-full flex flex-col items-center justify-center transition-all border ${
+                        className={`h-11 rounded-full flex flex-col items-center justify-center transition-all border ${
                           isSelected 
                           ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
-                          : 'bg-[#1c2636]/60 border-white/5 text-slate-300'
+                          : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
                         }`}
                       >
-                        <span className="text-[9px] font-bold opacity-70 uppercase tracking-tighter">{odd.label}</span>
-                        <span className="text-sm font-black italic">{odd.val || '—'}</span>
+                        <span className="text-[8px] font-bold opacity-60 uppercase">{odd.label}</span>
+                        <span className="text-xs font-black italic">{odd.val || '—'}</span>
                       </button>
                     );
                   })}
@@ -158,8 +157,9 @@ export default function MatchDetail({ match }) {
 
               {match.deep_markets?.map((market, mIdx) => (
                 <section key={mIdx}>
-                  <h3 className="text-[11px] font-bold italic text-slate-500 mb-3 tracking-widest px-1">{market.name}</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 tracking-widest px-1 uppercase">{market.name}</h3>
+                  {/* FORCED 3 COLUMNS ON ALL SCREENS */}
+                  <div className="grid grid-cols-3 gap-1.5">
                     {market.odds?.map((odd, oIdx) => {
                       const uniqueId = `${match.id}-${market.name}-${oIdx}`;
                       const isSelected = slipItems.find(item => item.id === uniqueId);
@@ -169,14 +169,14 @@ export default function MatchDetail({ match }) {
                           key={oIdx}
                           disabled={isLocked}
                           onClick={() => toggleBet(market.name, odd.display, oddValue, uniqueId)}
-                          className={`flex items-center justify-between h-11 px-4 rounded-full transition-all border ${
+                          className={`flex items-center justify-between h-10 px-3 rounded-full transition-all border ${
                             isSelected 
                             ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' 
-                            : 'bg-[#1c2636]/40 border-white/5 text-slate-400'
+                            : 'bg-[#1c2636]/40 border-white/5 text-slate-400 active:scale-95'
                           }`}
                         >
-                          <span className="text-[10px] font-bold italic truncate pr-2">{odd.display}</span>
-                          <span className="text-xs font-black italic">{oddValue || '—'}</span>
+                          <span className="text-[9px] font-bold italic truncate pr-1">{odd.display}</span>
+                          <span className="text-[11px] font-black italic">{oddValue || '—'}</span>
                         </button>
                       );
                     })}
@@ -201,7 +201,6 @@ export default function MatchDetail({ match }) {
         onGoHome={() => router.push('/')}
       />
 
-      {/* Mobile Slip Overlay */}
       {isMobileSlipOpen && (
         <div className="fixed inset-0 z-[130] bg-[#0b0f1a] lg:hidden flex flex-col p-4 animate-in slide-in-from-bottom duration-300">
           <div className="flex justify-between items-center mb-6 shrink-0">
