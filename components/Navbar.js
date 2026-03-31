@@ -56,9 +56,9 @@ const Navbar = ({ onSearch }) => {
         </div>
       </div>
 
+     // ... inside your Navbar return
       {/* --- BANNER SECTION --- */}
-      {/* Integrating HomeBanner here makes it part of the sticky header */}
-      <div className="bg-[#0b0f1a]">
+      <div className="bg-[#0b0f1a] w-full border-b border-white/5">
         <HomeBanner />
       </div>
     </nav>
