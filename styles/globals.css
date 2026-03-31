@@ -72,3 +72,32 @@ html, body {
 .odds-button:active {
   @apply scale-95 bg-[#10b981] text-black border-[#10b981];
 }
+
+
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show ONLY the printable ticket and its children */
+  .print-only, .print-only * {
+    visibility: visible;
+  }
+
+  /* Position the ticket at the very top-left of the paper */
+  .print-only {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm; /* Standard thermal paper width */
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Remove browser headers/footers (Date, URL, Page #) */
+  @page {
+    margin: 0;
+    size: auto;
+  }
+}
