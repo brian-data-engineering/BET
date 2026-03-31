@@ -1,30 +1,32 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
+import Betslip from '../../components/cashier/Betslip';
 import PrintableTicket from '../../components/cashier/PrintableTicket';
-import { Loader2, ReceiptText, Printer, RefreshCw, Search } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Zap } from 'lucide-react';
 
-export default function UnifiedTerminal() {
+export default function CashierDashboard() {
+  // --- STATE MANAGEMENT ---
   const [cart, setCart] = useState([]);
-  const [stake, setStake] = useState(0);
-  const [activeTicketId, setActiveTicketId] = useState(null);
-  const [currentTicket, setCurrentTicket] = useState(null);
-  const [cashierBalance, setCashierBalance] = useState(0);
+  const [stake, setStake] = useState("");
   const [searchQuery, setSearchQuery] = useState('');
-  const [loadedBookingCode, setLoadedBookingCode] = useState('');
+  const [cashierBalance, setCashierBalance] = useState(0);
+  const [currentTicket, setCurrentTicket] = useState(null); // Data for the printer
+  
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const fetchCashierData = useCallback(async () => {
+  // --- DATA FETCHING ---
+  const fetchCashierBalance = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { data: profile } = await supabase.from('profiles').select('balance').eq('id', user.id).single();
     if (profile) setCashierBalance(parseFloat(profile.balance || 0));
   }, []);
 
-  useEffect(() => { fetchCashierData(); }, [fetchCashierData]);
+  useEffect(() => { fetchCashierBalance(); }, [fetchCashierBalance]);
 
-  // 1. LOAD TICKET: Logic for New Bookings AND Reprints
+  // --- CORE LOGIC: LOAD TICKET ---
   const handleLoadTicket = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
@@ -38,176 +40,163 @@ export default function UnifiedTerminal() {
         .single();
 
       if (error || !ticket) {
-        alert("⚠️ NOT FOUND: Code expired or invalid.");
+        alert("⚠️ CODE INVALID OR EXPIRED");
         setSearchQuery('');
         return;
       }
 
-      const selectionsArray = Array.isArray(ticket.selections) 
+      const selections = Array.isArray(ticket.selections) 
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
-      // CASE A: ALREADY PAID (Reprint Mode)
-      if (ticket.is_paid || ticket.ticket_serial) {
-        setCart(selectionsArray);
-        setStake(ticket.stake || 0);
-        setActiveTicketId(null); // Prevents "Double Pay"
-        
-        const shouldReprint = confirm(
-          `✅ PAID TICKET: ${ticket.ticket_serial}\nStatus: ${ticket.status}\n\nWould you like to REPRINT this receipt?`
-        );
-
-        if (shouldReprint) {
+      // REPRINT LOGIC: If it has a serial, it's already paid
+      if (ticket.ticket_serial || ticket.is_paid) {
+        const confirmPrint = confirm(`🎟️ PAID TICKET: ${ticket.ticket_serial}\nWould you like to REPRINT the receipt?`);
+        if (confirmPrint) {
           setCurrentTicket(ticket);
-          setTimeout(() => {
-            window.print();
-            setCart([]);
-            setStake(0);
-          }, 500);
+          setTimeout(() => { window.print(); }, 500);
         }
-      } 
-      // CASE B: FRESH BOOKING (Deduction Mode)
-      else {
-        setCart(selectionsArray);
-        setStake(ticket.stake || 0);
-        setActiveTicketId(ticket.id);
-        setLoadedBookingCode(ticket.booking_code);
+      } else {
+        // FRESH BOOKING: Load into slip
+        setCart(selections);
+        setStake(ticket.stake?.toString() || "");
       }
-
+      
       setSearchQuery('');
     } catch (err) {
       console.error(err);
-      alert("Error loading ticket.");
     } finally {
       setIsSearching(false);
     }
   };
 
-  // 2. PROCESS PAYMENT: Burn code and deduct float
-  const handlePrintBet = async () => {
-    if (!activeTicketId || !loadedBookingCode) return;
-    if (cashierBalance < stake) {
-      alert("⚠️ INSUFFICIENT FLOAT");
-      return;
-    }
+  // --- CORE LOGIC: PROCESS PAYMENT ---
+  const handleProcessPayment = async () => {
+    const numStake = parseFloat(stake);
+    if (!numStake || numStake <= 0) return alert("Please enter a valid stake.");
+    if (numStake > cashierBalance) return alert("⚠️ INSUFFICIENT FLOAT");
 
     setIsProcessing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
-      const { data, error: rpcError } = await supabase.rpc('process_lucra_payment', {
-        p_booking_code: loadedBookingCode,
+      // We use the booking_code currently loaded in the slip context
+      // Note: In a real "Manual" bet, you'd insert the ticket first. 
+      // This assumes we are processing a booked ticket (9504 style).
+      const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
+        p_booking_code: searchQuery || cart[0]?.booking_code, 
         p_cashier_id: user.id,
         p_generated_serial: newSerial
       });
 
       if (rpcError) throw rpcError;
 
-      setCurrentTicket(data);
+      // Update Printer & UI
+      setCurrentTicket(paidTicket);
       
       setTimeout(() => {
         window.print();
+        // Clear Terminal
         setCart([]);
-        setStake(0);
-        setActiveTicketId(null);
-        setLoadedBookingCode('');
+        setStake("");
+        fetchCashierBalance();
         setIsProcessing(false);
-        fetchCashierData();
-      }, 700); // Slightly longer delay for printer reliability
+      }, 700);
 
     } catch (err) {
-      alert("❌ PAYMENT FAILED: " + err.message);
+      alert("❌ TRANSACTION FAILED: " + err.message);
       setIsProcessing(false);
     }
   };
 
   return (
     <CashierLayout>
-      <div className="flex h-[calc(100vh-64px)] bg-[#0b0f1a] text-white overflow-hidden font-sans">
+      <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden font-sans">
         
-        {/* LEFT AREA: SCANNER */}
-        <div className="flex-1 p-8 flex flex-col items-center justify-center border-r border-white/5">
-          <div className="w-full max-w-2xl bg-[#111926] p-10 rounded-[3.5rem] border border-white/10 shadow-2xl">
-            <div className="flex justify-between items-center mb-8">
-                <h1 className="text-[#10b981] font-black italic text-3xl tracking-tighter uppercase">Lucra Terminal</h1>
-                <button onClick={fetchCashierData} className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/40">
-                    <RefreshCw size={22} />
-                </button>
+        {/* LEFT COLUMN: SCANNER & UTILITIES */}
+        <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
+          <div className="w-full max-w-xl">
+            <div className="flex items-center gap-3 mb-8">
+              <Zap className="text-[#10b981]" fill="#10b981" size={24} />
+              <h2 className="text-2xl font-black italic uppercase tracking-tighter">Lucra Terminal</h2>
             </div>
-            
-            <div className="relative flex items-center gap-4 bg-black/40 p-5 rounded-3xl border border-white/5 focus-within:border-[#10b981] transition-all shadow-inner">
-              <Search className="text-[#10b981]" size={36} />
+
+            {/* SEARCH BOX */}
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+                <Search className="text-white/20 group-focus-within:text-[#10b981] transition-colors" size={28} />
+              </div>
               <input 
-                className="bg-transparent flex-1 text-3xl font-black uppercase tracking-widest outline-none placeholder:text-white/5"
-                placeholder="INPUT CODE..."
+                type="text"
+                placeholder="SCAN OR TYPE CODE..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
+                className="w-full bg-[#111926] border-2 border-white/5 rounded-[2rem] py-8 pl-16 pr-32 text-2xl font-black tracking-[0.2em] outline-none focus:border-[#10b981] transition-all uppercase placeholder:text-white/5"
               />
               <button 
                 onClick={handleLoadTicket}
                 disabled={isSearching}
-                className="bg-[#10b981] text-black px-12 py-5 rounded-2xl font-black italic hover:scale-105 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95"
+                className="absolute right-3 top-3 bottom-3 bg-[#10b981] text-black px-8 rounded-[1.5rem] font-black italic hover:brightness-110 active:scale-95 transition-all"
               >
-                {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
+                {isSearching ? <Loader2 className="animate-spin" size={20} /> : "LOAD"}
               </button>
             </div>
 
-            {activeTicketId && (
-              <div className="mt-12 p-10 bg-white/5 rounded-[2.5rem] border border-[#10b981]/20 animate-in fade-in zoom-in duration-500">
-                <div className="flex justify-between items-end mb-10">
-                    <div>
-                        <p className="text-[11px] font-bold text-[#10b981] uppercase tracking-[0.3em] mb-2">Debit Float</p>
-                        <p className="text-6xl font-black italic">KES {parseFloat(stake).toLocaleString()}</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-[11px] font-bold opacity-30 uppercase mb-2">Booking</p>
-                        <p className="text-2xl font-black text-[#10b981]">{loadedBookingCode}</p>
-                    </div>
+            {/* QUICK ACTIONS */}
+            <div className="grid grid-cols-2 gap-4 mt-8">
+              <div className="bg-[#111926] p-6 rounded-3xl border border-white/5">
+                <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest mb-1">Terminal Status</p>
+                <p className="text-[#10b981] font-black italic">ONLINE / READY</p>
+              </div>
+              <div className="bg-[#111926] p-6 rounded-3xl border border-white/5 flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest mb-1">Current Float</p>
+                  <p className="text-xl font-black italic">KES {cashierBalance.toLocaleString()}</p>
                 </div>
-                <button 
-                  onClick={handlePrintBet}
-                  disabled={isProcessing}
-                  className="w-full bg-[#10b981] hover:bg-[#059669] text-black py-8 rounded-3xl font-black text-2xl flex items-center justify-center gap-4 transition-all shadow-[0_15px_50px_rgba(16,185,129,0.25)]"
-                >
-                  {isProcessing ? <Loader2 className="animate-spin" /> : <><Printer size={36}/> PROCESS & PRINT</>}
+                <button onClick={fetchCashierBalance} className="text-white/20 hover:text-[#10b981] transition-colors">
+                   <RefreshCw size={20} />
                 </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
-        {/* RIGHT AREA: TICKET LIVE PREVIEW */}
-        <div className="w-[440px] p-8 flex flex-col gap-6 bg-[#111926]/40 backdrop-blur-sm">
-            <div className="bg-[#10b981] p-8 rounded-[2.5rem] text-black shadow-xl">
-                <p className="text-[11px] font-black uppercase opacity-60 mb-1 tracking-widest">Available Float</p>
-                <p className="text-4xl font-black italic">KES {cashierBalance.toLocaleString()}</p>
+        {/* RIGHT COLUMN: THE BETSLIP */}
+        <div className="w-[450px]">
+          <Betslip 
+            cart={cart}
+            stake={stake}
+            onStakeChange={setStake}
+            onRemove={(idx) => setCart(cart.filter((_, i) => i !== idx))}
+            onClear={() => { setCart([]); setStake(""); }}
+            isProcessing={isProcessing}
+          />
+          
+          {/* THE MAIN ACTION BUTTON (Floating over slip) */}
+          {cart.length > 0 && (
+            <div className="px-6 pb-6 bg-[#111926]/40 backdrop-blur-md">
+              <button 
+                onClick={handleProcessPayment}
+                disabled={isProcessing}
+                className="w-full bg-[#10b981] hover:bg-[#059669] text-black py-6 rounded-2xl font-black text-xl flex items-center justify-center gap-3 shadow-[0_20px_50px_rgba(16,185,129,0.2)] transition-all active:translate-y-1"
+              >
+                {isProcessing ? <Loader2 className="animate-spin" /> : "DEDUCT & PRINT RECEIPT"}
+              </button>
             </div>
-
-            <div className="flex-1 bg-black/30 rounded-[3rem] p-8 border border-white/5 overflow-y-auto custom-scrollbar">
-                <h3 className="text-[#10b981] font-black italic mb-8 text-xs tracking-[0.25em] uppercase border-b border-white/5 pb-4">Live Preview</h3>
-                {cart.map((item, idx) => (
-                    <div key={idx} className="mb-6 border-b border-white/5 pb-4 last:border-0">
-                        <p className="text-[10px] font-bold text-white/20 uppercase mb-2 truncate">{item.matchName}</p>
-                        <div className="flex justify-between font-black italic">
-                            <span className="text-base text-white/90 uppercase">{item.selection}</span>
-                            <span className="text-[#10b981] text-lg">@{parseFloat(item.odds).toFixed(2)}</span>
-                        </div>
-                    </div>
-                ))}
-                {cart.length === 0 && (
-                  <div className="h-full flex flex-col items-center justify-center opacity-10 py-20">
-                    <ReceiptText size={80} />
-                    <p className="font-black italic uppercase text-xs mt-6 tracking-widest">Scanner Idle</p>
-                  </div>
-                )}
-            </div>
+          )}
         </div>
+
       </div>
 
+      {/* HIDDEN PRINT LAYER */}
       <div className="hidden print:block">
-        <PrintableTicket ticket={currentTicket} />
+        <PrintableTicket 
+          ticket={currentTicket} 
+          cart={cart} 
+          stake={parseFloat(stake)} 
+        />
       </div>
     </CashierLayout>
   );
