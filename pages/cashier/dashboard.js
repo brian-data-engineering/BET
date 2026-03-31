@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import Betslip from '../../components/cashier/BetSlip';
-import PrintableTicket from '../../components/cashier/PrintableTicket';
-import { Loader2, Search, RefreshCw, Zap } from 'lucide-react';
+import Betslip from '../../components/cashier/BetSlip'; // Matches your BetSlip.js
+import PrintableTicket from '../../components/cashier/PrintableTicket'; // Matches your PrintableTicket.js
+import { Loader2, RefreshCw, Zap } from 'lucide-react';
 
 export default function CashierDashboard() {
   const [cart, setCart] = useState([]);
@@ -11,7 +11,7 @@ export default function CashierDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [cashierBalance, setCashierBalance] = useState(0);
   const [currentTicket, setCurrentTicket] = useState(null);
-  const [user, setUser] = useState(null); // Added to fix Reference Errors
+  const [user, setUser] = useState(null);
   
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -41,14 +41,15 @@ export default function CashierDashboard() {
     const input = searchQuery.trim().toUpperCase();
 
     try {
+      // Use explicit text casting in the query to ensure 1129 (number) matches "1129" (text)
       const { data: ticket, error } = await supabase
         .from('betsnow')
         .select('*')
-        .or(`booking_code.eq."${input}",ticket_serial.eq."${input}"`)
+        .or(`booking_code.eq.${input},ticket_serial.eq.${input}`)
         .single();
 
       if (error || !ticket) {
-        alert("⚠️ INVALID CODE");
+        alert("⚠️ INVALID CODE OR TICKET NOT FOUND");
         setSearchQuery('');
         return;
       }
@@ -57,14 +58,17 @@ export default function CashierDashboard() {
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
-      if (ticket.ticket_serial || ticket.is_paid) {
-        if (confirm("🎟️ PAID TICKET. REPRINT?")) {
-          setCurrentTicket(ticket);
+      // If it's already paid, we just set the ticket for reprinting
+      if (ticket.is_paid || ticket.ticket_serial) {
+        setCurrentTicket(ticket);
+        if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           setTimeout(() => { window.print(); }, 500);
         }
       } else {
+        // Load into active slip for processing
+        setCurrentTicket(ticket); 
         setCart(selections);
-        setStake(ticket.stake?.toString() || "");
+        setStake(ticket.stake?.toString() || "100");
       }
       setSearchQuery('');
     } catch (err) {
@@ -81,12 +85,13 @@ export default function CashierDashboard() {
     if (numStake > cashierBalance) return alert("⚠️ INSUFFICIENT FLOAT");
     if (!user) return alert("Session expired. Please refresh.");
 
+    // Identify the code - ensure it is a string
+    const targetCode = (currentTicket?.booking_code || cart[0]?.booking_code || searchQuery).toString();
+    if (!targetCode) return alert("No booking code found to process.");
+
     setIsProcessing(true);
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-
-      // Use the booking code from the first item in the cart if search is empty
-      const targetCode = cart[0]?.booking_code || searchQuery;
 
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: targetCode,
@@ -96,18 +101,20 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
+      // Update state with the finalized ticket from DB
       setCurrentTicket(paidTicket);
       
+      // Allow time for state to update before triggering print dialog
       setTimeout(() => {
         window.print();
         setCart([]);
         setStake("");
-        initTerminal(); // Refresh balance
+        initTerminal(); // Refresh float balance
         setIsProcessing(false);
       }, 800);
 
     } catch (err) {
-      alert("❌ FAILED: " + err.message);
+      alert("❌ FAILED: " + (err.message || "Unknown Error"));
       setIsProcessing(false);
     }
   };
@@ -127,7 +134,7 @@ export default function CashierDashboard() {
             <div className="relative">
               <input 
                 type="text"
-                placeholder="SCAN CODE..."
+                placeholder="SCAN CODE (e.g. 1129)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
@@ -165,7 +172,7 @@ export default function CashierDashboard() {
               stake={stake}
               onStakeChange={setStake}
               onRemove={(idx) => setCart(cart.filter((_, i) => i !== idx))}
-              onClear={() => { setCart([]); setStake(""); }}
+              onClear={() => { setCart([]); setStake(""); setCurrentTicket(null); }}
               isProcessing={isProcessing}
             />
           </div>
@@ -184,7 +191,7 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* PRINTER (Passes user to prevent footer crash) */}
+      {/* PRINTER (Hidden on screen, visible during window.print()) */}
       <div className="hidden print:block">
         <PrintableTicket 
           ticket={currentTicket} 
