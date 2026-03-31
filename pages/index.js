@@ -155,19 +155,19 @@ export default function Home({ initialMatches = [] }) {
 
                     <div className="col-span-5 grid grid-cols-3 gap-1.5">
                       {oddsData.map((o) => (
-                        <button
-                          key={o.label}
-                          onClick={() => toggleBet(o.label, o.val, match)}
-                          className={`h-11 rounded-xl flex items-center justify-center transition-all border ${
-                            currentSelection?.selection === o.label 
-                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-[0_0_15px_rgba(16,185,129,0.4)]' 
-                              : 'bg-[#1c2636]/60 border-white/5 text-white active:scale-95'
-                          }`}
-                        >
-                          <span className="text-[14px] font-black italic">
-                            {o.val ? parseFloat(o.val).toFixed(2) : '—'}
-                          </span>
-                        </button>
+                       <button
+  key={o.label}
+  onClick={() => toggleBet(o.label, o.val, match)}
+  className={`h-9 px-4 rounded-full flex items-center justify-center transition-all ${
+    currentSelection?.selection === o.label 
+      ? 'bg-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/20' 
+      : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95'
+  }`}
+>
+  <span className="text-[13px] font-black tracking-tight">
+    {o.val ? parseFloat(o.val).toFixed(2) : '—'}
+  </span>
+</button>
                       ))}
                     </div>
                   </div>
