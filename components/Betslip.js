@@ -8,27 +8,20 @@ export default function Betslip({ items = [], setItems }) {
   const [stake, setStake] = useState(100);
   const MAX_GAMES = 20;
 
-  // --- THE DISAPPEARING LOGIC ---
-  // Periodically check if any match in the slip has started/locked
+  // --- AUTO-REMOVE EXPIRED MATCHES ---
   useEffect(() => {
     const checkInterval = setInterval(() => {
       const now = new Date().getTime();
-      
       setItems(prevItems => {
         const filtered = prevItems.filter(item => {
           if (!item.startTime) return true;
-          // Format time to match homepage logic
           const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
           const matchTime = new Date(cleanTime).getTime();
-          // Remove if it's 1 minute or less from starting (matching your Home benchmark)
-          return (matchTime - now) > 60000;
+          return (matchTime - now) > 60000; // 1 minute buffer
         });
-        
-        // Only update state if something actually disappeared to prevent unnecessary renders
         return filtered.length !== prevItems.length ? filtered : prevItems;
       });
-    }, 5000); // Check every 5 seconds
-
+    }, 5000);
     return () => clearInterval(checkInterval);
   }, [setItems]);
 
@@ -36,29 +29,45 @@ export default function Betslip({ items = [], setItems }) {
     return items.reduce((acc, item) => acc * (parseFloat(item.odds) || 1), 1).toFixed(2);
   }, [items]);
 
-  const potentialWinnings = useMemo(() => {
-    const total = parseFloat(totalOdds) * (parseFloat(stake) || 0);
-    return total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const potentialWinningsRaw = useMemo(() => {
+    return parseFloat(totalOdds) * (parseFloat(stake) || 0);
   }, [totalOdds, stake]);
 
+  const potentialWinningsFormatted = useMemo(() => {
+    return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, [potentialWinningsRaw]);
+
+  // --- FIXED BOOKING LOGIC ---
   const handleBookBet = async () => {
-    // Prevent booking if empty or exceeding max
     if (items.length === 0 || items.length > MAX_GAMES) return;
     
     setIsBooking(true);
     try {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
+      
+      // We must insert ALL numerical values so the Cashier RPC can process payment
       const { error } = await supabase.from('betsnow').insert([{ 
         booking_code: finalCode, 
         selections: items, 
-        status: 'pending' 
+        stake: parseFloat(stake) || 100,
+        total_odds: parseFloat(totalOdds),
+        potential_payout: potentialWinningsRaw,
+        status: 'pending',
+        is_paid: false
       }]);
+
       if (error) throw error;
+      
       setBookingCode(finalCode);
-      navigator.clipboard.writeText(finalCode);
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(finalCode);
+      }
     } catch (err) {
-      console.error(err);
-    } finally { setIsBooking(false); }
+      console.error("Booking Error:", err);
+      alert("System Busy. Please try again.");
+    } finally { 
+      setIsBooking(false); 
+    }
   };
 
   return (
@@ -78,7 +87,6 @@ export default function Betslip({ items = [], setItems }) {
         )}
       </div>
 
-      {/* THE DYNAMIC CONTAINER */}
       <div className="flex-1 overflow-y-auto no-scrollbar">
         <div className="p-3">
           {items.length === 0 ? (
@@ -97,10 +105,9 @@ export default function Betslip({ items = [], setItems }) {
             </div>
           ) : (
             <div className="flex flex-col">
-              {/* LIST OF GAMES */}
               <div className="space-y-2 mb-6">
                 {items.map((item) => (
-                  <div key={item.id} className="bg-[#1c2636]/60 border border-white/5 rounded-xl p-3 relative animate-in slide-in-from-right-2">
+                  <div key={item.id} className="bg-[#1c2636]/60 border border-white/5 rounded-xl p-3 relative">
                     <button onClick={() => setItems(prev => prev.filter(i => i.id !== item.id))} className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-white/5 text-slate-400 hover:text-red-400">
                       <X size={14} />
                     </button>
@@ -108,7 +115,7 @@ export default function Betslip({ items = [], setItems }) {
                     <div className="flex justify-between items-end">
                       <div>
                         <p className="text-xs font-black text-white">{item.selection}</p>
-                        <p className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">1X2 Market</p>
+                        <p className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">{item.marketName || '1X2 Market'}</p>
                       </div>
                       <span className="text-sm font-black text-[#f59e0b] tabular-nums">{parseFloat(item.odds).toFixed(2)}</span>
                     </div>
@@ -116,7 +123,6 @@ export default function Betslip({ items = [], setItems }) {
                 ))}
               </div>
 
-              {/* FOOTER AREA */}
               <div className="pt-4 border-t border-white/10 space-y-4">
                 {items.length > MAX_GAMES && (
                   <div className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg flex items-center gap-2 text-red-500">
@@ -132,12 +138,17 @@ export default function Betslip({ items = [], setItems }) {
 
                 <div className="bg-[#1c2636] border border-white/10 rounded-xl p-3 flex justify-between items-center">
                   <span className="text-[9px] font-black text-slate-400 uppercase">Stake KES</span>
-                  <input type="number" value={stake} onChange={(e) => setStake(e.target.value)} className="bg-transparent text-right font-black text-white outline-none w-24 text-lg" />
+                  <input 
+                    type="number" 
+                    value={stake} 
+                    onChange={(e) => setStake(e.target.value)} 
+                    className="bg-transparent text-right font-black text-white outline-none w-24 text-lg" 
+                  />
                 </div>
 
                 <div className="flex justify-between items-center px-1">
                   <span className="text-[10px] font-black text-slate-400 uppercase">Payout</span>
-                  <span className="text-lg font-black text-[#10b981]">KES {potentialWinnings}</span>
+                  <span className="text-lg font-black text-[#10b981]">KES {potentialWinningsFormatted}</span>
                 </div>
 
                 <button 
@@ -151,7 +162,7 @@ export default function Betslip({ items = [], setItems }) {
                 >
                   <Zap size={18} fill="currentColor" />
                   <span className="uppercase italic tracking-tighter text-[13px]">
-                    {items.length > MAX_GAMES ? 'Too many games' : 'Book Bet Code'}
+                    {isBooking ? 'Booking...' : items.length > MAX_GAMES ? 'Too many games' : 'Book Bet Code'}
                   </span>
                 </button>
               </div>
