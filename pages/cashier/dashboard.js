@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import Betslip from '../../components/cashier/Betslip';
+import Betslip from '../../components/cashier/BetSlip';
 import PrintableTicket from '../../components/cashier/PrintableTicket';
 import { Loader2, Search, RefreshCw, Zap } from 'lucide-react';
 
