@@ -18,16 +18,15 @@ export default function PrintableTicket({ ticket, cart, user }) {
     <div className="print-only bg-white text-black p-2 w-[80mm] font-mono text-[10px] leading-[1.1]">
       {/* HEADER GRID */}
       <div className="border-2 border-black flex">
-        {/* LOGO PLACEHOLDER */}
+        {/* LOGO SECTION */}
         <div className="w-2/3 border-r-2 border-black flex items-center justify-center p-2">
-          {/https://pushvault.shop/logo.png/}
           <img 
-            src="URL_TO_YOUR_LOGO" 
+            src="https://pushvault.shop/logo.png" 
             alt="LUCRA LOGO" 
             className="max-h-12 max-w-full object-contain"
             onError={(e) => { e.target.style.display = 'none'; }} 
           />
-          <span className="font-black text-xl italic tracking-tighter">LUCRA.BET</span>
+          <span className="font-black text-xl italic tracking-tighter ml-2">LUCRA.BET</span>
         </div>
         
         {/* SHOP INFO */}
@@ -56,7 +55,7 @@ export default function PrintableTicket({ ticket, cart, user }) {
         Bet Placed On {formatDate()}
       </div>
 
-      {/* MATCH TABLE HEADER */}
+      {/* MATCH TABLE */}
       <table className="w-full border-x-2 border-b-2 border-black table-fixed border-collapse">
         <thead>
           <tr className="border-b-2 border-black text-[9px] uppercase">
@@ -85,7 +84,7 @@ export default function PrintableTicket({ ticket, cart, user }) {
         </tbody>
       </table>
 
-      {/* FOOTER FINANCIALS */}
+      {/* FINANCIALS */}
       <div className="border-x-2 border-b-2 border-black font-black uppercase italic">
         <div className="p-1 text-center text-[9px]">BET TYPE: Sports Betting</div>
         
@@ -111,7 +110,7 @@ export default function PrintableTicket({ ticket, cart, user }) {
         market closed will be voided.
       </div>
 
-      {/* FAKE BARCODE */}
+      {/* BARCODE */}
       <div className="mt-2 flex flex-col items-center">
         <div className="w-full h-8 flex gap-[1px] px-4 overflow-hidden bg-white border-x border-black">
           {[...Array(50)].map((_, i) => (
