@@ -101,3 +101,22 @@ html, body {
     size: auto;
   }
 }
+
+
+@layer utilities {
+  /* Hides scrollbars in Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hides scrollbars in IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  /* Optional: Adds a smooth fade to the edges of the banner track */
+  .banner-mask {
+    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+  }
+}
