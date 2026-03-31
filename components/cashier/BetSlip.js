@@ -12,8 +12,8 @@ export default function BetSlip({ cart, onRemove, stake, setStake, onPrint }) {
   const calculateTotalOdds = () => {
     if (cart.length === 0) return (0).toFixed(2);
     const total = cart.reduce((acc, item) => {
-      // Handles both 'odd' and 'odds' keys just in case
-      const val = parseValue(item.odds || item.odd);
+      // Direct access to 'odds' as per your DB schema
+      const val = parseValue(item.odds);
       return acc * val;
     }, 1);
     return total.toFixed(2);
@@ -33,9 +33,9 @@ export default function BetSlip({ cart, onRemove, stake, setStake, onPrint }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-black italic flex items-center gap-2 tracking-tighter">
-          <Ticket className="text-lucra-green" size={20} /> TERMINAL SLIP
+          <Ticket className="text-[#10b981]" size={20} /> TERMINAL SLIP
         </h2>
-        <span className="bg-lucra-green/10 text-lucra-green border border-lucra-green/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+        <span className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
           {cart.length} {cart.length === 1 ? 'Event' : 'Events'}
         </span>
       </div>
@@ -45,27 +45,28 @@ export default function BetSlip({ cart, onRemove, stake, setStake, onPrint }) {
         {cart.length > 0 ? (
           cart.map((item) => (
             <div 
-              key={item.matchId} 
+              key={item.id || item.matchId} // Uses 'id' from your JSON if available
               className="bg-white/5 border border-white/5 p-4 rounded-2xl relative animate-in fade-in slide-in-from-right-2 duration-300 group"
             >
               <button 
-                onClick={() => onRemove(item.matchId)} 
+                onClick={() => onRemove(item.id || item.matchId)} 
                 className="absolute right-3 top-3 text-gray-500 hover:text-red-500 transition-colors"
               >
                 <Trash2 size={14} />
               </button>
               
+              {/* ALIGNED TO DB: matchName */}
               <p className="text-[10px] text-gray-400 font-black uppercase mb-1 tracking-tight truncate pr-6">
-                {item.matchName || `${item.home} v ${item.away}`}
+                {item.matchName}
               </p>
               
               <div className="flex justify-between items-end">
                 <div className="flex flex-col">
                   <span className="text-[10px] text-gray-500 font-bold uppercase">Selection</span>
-                  <span className="text-lucra-green font-black text-sm uppercase">{item.selection}</span>
+                  <span className="text-[#10b981] font-black text-sm uppercase">{item.selection}</span>
                 </div>
                 <div className="text-right">
-                  <span className="font-mono font-black text-lg">@{parseValue(item.odds || item.odd).toFixed(2)}</span>
+                  <span className="font-mono font-black text-lg">@{parseValue(item.odds).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -82,11 +83,11 @@ export default function BetSlip({ cart, onRemove, stake, setStake, onPrint }) {
       <div className="mt-6 space-y-4 pt-6 border-t border-white/10">
         <div className="flex justify-between font-black text-xs uppercase tracking-widest px-1">
           <span className="text-gray-500">Total Odds</span>
-          <span className="text-lucra-green font-mono text-lg">{totalOdds}</span>
+          <span className="text-[#10b981] font-mono text-lg">{totalOdds}</span>
         </div>
 
         {/* Stake Input */}
-        <div className="bg-white/5 p-4 rounded-2xl border border-white/5 focus-within:border-lucra-green/30 transition-all">
+        <div className="bg-white/5 p-4 rounded-2xl border border-white/5 focus-within:border-[#10b981]/30 transition-all">
           <label className="text-[9px] text-gray-500 font-black uppercase mb-1 block tracking-widest">Stake Amount (KES)</label>
           <div className="flex items-center">
             <span className="text-xl font-black text-gray-600 mr-2">KES</span>
@@ -101,7 +102,7 @@ export default function BetSlip({ cart, onRemove, stake, setStake, onPrint }) {
         </div>
 
         {/* Payout Display */}
-        <div className="bg-lucra-green shadow-[0_0_30px_rgba(0,255,135,0.15)] p-5 rounded-2xl text-black relative overflow-hidden group">
+        <div className="bg-[#10b981] shadow-[0_0_30px_rgba(16,185,129,0.15)] p-5 rounded-2xl text-black relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
              <Zap size={40} fill="currentColor" />
           </div>
@@ -118,7 +119,7 @@ export default function BetSlip({ cart, onRemove, stake, setStake, onPrint }) {
         <button 
           onClick={onPrint}
           disabled={cart.length === 0 || numericStake <= 0}
-          className="w-full bg-white text-black font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:bg-lucra-green hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-[0.98] transition-all disabled:opacity-10 disabled:grayscale cursor-pointer"
+          className="w-full bg-white text-black font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:bg-[#10b981] hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-[0.98] transition-all disabled:opacity-10 disabled:grayscale cursor-pointer"
         >
           <Printer size={20} /> 
           <span className="uppercase tracking-widest text-sm">Print Ticket</span>
