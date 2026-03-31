@@ -11,6 +11,7 @@ export default function UnifiedTerminal() {
   const [currentTicket, setCurrentTicket] = useState(null);
   const [cashierBalance, setCashierBalance] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loadedBookingCode, setLoadedBookingCode] = useState(''); // To keep track of the code being "burned"
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -23,13 +24,13 @@ export default function UnifiedTerminal() {
 
   useEffect(() => { fetchCashierData(); }, [fetchCashierData]);
 
-  const handleLoadBooking = async () => {
+  // 1. LOAD TICKET: Handles both 4-digit Booking and 10-digit Serial
+  const handleLoadTicket = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
 
     try {
-      // Search in booking_code (for fresh bets) OR ticket_serial (for reprints/payouts)
       const { data: ticket, error } = await supabase
         .from('betsnow')
         .select('*')
@@ -37,46 +38,44 @@ export default function UnifiedTerminal() {
         .single();
 
       if (error || !ticket) {
-        alert("⚠️ TICKET NOT FOUND. It may have been processed or the code is invalid.");
+        alert("⚠️ NOT FOUND: Code expired or invalid.");
         setSearchQuery('');
         return;
       }
 
-      // 1. DATA PARSING: Ensure selections is always an array
+      // Ensure selections is an array
       const selectionsArray = Array.isArray(ticket.selections) 
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
-      // 2. CASE: ALREADY PAID (Found via Serial or old record)
-      // Since booking_code is now NULLed on payment, finding it via Serial is the main way to reprint
-      if (ticket.ticket_serial || ticket.status === 'paid' || ticket.is_paid) {
-        const reprint = confirm(`🎟️ PAID TICKET: ${ticket.ticket_serial}\n\nThis booking is already settled. Reprint receipt?`);
-        if (reprint) {
-          setCurrentTicket({ ...ticket, selections: selectionsArray });
-          setTimeout(() => window.print(), 500);
-        }
-        setSearchQuery('');
-        setCart([]); // Clear preview
-        setActiveTicketId(null);
-        return;
+      // CASE A: IT'S A PAID TICKET (Search by Serial)
+      if (ticket.is_paid || ticket.ticket_serial) {
+        setCart(selectionsArray);
+        setStake(ticket.stake || 0);
+        setActiveTicketId(null); // Disable "Print" button
+        setLoadedBookingCode('');
+        alert(`✅ PAID TICKET LOADED\nSerial: ${ticket.ticket_serial}\nStatus: ${ticket.status}`);
+      } 
+      // CASE B: IT'S A NEW BOOKING (Search by Booking Code)
+      else {
+        setCart(selectionsArray);
+        setStake(ticket.stake || 0);
+        setActiveTicketId(ticket.id);
+        setLoadedBookingCode(ticket.booking_code); // Store the code to burn it later
       }
 
-      // 3. CASE: FRESH BOOKING
-      setCart(selectionsArray);
-      setStake(ticket.stake || 0);
-      setActiveTicketId(ticket.id);
-      setSearchQuery(''); 
-
+      setSearchQuery('');
     } catch (err) {
-      console.error("Load Error:", err);
-      alert("Error loading ticket data.");
+      console.error(err);
+      alert("Error loading ticket.");
     } finally {
       setIsSearching(false);
     }
   };
 
+  // 2. PROCESS PAYMENT: Deducts money, assigns Serial, and DELETES Booking Code
   const handlePrintBet = async () => {
-    if (!activeTicketId || cart.length === 0) return;
+    if (!activeTicketId || !loadedBookingCode) return;
     if (cashierBalance < stake) {
       alert("⚠️ INSUFFICIENT FLOAT");
       return;
@@ -85,37 +84,37 @@ export default function UnifiedTerminal() {
     setIsProcessing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      // Generate a clean Alphanumeric Serial
-      const serial = `LCR-${Math.random().toString(36).toUpperCase().substring(2, 10)}`;
-      const totalOdds = cart.reduce((acc, item) => acc * (item.odds || 1), 1);
+      
+      // Generate the 10-digit numeric serial
+      const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
-      const { data, error: rpcError } = await supabase.rpc('place_and_deduct_bet', {
-        p_ticket_id: activeTicketId,
+      // Use the "process_lucra_payment" function we created
+      const { data, error: rpcError } = await supabase.rpc('process_lucra_payment', {
+        p_booking_code: loadedBookingCode,
         p_cashier_id: user.id,
-        p_stake: parseFloat(stake),
-        p_selections: cart,
-        p_odds: parseFloat(totalOdds.toFixed(2)),
-        p_payout: parseFloat((totalOdds * stake).toFixed(2)),
-        p_serial: serial
+        p_generated_serial: newSerial
       });
 
       if (rpcError) throw rpcError;
 
-      // Set the ticket for the print component
+      // Load data into print component
       setCurrentTicket(data);
       
+      // Short delay to ensure PrintableTicket has the data before window.print()
       setTimeout(() => {
         window.print();
-        // Reset Terminal
+        
+        // Clear everything
         setCart([]);
         setStake(0);
         setActiveTicketId(null);
+        setLoadedBookingCode('');
         setIsProcessing(false);
         fetchCashierData();
-      }, 300);
+      }, 500);
 
     } catch (err) {
-      alert("PAYMENT FAILED: " + err.message);
+      alert("❌ PAYMENT FAILED: " + err.message);
       setIsProcessing(false);
     }
   };
@@ -124,12 +123,12 @@ export default function UnifiedTerminal() {
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#0b0f1a] text-white overflow-hidden font-sans">
         
-        {/* LEFT: ACTION AREA */}
+        {/* LEFT AREA: SEARCH & ACTIONS */}
         <div className="flex-1 p-8 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-2xl bg-[#111926] p-8 rounded-[3rem] border border-white/10 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-[#10b981] font-black italic text-3xl tracking-tighter uppercase">Lucra Terminal</h1>
-                <button onClick={fetchCashierData} className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/40 hover:text-[#10b981]">
+                <button onClick={fetchCashierData} className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/40">
                     <RefreshCw size={20} />
                 </button>
             </div>
@@ -137,31 +136,32 @@ export default function UnifiedTerminal() {
             <div className="relative flex items-center gap-4 bg-black/40 p-4 rounded-2xl border border-white/5 focus-within:border-[#10b981] transition-all">
               <Search className="text-[#10b981]" size={32} />
               <input 
-                className="bg-transparent flex-1 text-2xl font-black uppercase tracking-widest outline-none placeholder:text-white/5"
-                placeholder="SCAN OR TYPE CODE..."
+                className="bg-transparent flex-1 text-2xl font-black uppercase tracking-widest outline-none placeholder:text-white/10"
+                placeholder="ENTER CODE OR SERIAL..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleLoadBooking()}
+                onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
               />
               <button 
-                onClick={handleLoadBooking}
+                onClick={handleLoadTicket}
                 disabled={isSearching}
-                className="bg-[#10b981] text-black px-10 py-4 rounded-xl font-black italic hover:scale-105 transition-all shadow-lg active:scale-95"
+                className="bg-[#10b981] text-black px-10 py-4 rounded-xl font-black italic hover:scale-105 transition-all shadow-lg"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
 
+            {/* PAYMENT BOX: Only shows if it's a new booking */}
             {activeTicketId && (
               <div className="mt-10 p-8 bg-white/5 rounded-3xl border border-[#10b981]/20 animate-in fade-in zoom-in duration-300">
                 <div className="flex justify-between items-end mb-8">
                     <div>
-                        <p className="text-[10px] font-bold text-[#10b981] uppercase tracking-[0.2em] mb-1">Total Stake</p>
-                        <p className="text-5xl font-black italic">KES {stake.toLocaleString()}</p>
+                        <p className="text-[10px] font-bold text-[#10b981] uppercase tracking-[0.2em] mb-1">Deduct Stake</p>
+                        <p className="text-5xl font-black italic">KES {parseFloat(stake).toLocaleString()}</p>
                     </div>
                     <div className="text-right">
-                        <p className="text-[10px] font-bold opacity-30 uppercase mb-1">Matches</p>
-                        <p className="text-xl font-black">{cart.length}</p>
+                        <p className="text-[10px] font-bold opacity-30 uppercase mb-1">Code</p>
+                        <p className="text-xl font-black text-[#10b981]">{loadedBookingCode}</p>
                     </div>
                 </div>
                 <button 
@@ -169,22 +169,22 @@ export default function UnifiedTerminal() {
                   disabled={isProcessing}
                   className="w-full bg-[#10b981] hover:bg-[#059669] text-black py-7 rounded-2xl font-black text-2xl flex items-center justify-center gap-4 transition-all shadow-[0_10px_40px_rgba(16,185,129,0.2)]"
                 >
-                  {isProcessing ? <Loader2 className="animate-spin" /> : <><Printer size={32}/> CONFIRM & PRINT</>}
+                  {isProcessing ? <Loader2 className="animate-spin" /> : <><Printer size={32}/> PROCESS & PRINT</>}
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT: TICKET PREVIEW */}
+        {/* RIGHT AREA: PREVIEW */}
         <div className="w-[420px] p-8 flex flex-col gap-6 bg-[#111926]/30">
             <div className="bg-[#10b981] p-6 rounded-[2rem] text-black shadow-lg">
-                <p className="text-[10px] font-black uppercase opacity-60 mb-1">Cashier Balance</p>
+                <p className="text-[10px] font-black uppercase opacity-60 mb-1">Current Float</p>
                 <p className="text-3xl font-black italic">KES {cashierBalance.toLocaleString()}</p>
             </div>
 
-            <div className="flex-1 bg-black/20 rounded-[2.5rem] p-6 border border-white/5 overflow-y-auto custom-scrollbar">
-                <h3 className="text-[#10b981] font-black italic mb-6 text-sm tracking-widest uppercase border-b border-white/5 pb-2">Ticket Preview</h3>
+            <div className="flex-1 bg-black/20 rounded-[2.5rem] p-6 border border-white/5 overflow-y-auto">
+                <h3 className="text-[#10b981] font-black italic mb-6 text-sm tracking-widest uppercase border-b border-white/5 pb-2">Selections Preview</h3>
                 {cart.map((item, idx) => (
                     <div key={idx} className="mb-5 border-b border-white/5 pb-3 last:border-0">
                         <p className="text-[10px] font-bold text-white/30 uppercase mb-1 truncate">{item.matchName}</p>
@@ -197,14 +197,14 @@ export default function UnifiedTerminal() {
                 {cart.length === 0 && (
                   <div className="h-full flex flex-col items-center justify-center opacity-10 py-20">
                     <ReceiptText size={64} />
-                    <p className="font-black italic uppercase text-xs mt-4 tracking-tighter">Terminal Idle</p>
+                    <p className="font-black italic uppercase text-xs mt-4">Waiting for Input...</p>
                   </div>
                 )}
             </div>
         </div>
       </div>
 
-      {/* HIDDEN PRINT COMPONENT */}
+      {/* PRINT LAYER */}
       <div className="hidden print:block">
         <PrintableTicket ticket={currentTicket} />
       </div>
