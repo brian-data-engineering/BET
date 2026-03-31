@@ -3,50 +3,43 @@ import { supabase } from '../lib/supabaseClient';
 
 export default function HomeBanner() {
   const [banners, setBanners] = useState([]);
-  const [mounted, setMounted] = useState(false); // Prevents Hydration Error
 
   useEffect(() => {
-    setMounted(true); // Tells React we are now on the client side
     async function getBanners() {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('banners')
         .select('*')
         .eq('is_active', true)
         .order('display_order', { ascending: true });
       
-      if (error) {
-        console.error("Supabase Error:", error.message);
-      } else {
-        setBanners(data || []);
-      }
+      if (data) setBanners(data);
     }
     getBanners();
   }, []);
 
-  // Don't render anything until the component has mounted on the client
-  if (!mounted || banners.length === 0) return null;
+  if (banners.length === 0) return null;
 
   return (
-    <div className="w-full overflow-hidden pt-4 bg-[#0b0f1a]">
-      <div className="flex overflow-x-auto gap-4 px-4 pb-4 snap-x snap-mandatory no-scrollbar">
+    <div className="w-full overflow-hidden bg-[#0b0f1a]">
+      {/* Reduced height to h-20 and made it full width */}
+      <div className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar w-full">
         {banners.map((banner) => (
-          <div 
-            key={banner.id} 
-            className="min-w-[85%] md:min-w-[45%] snap-center shrink-0"
+          <a 
+            key={banner.id}
+            href={banner.target_url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="w-full h-20 md:h-24 snap-center shrink-0 border-x border-white/5 transition-opacity hover:opacity-90"
+            style={{ 
+              backgroundImage: `url('${banner.image_url}')`,
+              backgroundSize: 'cover', // Use 'cover' to fill the width
+              backgroundPosition: 'center',
+              backgroundColor: '#1c2636'
+            }}
           >
-            <a 
-              href={banner.target_url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block h-32 rounded-2xl bg-cover bg-center shadow-lg border border-white/5 overflow-hidden"
-              style={{ 
-                backgroundImage: `url('${banner.image_url}')`,
-                backgroundColor: '#1c2636'
-              }}
-            >
-              <div className="w-full h-full" />
-            </a>
-          </div>
+            {/* Subtle overlay for depth */}
+            <div className="w-full h-full bg-gradient-to-r from-black/40 via-transparent to-black/40" />
+          </a>
         ))}
       </div>
     </div>
