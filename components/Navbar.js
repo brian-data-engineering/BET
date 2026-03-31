@@ -1,15 +1,15 @@
 import React from 'react';
 import Link from 'next/link';
 import { 
-  Search, Trophy, Activity, Smartphone, Ticket
+  Search, Trophy, Activity, Smartphone, Ticket 
 } from 'lucide-react';
-import HomeBanner from './HomeBanner'; // Import your banner component here
+import HomeBanner from './HomeBanner';
 
 const Navbar = ({ onSearch }) => {
   return (
-    <nav className="sticky top-0 z-50 shadow-xl flex flex-col">
+    <nav className="sticky top-0 z-50 shadow-xl flex flex-col w-full">
       
-      {/* --- TOP BAR --- */}
+      {/* --- TOP BAR: Branding & Actions --- */}
       <div className="bg-[#0b0f1a] px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-1 cursor-pointer">
           <div className="w-9 h-9 border-2 border-[#10b981] rounded-full flex items-center justify-center font-black text-[#10b981] text-lg">
@@ -31,7 +31,7 @@ const Navbar = ({ onSearch }) => {
         </div>
       </div>
 
-      {/* --- QUICK LINKS & SEARCH --- */}
+      {/* --- QUICK LINKS & SEARCH: Utility Bar --- */}
       <div className="bg-[#003d30] px-4 py-2 border-y border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-6 text-[11px] font-bold text-slate-400 uppercase italic">
           <button className="hover:text-white flex items-center gap-1.5 transition-colors">
@@ -56,9 +56,8 @@ const Navbar = ({ onSearch }) => {
         </div>
       </div>
 
-     // ... inside your Navbar return
-      {/* --- BANNER SECTION --- */}
-      <div className="bg-[#0b0f1a] w-full border-b border-white/5">
+      {/* --- BANNER SECTION: Full-Width Integrated Promo --- */}
+      <div className="bg-[#0b0f1a] w-full border-b border-white/5 overflow-hidden">
         <HomeBanner />
       </div>
     </nav>
