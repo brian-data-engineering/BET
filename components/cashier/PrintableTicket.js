@@ -20,7 +20,7 @@ export default function PrintableTicket({ ticket, cart, user }) {
       <div className="border-2 border-black flex">
         {/* LOGO PLACEHOLDER */}
         <div className="w-2/3 border-r-2 border-black flex items-center justify-center p-2">
-          {/* REPLACE 'https://pushvault.shop/logo.png/}
+          {/https://pushvault.shop/logo.png/}
           <img 
             src="URL_TO_YOUR_LOGO" 
             alt="LUCRA LOGO" 
@@ -57,7 +57,7 @@ export default function PrintableTicket({ ticket, cart, user }) {
       </div>
 
       {/* MATCH TABLE HEADER */}
-      <table className="w-full border-x-2 border-b-2 border-black table-fixed">
+      <table className="w-full border-x-2 border-b-2 border-black table-fixed border-collapse">
         <thead>
           <tr className="border-b-2 border-black text-[9px] uppercase">
             <th className="w-[25%] border-r border-black p-1 text-left">Event</th>
@@ -68,20 +68,15 @@ export default function PrintableTicket({ ticket, cart, user }) {
         <tbody>
           {selections.map((item, index) => (
             <tr key={index} className="border-b border-black last:border-b-0 text-[9px]">
-              {/* Left Column: Category/Code */}
               <td className="border-r border-black p-1 align-top font-bold leading-tight">
                 {item.marketName || 'Intl'} <br />
                 {item.id?.slice(-4) || '9901'}
               </td>
-              
-              {/* Middle Column: Match & Pick */}
               <td className="border-r border-black p-1 text-center align-top">
                 <div className="font-black uppercase">{item.matchName}</div>
                 <div className="font-bold">Match Winner({item.selection === '1' ? 'Home' : item.selection === '2' ? 'Away' : 'Draw'})</div>
                 <div className="text-[8px]">{item.startTime ? new Date(item.startTime).toLocaleString('en-GB', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}) : ''}</div>
               </td>
-              
-              {/* Right Column: Odds */}
               <td className="p-1 text-right align-top font-black text-[11px]">
                 {parseFloat(item.odds || 0).toFixed(2)}
               </td>
@@ -110,21 +105,18 @@ export default function PrintableTicket({ ticket, cart, user }) {
         </div>
       </div>
 
-      {/* TERMS & BARCODE */}
+      {/* TERMS */}
       <div className="text-[7px] text-center mt-1 leading-tight font-bold">
         This is a copy. Terms and conditions apply, tickets placed after <br />
         market closed will be voided.
       </div>
 
-      {/* FAKE BARCODE FOR STYLE */}
+      {/* FAKE BARCODE */}
       <div className="mt-2 flex flex-col items-center">
-        <div className="w-full h-8 bg-black flex items-center justify-center">
-          {/* Vertical white lines to simulate barcode */}
-          <div className="w-full h-full flex gap-[1px] px-4 overflow-hidden bg-white">
-            {[...Array(60)].map((_, i) => (
-              <div key={i} className="bg-black" style={{ width: `${Math.random() * 3 + 1}px`, height: '100%' }}></div>
-            ))}
-          </div>
+        <div className="w-full h-8 flex gap-[1px] px-4 overflow-hidden bg-white border-x border-black">
+          {[...Array(50)].map((_, i) => (
+            <div key={i} className="bg-black shrink-0" style={{ width: `${(i % 3) + 1}px`, height: '100%' }}></div>
+          ))}
         </div>
         <span className="text-[8px] font-black tracking-[0.5em] mt-0.5">{ticket?.ticket_serial || '0000000000'}</span>
       </div>
