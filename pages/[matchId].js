@@ -13,6 +13,9 @@ export default function MatchDetail({ match }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
+  // URL for your background image
+  const bgImageUrl = 'https://t3.ftcdn.net/jpg/06/07/07/80/360_F_607078002_yMGIjR7oCK8fvvR8qD8hZ5EsXK7V8M7I.jpg';
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 10000);
     return () => clearInterval(timer);
@@ -31,8 +34,6 @@ export default function MatchDetail({ match }) {
   };
 
   const { isLocked, isStartingSoon } = getMatchStatus();
-  
-  // Helper to ensure text isn't stuck in ALL CAPS from scraped data
   const cleanName = (name) => name ? name.replace(/['"]+/g, '') : 'TBD';
 
   const formatFixedTime = (dateString) => {
@@ -84,11 +85,10 @@ export default function MatchDetail({ match }) {
           
           <main className="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6 pb-32">
             
-            {/* Header */}
             <div className="flex items-center justify-between px-4 lg:px-0 pt-4 lg:pt-0">
               <div className="flex items-center gap-4">
-                <button onClick={() => router.back()} className="p-2.5 bg-[#1c2636] border border-white/5 rounded-xl transition-all group">
-                  <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+                <button onClick={() => router.back()} className="p-2.5 bg-[#1c2636] border border-white/5 rounded-xl">
+                  <ChevronLeft size={20} />
                 </button>
                 <div>
                   <h1 className="text-[10px] font-bold capitalize italic text-[#10b981] opacity-80">{match.league_name}</h1>
@@ -103,29 +103,37 @@ export default function MatchDetail({ match }) {
               )}
             </div>
 
-            {/* Hero Section */}
-            <div className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[200px] flex items-center ${isLocked ? 'saturate-50' : ''}`}>
-              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10" />
+            {/* Hero Section with BG Image */}
+            <div 
+              className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[220px] flex items-center ${isLocked ? 'saturate-50' : ''}`}
+              style={{
+                backgroundImage: `url('${bgImageUrl}')`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-[#0b0f1a]/90 via-[#0b0f1a]/40 to-[#0b0f1a]/90 z-0" />
+              
               <div className="w-full flex justify-around items-center px-4 relative z-10">
                 <div className="flex-1 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-[#0b0f1a] rounded-2xl flex items-center justify-center border border-white/5 mb-3 shadow-2xl">
+                  <div className="w-12 h-12 bg-[#0b0f1a]/60 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 mb-3 shadow-2xl">
                     <Shield size={24} className="text-[#10b981]" />
                   </div>
-                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none">{cleanName(match.home_team)}</h2>
+                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none drop-shadow-lg">{cleanName(match.home_team)}</h2>
                 </div>
 
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-orange-500 text-2xl font-black italic tracking-tighter">VS</span>
-                  <div className={`px-3 py-1 rounded-full text-[9px] font-bold italic border ${isStartingSoon ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-white/5 border-white/10 text-slate-300'}`}>
+                  <span className="text-orange-500 text-3xl font-black italic tracking-tighter drop-shadow-md">VS</span>
+                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-bold italic border backdrop-blur-sm ${isStartingSoon ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-[#0b0f1a]/60 border-white/20 text-slate-200'}`}>
                     {formatFixedTime(match.commence_time)}
                   </div>
                 </div>
 
                 <div className="flex-1 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-[#0b0f1a] rounded-2xl flex items-center justify-center border border-white/5 mb-3 shadow-2xl">
+                  <div className="w-12 h-12 bg-[#0b0f1a]/60 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 mb-3 shadow-2xl">
                     <Shield size={24} className="text-[#10b981]" />
                   </div>
-                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none text-white/90">{cleanName(match.away_team)}</h2>
+                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none text-white drop-shadow-lg">{cleanName(match.away_team)}</h2>
                 </div>
               </div>
             </div>
@@ -159,7 +167,6 @@ export default function MatchDetail({ match }) {
 
               {match.deep_markets?.map((market, mIdx) => (
                 <section key={mIdx}>
-                  {/* Using toLowerCase() + capitalize class to fix screaming scraped data */}
                   <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 capitalize">
                     {market.name?.toLowerCase()}
                   </h3>
@@ -221,4 +228,34 @@ export default function MatchDetail({ match }) {
   );
 }
 
-// ...getServerSideProps remains the same
+// THE MISSING DATA FETCHING BLOCK:
+export async function getServerSideProps({ params }) {
+  const { matchId } = params;
+  try {
+    const { data, error } = await supabase
+      .from('api_events')
+      .select(`*, api_event_details ( markets )`)
+      .eq('id', matchId)
+      .single();
+
+    if (error || !data) return { notFound: true };
+
+    const details = data.api_event_details;
+    let rawMarkets = [];
+    
+    // Handle different data shapes from scrapped data
+    if (Array.isArray(details) && details.length > 0) {
+      rawMarkets = details[0]?.markets?.data || details[0]?.markets || [];
+    } else if (details) {
+      rawMarkets = details.markets?.data || details.markets || [];
+    }
+
+    return {
+      props: {
+        match: JSON.parse(JSON.stringify({ ...data, deep_markets: rawMarkets }))
+      }
+    };
+  } catch (err) {
+    return { notFound: true };
+  }
+}
