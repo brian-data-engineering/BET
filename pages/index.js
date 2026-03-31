@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import MobileFooter from '../components/MobileFooter';
+import HomeBanner from '../components/HomeBanner'; // 1. Import the new component
 import { useBets } from '../context/BetContext'; 
 import { Clock, AlertCircle, X, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -30,8 +31,8 @@ export default function Home({ initialMatches = [] }) {
     const timeDiff = matchDate.getTime() - currentTime.getTime();
     
     return { 
-      isLocked: timeDiff <= 60000, // Lock 1 minute before
-      isStartingSoon: timeDiff > 60000 && timeDiff <= 300000 // Highlight if 1-5 mins away
+      isLocked: timeDiff <= 60000, 
+      isStartingSoon: timeDiff > 60000 && timeDiff <= 300000 
     };
   };
 
@@ -101,6 +102,10 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-[#0b0f1a] no-scrollbar flex flex-col relative">
+          
+          {/* 2. Added HomeBanner here */}
+          <HomeBanner />
+
           <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 overflow-x-auto no-scrollbar gap-2 shrink-0">
             {sportTabs.map((tab) => (
               <button 
@@ -156,18 +161,18 @@ export default function Home({ initialMatches = [] }) {
                     <div className="col-span-5 grid grid-cols-3 gap-1.5">
                       {oddsData.map((o) => (
                        <button
-  key={o.label}
-  onClick={() => toggleBet(o.label, o.val, match)}
-  className={`h-9 px-4 rounded-full flex items-center justify-center transition-all ${
-    currentSelection?.selection === o.label 
-      ? 'bg-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/20' 
-      : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95'
-  }`}
->
-  <span className="text-[13px] font-black tracking-tight">
-    {o.val ? parseFloat(o.val).toFixed(2) : '—'}
-  </span>
-</button>
+                          key={o.label}
+                          onClick={() => toggleBet(o.label, o.val, match)}
+                          className={`h-9 px-4 rounded-full flex items-center justify-center transition-all ${
+                            currentSelection?.selection === o.label 
+                              ? 'bg-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/20' 
+                              : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95'
+                          }`}
+                        >
+                          <span className="text-[13px] font-black tracking-tight">
+                            {o.val ? parseFloat(o.val).toFixed(2) : '—'}
+                          </span>
+                        </button>
                       ))}
                     </div>
                   </div>
