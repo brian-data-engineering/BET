@@ -4,7 +4,6 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import MobileFooter from '../components/MobileFooter';
-import HomeBanner from '../components/HomeBanner'; // 1. Import the new component
 import { useBets } from '../context/BetContext'; 
 import { Clock, AlertCircle, X, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -103,9 +102,6 @@ export default function Home({ initialMatches = [] }) {
 
         <main className="flex-1 overflow-y-auto bg-[#0b0f1a] no-scrollbar flex flex-col relative">
           
-          {/* 2. Added HomeBanner here */}
-          <HomeBanner />
-
           <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 overflow-x-auto no-scrollbar gap-2 shrink-0">
             {sportTabs.map((tab) => (
               <button 
