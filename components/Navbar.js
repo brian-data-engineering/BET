@@ -3,25 +3,27 @@ import Link from 'next/link';
 import { 
   Search, Trophy, Activity, Smartphone, Ticket
 } from 'lucide-react';
+import HomeBanner from './HomeBanner'; // Import your banner component here
 
 const Navbar = ({ onSearch }) => {
   return (
-    <nav className="sticky top-0 z-50 shadow-xl">
+    <nav className="sticky top-0 z-50 shadow-xl flex flex-col">
       
       {/* --- TOP BAR --- */}
       <div className="bg-[#0b0f1a] px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-1 cursor-pointer">
-          <div className="w-9 h-9 border-2 border-[#10b981] rounded-full flex items-center justify-center font-black text-[#10b981] text-lg">bb</div>
+          <div className="w-9 h-9 border-2 border-[#10b981] rounded-full flex items-center justify-center font-black text-[#10b981] text-lg">
+            L
+          </div>
           <div className="flex flex-col leading-none">
             <span className="text-2xl font-black tracking-tighter text-white uppercase italic">
-              brian<span className="text-[#f59e0b]">bet</span>
+              lucra<span className="text-[#f59e0b]">bet</span>
             </span>
             <span className="text-[10px] font-bold text-[#f59e0b] ml-auto">.co.ke</span>
           </div>
         </Link>
 
         <div className="flex items-center gap-3">
-          {/* Replaced Login with a "My Bets" or "Check Ticket" look */}
           <button className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-lg text-slate-300 hover:text-white transition-all text-xs font-bold uppercase tracking-tight">
             <Ticket size={16} className="text-[#f59e0b]" />
             Check Ticket
@@ -30,7 +32,7 @@ const Navbar = ({ onSearch }) => {
       </div>
 
       {/* --- QUICK LINKS & SEARCH --- */}
-      <div className="bg-[#003d30] px-4 py-2 border-t border-white/5 flex items-center justify-between">
+      <div className="bg-[#003d30] px-4 py-2 border-y border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-6 text-[11px] font-bold text-slate-400 uppercase italic">
           <button className="hover:text-white flex items-center gap-1.5 transition-colors">
             <Activity size={14} /> Live Score
@@ -46,12 +48,18 @@ const Navbar = ({ onSearch }) => {
         </div>
         
         <div 
-          onClick={() => onSearch && onSearch()} 
+          onClick={() => onSearch && onSearch('')} 
           className="flex items-center gap-2 text-white/70 hover:text-white cursor-pointer group"
         >
           <Search size={18} className="group-hover:scale-110 transition-transform" />
           <span className="text-sm font-bold uppercase tracking-tight">Search</span>
         </div>
+      </div>
+
+      {/* --- BANNER SECTION --- */}
+      {/* Integrating HomeBanner here makes it part of the sticky header */}
+      <div className="bg-[#0b0f1a]">
+        <HomeBanner />
       </div>
     </nav>
   );
