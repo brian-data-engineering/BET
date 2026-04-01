@@ -18,24 +18,28 @@ def similarity(a, b):
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 def run_mapping():
-    print("🔄 Starting Lucra League Mapper (Betsnow Edition)...", flush=True)
+    print("🔄 Starting Lucra Hard-Break Mapper (Betsnow Edition)...", flush=True)
 
-    # 1. Fetch data from betsnow (where your active multibets live)
+    # 1. Fetch data from betsnow
     betsnow_data = supabase.table("betsnow") \
         .select("league_name, country") \
         .execute()
     
-    # Process comma-separated strings into a unique set of (League, Country)
     active_leagues = set()
     for row in betsnow_data.data:
-        # Split by comma if it's a multibet, strip whitespace
-        leagues = [l.strip() for l in (row.get('league_name') or "").split(',') if l.strip()]
-        countries = [c.strip() for c in (row.get('country') or "").split(',') if c.strip()]
+        l_raw = row.get('league_name') or ""
+        c_raw = row.get('country') or ""
+
+        # --- THE FIX: Split by DOUBLE COMMA (the separator we added in React) ---
+        # This keeps "League, Women" as ONE item.
+        leagues = [l.strip() for l in l_raw.split(', ,') if l.strip()]
+        countries = [c.strip() for c in c_raw.split(', ,') if c.strip()]
         
-        # We zip them or match them. Since multibet strings are ordered, 
-        # we'll assume a 1:1 match or use the first country as a fallback
+        # Zip them accurately using the double-comma indices
         for i, league in enumerate(leagues):
-            country = countries[i] if i < len(countries) else countries[0] if countries else "Unknown"
+            # Fallback for country if indices don't match exactly
+            country = countries[i] if i < len(countries) else (countries[0] if countries else "Unknown")
+            
             if league not in ["Unknown League", "General League"]:
                 active_leagues.add((league, country))
 
@@ -55,7 +59,6 @@ def run_mapping():
             slug = api_item['league_id'].lower()
             
             # --- COUNTRY LOCK ---
-            # Prevents mapping 'Premier League' to 'Egypt Premier League' 
             if search_country != 'international':
                 if search_country and search_country not in slug:
                     continue
@@ -65,7 +68,6 @@ def run_mapping():
             # --- FUZZY MATCHING ---
             score_name = similarity(b_league, api_item['league_name'])
             
-            # Extract league part from slug (soccer_spain_laliga -> laliga)
             slug_parts = slug.split('_')
             slug_league_part = slug_parts[-1].replace('-', ' ')
             score_slug = similarity(b_league, slug_league_part)
@@ -77,23 +79,23 @@ def run_mapping():
                 best_match_id = api_item['league_id']
                 best_match_name = api_item['league_name']
 
-        # Threshold check (0.45 is usually safe for soccer leagues)
+        # Threshold check
         if highest_score > 0.45: 
             final_mappings_dict[b_league] = {
                 "scraped_league": b_league,
                 "official_league": best_match_name,
                 "official_country": b_country,
-                "is_verified": False # Mark as false so you can review in Admin
+                "is_verified": False 
             }
             print(f"✅ Found: '{b_league}' ({b_country}) -> {best_match_name} [{highest_score:.2f}]")
 
-    # 3. Final Upsert into the NEW league_mappings structure
+    # 3. Final Upsert
     if final_mappings_dict:
         mappings_list = list(final_mappings_dict.values())
         try:
             supabase.table("league_mappings").upsert(
                 mappings_list, 
-                on_conflict="scraped_league" # Updated to your new unique column
+                on_conflict="scraped_league" 
             ).execute()
             print(f"\n✨ Successfully mapped {len(mappings_list)} leagues from your recent bets.")
         except Exception as e:
