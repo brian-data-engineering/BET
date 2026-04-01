@@ -37,39 +37,42 @@ export default function Betslip({ items = [], setItems }) {
     return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [potentialWinningsRaw]);
 
-  // --- FIXED BOOKING LOGIC WITH API MAPPING ---
+  // --- UPDATED MULTIBET-AWARE BOOKING LOGIC ---
   const handleBookBet = async () => {
     if (items.length === 0 || items.length > MAX_GAMES) return;
     
     setIsBooking(true);
     try {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
-      const primaryItem = items[0];
       
-      // Map the matchId from your slip to the ID in api_events
-      const targetId = primaryItem?.matchId || primaryItem?.id;
+      // 1. Collect all unique matchIds from the slip
+      const matchIds = items.map(item => item.matchId).filter(Boolean);
       
       let countryValue = "Unknown";
       let leagueValue = "Unknown League";
 
-      if (targetId) {
+      if (matchIds.length > 0) {
         try {
-          const { data: eventData } = await supabase
+          // 2. Fetch data for ALL matches in the slip at once
+          const { data: eventsData } = await supabase
             .from('api_events')
             .select('country, display_league, league_name')
-            .eq('id', targetId)
-            .single();
+            .in('id', matchIds);
 
-          if (eventData) {
-            countryValue = eventData.country || "Unknown";
-            leagueValue = eventData.display_league || eventData.league_name || "Unknown League";
+          if (eventsData && eventsData.length > 0) {
+            // 3. Remove duplicates using Set and join with commas
+            const countries = [...new Set(eventsData.map(e => e.country).filter(Boolean))];
+            const leagues = [...new Set(eventsData.map(e => e.display_league || e.league_name).filter(Boolean))];
+
+            countryValue = countries.length > 0 ? countries.join(', ') : "Unknown";
+            leagueValue = leagues.length > 0 ? leagues.join(', ') : "Unknown League";
           }
         } catch (err) {
-          console.warn("Could not fetch clean mapping from api_events.");
+          console.warn("Could not fetch multi-match mapping from api_events.");
         }
       }
       
-      // INSERT into betsnow
+      // 4. INSERT into betsnow
       const { error } = await supabase.from('betsnow').insert([{ 
         booking_code: finalCode, 
         selections: items, 
@@ -78,8 +81,7 @@ export default function Betslip({ items = [], setItems }) {
         potential_payout: potentialWinningsRaw,
         status: 'pending',
         is_paid: false,
-        // Using the mapped data
-        event_id: targetId,
+        event_id: matchIds.join(','),
         country: countryValue,
         league_name: leagueValue
       }]);
