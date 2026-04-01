@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import AdminLayout from '../../components/admin/AdminLayout';
-import ProtectedRoute from '../../components/auth/ProtectedRoute';
+import OperatorLayout from '../../components/operator/OperatorLayout';
 import { 
   FileText, 
   Download, 
@@ -25,7 +24,7 @@ export default function OperatorReports() {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        // Fetch all cashiers under this operator to calculate shop-wide stats
+        // Fetch all cashiers under this operator (parent_id)
         const { data: cashiers, error } = await supabase
           .from('profiles')
           .select('*')
@@ -49,46 +48,46 @@ export default function OperatorReports() {
   }, []);
 
   return (
-    <ProtectedRoute allowedRoles={['operator']}>
-      <AdminLayout>
-        <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
-          
-          {/* Header & Actions */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex flex-col">
-              <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">Financial Intelligence</h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 italic">Shop Performance & Liquidity Audit</p>
-            </div>
-
-            <button className="flex items-center gap-2 bg-[#111926] border border-white/5 px-6 py-3 rounded-2xl text-[10px] font-black uppercase italic hover:bg-white hover:text-black transition-all tracking-widest">
-              <Download size={16} />
-              Export CSV
-            </button>
+    <OperatorLayout>
+      <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
+        
+        {/* Header & Actions */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex flex-col">
+            <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">Financial Intelligence</h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1 italic">Shop Performance & Liquidity Audit</p>
           </div>
 
-          {/* Key Performance Indicators */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <QuickStat label="Total Nodes" value={reportData.totalTerminals} icon={<Monitor size={14}/>} />
-            <QuickStat label="Network Float" value={`KES ${reportData.deployedFloat.toLocaleString()}`} icon={<TrendingUp size={14}/>} color="text-[#10b981]" />
-            <QuickStat label="Avg Node Bal" value={`KES ${(reportData.deployedFloat / (reportData.totalTerminals || 1)).toLocaleString()}`} icon={<Filter size={14}/>} />
-            <QuickStat label="Settlement status" value="PENDING" icon={<Calendar size={14}/>} color="text-amber-500" />
+          <button className="flex items-center gap-2 bg-[#111926] border border-white/5 px-6 py-3 rounded-2xl text-[10px] font-black uppercase italic hover:bg-white hover:text-black transition-all tracking-widest">
+            <Download size={16} />
+            Export CSV
+          </button>
+        </div>
+
+        {/* Key Performance Indicators */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <QuickStat label="Total Nodes" value={reportData.totalTerminals} icon={<Monitor size={14}/>} />
+          <QuickStat label="Network Float" value={`KES ${reportData.deployedFloat.toLocaleString()}`} icon={<TrendingUp size={14}/>} color="text-[#10b981]" />
+          <QuickStat label="Avg Node Bal" value={`KES ${(reportData.deployedFloat / (reportData.totalTerminals || 1)).toLocaleString()}`} icon={<Filter size={14}/>} />
+          <QuickStat label="Settlement status" value="PENDING" icon={<Calendar size={14}/>} color="text-amber-500" />
+        </div>
+
+        {/* Main Report Table */}
+        <div className="bg-[#111926] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+          <div className="p-8 border-b border-white/5 bg-white/[0.01] flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <FileText size={20} className="text-[#10b981]" />
+              <h2 className="font-black uppercase text-sm italic tracking-widest">Terminal Liquidity Ledger</h2>
+            </div>
+            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest italic">Updated: {new Date().toLocaleTimeString()}</span>
           </div>
 
-          {/* Main Report Table */}
-          <div className="bg-[#111926] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-            <div className="p-8 border-b border-white/5 bg-white/[0.01] flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <FileText size={20} className="text-[#10b981]" />
-                <h2 className="font-black uppercase text-sm italic tracking-widest">Terminal Liquidity Ledger</h2>
-              </div>
-              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest italic">Updated: {new Date().toLocaleTimeString()}</span>
-            </div>
-
+          <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-[#0b0f1a]/50 text-slate-500 uppercase text-[9px] font-black tracking-[0.2em] italic">
                 <tr>
-                  <th className="p-8">Terminal Name</th>
-                  <th className="p-8">Last Activity</th>
+                  <th className="p-8 text-white">Terminal Name</th>
+                  <th className="p-8">Provision Date</th>
                   <th className="p-8 text-center">Assigned Float</th>
                   <th className="p-8 text-right">Status</th>
                 </tr>
@@ -109,7 +108,7 @@ export default function OperatorReports() {
                     </td>
                     <td className="p-8 text-right">
                       <div className="flex items-center justify-end gap-2">
-                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                          <span className="text-[9px] font-black text-emerald-500 uppercase italic tracking-widest">In Sync</span>
                       </div>
                     </td>
@@ -117,17 +116,17 @@ export default function OperatorReports() {
                 ))}
               </tbody>
             </table>
-
-            {reportData.activeCashiers.length === 0 && (
-              <div className="p-24 text-center">
-                <ArrowDownCircle size={40} className="mx-auto text-slate-800 mb-4 opacity-20" />
-                <p className="text-slate-700 font-black uppercase text-[10px] tracking-[0.4em] italic">No Terminal Data Found</p>
-              </div>
-            )}
           </div>
+
+          {reportData.activeCashiers.length === 0 && !loading && (
+            <div className="p-24 text-center">
+              <ArrowDownCircle size={40} className="mx-auto text-slate-800 mb-4 opacity-20" />
+              <p className="text-slate-700 font-black uppercase text-[10px] tracking-[0.4em] italic">No Terminal Data Found</p>
+            </div>
+          )}
         </div>
-      </AdminLayout>
-    </ProtectedRoute>
+      </div>
+    </OperatorLayout>
   );
 }
 
