@@ -40,7 +40,7 @@ export default function AdminSidebar() {
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'Operators', path: '/admin/operator', icon: <ShieldCheck size={20} /> },
-    { name: 'League Bridge', path: '/admin/mapping', icon: <Globe size={20} /> },
+    { name: 'League Bridge', path: '/admin/leagues', icon: <Globe size={20} /> },
     { name: 'Funding', path: '/admin/funding', icon: <Wallet size={20} /> },
     { name: 'Network Audit', path: '/admin/reports', icon: <BarChart3 size={20} /> },
   ];
