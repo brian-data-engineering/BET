@@ -37,7 +37,7 @@ export default function Betslip({ items = [], setItems }) {
     return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [potentialWinningsRaw]);
 
-  // --- FIXED BOOKING LOGIC WITH MULTI-COLUMN FALLBACK ---
+  // --- FIXED BOOKING LOGIC WITH API MAPPING ---
   const handleBookBet = async () => {
     if (items.length === 0 || items.length > MAX_GAMES) return;
     
@@ -46,28 +46,27 @@ export default function Betslip({ items = [], setItems }) {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
       const primaryItem = items[0];
       
-      // Initialize with basic IDs
-      let cleanMapping = { 
-        event_id: primaryItem?.id || primaryItem?.matchId, 
-        country: null, 
-        league_name: null 
-      };
+      // Map the matchId from your slip to the ID in api_events
+      const targetId = primaryItem?.matchId || primaryItem?.id;
       
-      try {
-        // We select both league columns to be safe
-        const { data: eventData } = await supabase
-          .from('api_events')
-          .select('country, display_league, league_name')
-          .eq('id', cleanMapping.event_id)
-          .single();
+      let countryValue = "Unknown";
+      let leagueValue = "Unknown League";
 
-        if (eventData) {
-          cleanMapping.country = eventData.country;
-          // Logic: Prefer display_league, but use league_name if display is empty
-          cleanMapping.league_name = eventData.display_league || eventData.league_name;
+      if (targetId) {
+        try {
+          const { data: eventData } = await supabase
+            .from('api_events')
+            .select('country, display_league, league_name')
+            .eq('id', targetId)
+            .single();
+
+          if (eventData) {
+            countryValue = eventData.country || "Unknown";
+            leagueValue = eventData.display_league || eventData.league_name || "Unknown League";
+          }
+        } catch (err) {
+          console.warn("Could not fetch clean mapping from api_events.");
         }
-      } catch (err) {
-        console.warn("API Lookup skipped, columns will be null in betsnow:", err);
       }
       
       // INSERT into betsnow
@@ -79,10 +78,10 @@ export default function Betslip({ items = [], setItems }) {
         potential_payout: potentialWinningsRaw,
         status: 'pending',
         is_paid: false,
-        // Using the mapped data from api_events
-        event_id: cleanMapping.event_id,
-        country: cleanMapping.country,
-        league_name: cleanMapping.league_name
+        // Using the mapped data
+        event_id: targetId,
+        country: countryValue,
+        league_name: leagueValue
       }]);
 
       if (error) throw error;
