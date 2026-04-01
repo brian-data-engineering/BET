@@ -37,7 +37,7 @@ export default function Betslip({ items = [], setItems }) {
     return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [potentialWinningsRaw]);
 
-  // --- UPDATED MULTIBET-AWARE BOOKING LOGIC ---
+  // --- UPDATED MULTIBET-AWARE BOOKING LOGIC (DOUBLE COMMA PROTOCOL) ---
   const handleBookBet = async () => {
     if (items.length === 0 || items.length > MAX_GAMES) return;
     
@@ -45,7 +45,7 @@ export default function Betslip({ items = [], setItems }) {
     try {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
       
-      // 1. Collect all unique matchIds from the slip
+      // 1. Collect all matchIds from the slip
       const matchIds = items.map(item => item.matchId).filter(Boolean);
       
       let countryValue = "Unknown";
@@ -53,26 +53,27 @@ export default function Betslip({ items = [], setItems }) {
 
       if (matchIds.length > 0) {
         try {
-          // 2. Fetch data for ALL matches in the slip at once
+          // 2. Fetch data for ALL matches in the slip
           const { data: eventsData } = await supabase
             .from('api_events')
             .select('country, display_league, league_name')
             .in('id', matchIds);
 
           if (eventsData && eventsData.length > 0) {
-            // 3. Remove duplicates using Set and join with commas
+            // 3. Extract unique names
             const countries = [...new Set(eventsData.map(e => e.country).filter(Boolean))];
             const leagues = [...new Set(eventsData.map(e => e.display_league || e.league_name).filter(Boolean))];
 
-            countryValue = countries.length > 0 ? countries.join(', ') : "Unknown";
-            leagueValue = leagues.length > 0 ? leagues.join(', ') : "Unknown League";
+            // 4. JOIN WITH DOUBLE COMMAS (Hard-break for Python mapping script)
+            countryValue = countries.length > 0 ? countries.join(', , ') : "Unknown";
+            leagueValue = leagues.length > 0 ? leagues.join(', , ') : "Unknown League";
           }
         } catch (err) {
           console.warn("Could not fetch multi-match mapping from api_events.");
         }
       }
       
-      // 4. INSERT into betsnow
+      // 5. INSERT into betnow
       const { error } = await supabase.from('betsnow').insert([{ 
         booking_code: finalCode, 
         selections: items, 
