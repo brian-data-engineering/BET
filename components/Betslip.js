@@ -37,13 +37,31 @@ export default function Betslip({ items = [], setItems }) {
     return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [potentialWinningsRaw]);
 
-  // --- FIXED BOOKING LOGIC ---
+  // --- FIXED BOOKING LOGIC WITH API MAPPING ---
   const handleBookBet = async () => {
     if (items.length === 0 || items.length > MAX_GAMES) return;
     
     setIsBooking(true);
     try {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
+      
+      // Look up clean data from api_events to map the messy scraper names
+      let cleanMapping = { event_id: items[0]?.id, country: null, league_name: null };
+      
+      try {
+        const { data: eventData } = await supabase
+          .from('api_events')
+          .select('country, display_league')
+          .eq('id', items[0]?.id)
+          .single();
+
+        if (eventData) {
+          cleanMapping.country = eventData.country;
+          cleanMapping.league_name = eventData.display_league;
+        }
+      } catch (err) {
+        console.warn("Could not fetch clean mapping, proceeding with raw data.");
+      }
       
       // We must insert ALL numerical values so the Cashier RPC can process payment
       const { error } = await supabase.from('betsnow').insert([{ 
@@ -53,7 +71,11 @@ export default function Betslip({ items = [], setItems }) {
         total_odds: parseFloat(totalOdds),
         potential_payout: potentialWinningsRaw,
         status: 'pending',
-        is_paid: false
+        is_paid: false,
+        // NEW MAPPING COLUMNS
+        event_id: cleanMapping.event_id,
+        country: cleanMapping.country,
+        league_name: cleanMapping.league_name
       }]);
 
       if (error) throw error;
