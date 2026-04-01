@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { LayoutDashboard, Users, Wallet, LogOut, Monitor, ShieldCheck } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  Wallet, 
+  LogOut, 
+  Monitor, 
+  ShieldCheck, 
+  Globe, 
+  BarChart3 
+} from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function AdminSidebar() {
@@ -14,11 +22,9 @@ export default function AdminSidebar() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          // Priority: app_metadata (set by system) > user_metadata (set during signup)
           const currentRole = user?.app_metadata?.role || user?.user_metadata?.role || 'operator';
           setRole(currentRole);
         } else {
-          // If no user session found, redirect to login
           router.push('/admin/login');
         }
       } catch (err) {
@@ -30,31 +36,29 @@ export default function AdminSidebar() {
     getRole();
   }, [router]);
 
-  // 1. Navigation Menus
+  // --- SUPER ADMIN MENU (LUCRA CORE) ---
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'Operators', path: '/admin/operator', icon: <ShieldCheck size={20} /> },
+    { name: 'League Bridge', path: '/admin/mapping', icon: <Globe size={20} /> },
     { name: 'Funding', path: '/admin/funding', icon: <Wallet size={20} /> },
+    { name: 'Network Audit', path: '/admin/reports', icon: <BarChart3 size={20} /> },
   ];
 
+  // --- OPERATOR MENU (SHOP LEVEL) ---
   const operatorMenu = [
     { name: 'Shop Dashboard', path: '/operator/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'My Cashiers', path: '/operator/staff', icon: <Monitor size={20} /> },
     { name: 'Shop Wallet', path: '/operator/wallet', icon: <Wallet size={20} /> },
   ];
 
-  // 2. Logic to determine menu content
   const isSuperAdmin = role === 'super_admin';
   const activeMenu = isSuperAdmin ? adminMenu : operatorMenu;
   const label = isSuperAdmin ? 'LUCRA ADMIN' : 'SHOP OPERATOR';
 
   const handleLogout = async () => {
-    // Clear state before redirect to prevent flashing wrong menu
     setLoading(true);
     await supabase.auth.signOut();
-    
-    // Unified redirect to your shared login page
-    // Using window.location.href ensures a clean slate and no 404s
     window.location.href = '/admin/login'; 
   };
 
@@ -74,7 +78,7 @@ export default function AdminSidebar() {
         </h2>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {activeMenu.map((item) => {
           const isActive = router.pathname === item.path;
           return (
