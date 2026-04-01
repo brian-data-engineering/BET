@@ -1,30 +1,32 @@
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
 import AdminSidebar from './AdminSidebar';
-import OperatorSidebar from './OperatorSidebar'; // You'll create this next
 
 export default function AdminLayout({ children }) {
-  const [role, setRole] = useState(null);
+  const [authorized, setAuthorized] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
-    const getUserRole = async () => {
+    const checkAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      // Check metadata badge first (fastest)
-      const userRole = user?.app_metadata?.role || user?.user_metadata?.role;
-      setRole(userRole);
+      const role = user?.app_metadata?.role || user?.user_metadata?.role;
+
+      // Only let Admins in. Everyone else gets kicked to Admin Login.
+      if (!user || (role !== 'admin' && role !== 'super_admin')) {
+        router.push('/admin/login');
+      } else {
+        setAuthorized(true);
+      }
     };
-    getUserRole();
-  }, []);
+    checkAdmin();
+  }, [router]);
+
+  if (!authorized) return null; // Or your "Verifying..." spinner
 
   return (
-    <div className="flex min-h-screen bg-black text-white">
-      {/* 🚀 THE FIX: Switch sidebars based on the role */}
-      {role === 'operator' ? (
-        <OperatorSidebar /> 
-      ) : (
-        <AdminSidebar />
-      )}
-      
+    <div className="flex min-h-screen bg-[#0b0f1a] text-white font-sans">
+      <AdminSidebar />
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
