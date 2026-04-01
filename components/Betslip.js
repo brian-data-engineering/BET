@@ -37,7 +37,7 @@ export default function Betslip({ items = [], setItems }) {
     return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [potentialWinningsRaw]);
 
-  // --- UPDATED MULTIBET-AWARE BOOKING LOGIC (DOUBLE COMMA PROTOCOL) ---
+  // --- UPDATED MULTIBET-AWARE BOOKING LOGIC ---
   const handleBookBet = async () => {
     if (items.length === 0 || items.length > MAX_GAMES) return;
     
@@ -45,7 +45,7 @@ export default function Betslip({ items = [], setItems }) {
     try {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
       
-      // 1. Collect all matchIds from the slip
+      // 1. Collect all unique matchIds from the slip
       const matchIds = items.map(item => item.matchId).filter(Boolean);
       
       let countryValue = "Unknown";
@@ -53,18 +53,19 @@ export default function Betslip({ items = [], setItems }) {
 
       if (matchIds.length > 0) {
         try {
-          // 2. Fetch data for ALL matches in the slip
+          // 2. Fetch data for ALL matches in the slip at once
           const { data: eventsData } = await supabase
             .from('api_events')
             .select('country, display_league, league_name')
             .in('id', matchIds);
 
           if (eventsData && eventsData.length > 0) {
-            // 3. Extract unique names
+            // 3. Remove duplicates using Set
             const countries = [...new Set(eventsData.map(e => e.country).filter(Boolean))];
             const leagues = [...new Set(eventsData.map(e => e.display_league || e.league_name).filter(Boolean))];
 
-            // 4. JOIN WITH DOUBLE COMMAS (Hard-break for Python mapping script)
+            // 4. IMPLEMENT DOUBLE COMMA JOIN
+            // This prevents "League, Women" from being split incorrectly in Python
             countryValue = countries.length > 0 ? countries.join(', , ') : "Unknown";
             leagueValue = leagues.length > 0 ? leagues.join(', , ') : "Unknown League";
           }
