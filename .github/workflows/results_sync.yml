@@ -2,27 +2,26 @@ name: Lucra Results Sync
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Runs every 30 minutes
-  workflow_dispatch:
+    - cron: '*/30 * * * *' # Every 30 mins
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
       - name: Install dependencies
-        run: |
-          pip install supabase requests
+        run: pip install supabase requests
 
       - name: Run results sync
         env:
-          # Map Secrets to the names used in sync_results.py
+          # VITAL: This connects GitHub Secrets to Script variables
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           API_KEY: ${{ secrets.ODDS_API_KEY }} 
