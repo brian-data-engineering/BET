@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
-import { Monitor, Loader2, Send, RefreshCw, Database } from 'lucide-react';
+import { Monitor, Loader2, Send, Database } from 'lucide-react';
 
 export default function ManageStaff() {
   const [staff, setStaff] = useState([]);
@@ -9,46 +9,40 @@ export default function ManageStaff() {
   const [fetching, setFetching] = useState(true);
   const [processingId, setProcessingId] = useState(null);
 
-  const fetchLedgerData = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    setFetching(true);
 
-    // 1. Get Profiles
     const [pRes, sRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('profiles').select('*').eq('parent_id', user.id).eq('role', 'cashier').order('username', { ascending: true })
+      supabase.from('profiles')
+        .select('*')
+        .eq('parent_id', user.id)
+        .eq('role', 'cashier')
+        .order('username', { ascending: true })
     ]);
 
-    // 2. Compute Ledger Balances (The Source of Truth)
-    const userIds = [user.id, ...(sRes.data?.map(s => s.id) || [])];
-    const { data: ledgerRows } = await supabase
-      .from('ledger')
-      .select('user_id, type, amount')
-      .in('user_id', userIds);
-
-    const getBalance = (uid) => {
-      return (ledgerRows || [])
-        .filter(row => row.user_id === uid)
-        .reduce((acc, row) => row.type === 'credit' ? acc + Number(row.amount) : acc - Number(row.amount), 0);
-    };
-
-    if (pRes.data) {
-      setOperatorProfile({ ...pRes.data, balance: getBalance(user.id) });
-    }
-
-    if (sRes.data) {
-      setStaff(sRes.data.map(s => ({ ...s, balance: getBalance(s.id) })));
-    }
+    if (pRes.data) setOperatorProfile(pRes.data);
+    if (sRes.data) setStaff(sRes.data);
     
     setFetching(false);
   }, []);
 
-  useEffect(() => { fetchLedgerData(); }, [fetchLedgerData]);
+  useEffect(() => { 
+    fetchData();
+    
+    // Subscribe to any profile changes in this hierarchy
+    const channel = supabase
+      .channel('staff-mgmt-sync')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
 
   const handleDispatch = async (id, name) => {
     if (processingId) return;
-    const val = prompt(`Confirm Ledger Dispatch to ${name.toUpperCase()}:`);
+    const val = prompt(`Enter KES amount to dispatch to ${name.toUpperCase()}:`);
     if (!val) return;
 
     const amount = Math.trunc(Number(val));
@@ -62,8 +56,8 @@ export default function ManageStaff() {
         p_amount: amount
       });
 
-      if (error) alert(`Vault Rejection: ${error.message}`);
-      else await fetchLedgerData(); // Refresh ledger sums
+      if (error) alert(`Dispatch Rejection: ${error.message}`);
+      // fetchData() is triggered automatically by the Realtime listener above
     } catch (err) {
       console.error(err);
     } finally {
@@ -75,29 +69,28 @@ export default function ManageStaff() {
     <OperatorLayout profile={operatorProfile}>
       <div className="p-8 space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* LEDGER STATUS HEADER */}
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
             <div className="flex items-center gap-2 text-blue-500 font-black uppercase text-[10px] italic mb-1 tracking-widest">
-              <Database size={12} /> Ledger-Verified State
+              <Database size={12} /> Network Integrity
             </div>
             <h1 className="text-5xl font-black uppercase italic tracking-tighter">Terminal Nodes</h1>
           </div>
           <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5 shadow-2xl">
-            <span className="text-[9px] font-black text-slate-500 uppercase italic block mb-1">Total System Float</span>
-            <span className="text-3xl font-black text-[#10b981] italic">
-              KES {Math.floor(staff.reduce((acc, s) => acc + (s.balance || 0), 0)).toLocaleString()}
+            <span className="text-[9px] font-black text-slate-500 uppercase italic block mb-1">Active Network Float</span>
+            <span className="text-3xl font-black text-[#10b981] italic tracking-tighter">
+              KES {parseFloat(staff.reduce((acc, s) => acc + (s.balance || 0), 0)).toLocaleString()}
             </span>
           </div>
         </div>
 
-        <div className="lg:col-span-12 bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+        <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
           <table className="w-full text-left">
             <thead className="bg-black/20 text-[9px] font-black uppercase text-slate-600 italic tracking-widest">
               <tr>
                 <th className="p-10">Node ID</th>
-                <th className="p-10 text-center">Computed Balance</th>
-                <th className="p-10 text-right">Liquidity Dispatch</th>
+                <th className="p-10 text-center">Current Liquidity</th>
+                <th className="p-10 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -110,7 +103,7 @@ export default function ManageStaff() {
                     </div>
                   </td>
                   <td className="p-10 text-center font-black italic text-[#10b981] text-2xl">
-                    KES {Math.floor(s.balance || 0).toLocaleString()}
+                    KES {parseFloat(s.balance || 0).toLocaleString()}
                   </td>
                   <td className="p-10 text-right">
                     <button 
@@ -122,7 +115,7 @@ export default function ManageStaff() {
                         <Loader2 className="animate-spin" />
                       ) : (
                         <div className="flex items-center gap-2">
-                           DISPATCH <Send size={14} className="group-hover:translate-x-1 transition-transform" />
+                          DISPATCH <Send size={14} className="group-hover:translate-x-1 transition-transform" />
                         </div>
                       )}
                     </button>
