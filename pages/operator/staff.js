@@ -40,9 +40,10 @@ export default function ManageStaff() {
   }, [fetchStaffWithStats]);
 
   const quickFund = async (id, name) => {
-    const val = prompt(`Send Float to ${name.toUpperCase()}:`);
+    const val = prompt(`Liquidity Volume for ${name.toUpperCase()}:`);
     if (!val || isNaN(val) || parseFloat(val) <= 0) return;
 
+    // Force whole number math
     const cleanAmount = Math.floor(parseFloat(val));
 
     const { error } = await supabase.rpc('transfer_credits', {
@@ -51,9 +52,10 @@ export default function ManageStaff() {
       p_amount: cleanAmount
     });
 
-    if (error) alert("Transfer Protocol Failed: " + error.message);
+    if (error) alert("Transfer Failed: " + error.message);
     else {
-      setTimeout(() => fetchStaffWithStats(operatorId), 400);
+      // Small timeout ensures DB lock is released before UI re-fetches
+      setTimeout(() => fetchStaffWithStats(operatorId), 500);
     }
   };
 
@@ -66,7 +68,7 @@ export default function ManageStaff() {
       target_username: form.username, 
       op_id: operatorId 
     });
-    if (error) alert("Deployment Error: " + error.message);
+    if (error) alert(error.message);
     else { setForm({ email: '', password: '', username: '' }); fetchStaffWithStats(operatorId); }
     setLoading(false);
   };
@@ -77,12 +79,12 @@ export default function ManageStaff() {
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
             <div className="flex items-center gap-2 text-blue-500 font-black uppercase text-[10px] italic tracking-widest mb-1">
-              <RefreshCw size={12} className={fetching ? 'animate-spin' : ''} /> Network Control
+              <RefreshCw size={12} className={fetching ? 'animate-spin' : ''} /> Control Panel
             </div>
             <h1 className="text-5xl font-black uppercase italic tracking-tighter">Terminal Nodes</h1>
           </div>
           <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5 shadow-2xl">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic block mb-1">Total Terminal Liquidity</span>
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic block mb-1">Cumulative Float</span>
             <span className="text-3xl font-black text-[#10b981] italic">
               KES {Math.floor(staff.reduce((acc, s) => acc + parseFloat(s.balance || 0), 0)).toLocaleString()}
             </span>
@@ -106,15 +108,15 @@ export default function ManageStaff() {
             <table className="w-full text-left">
               <thead className="bg-black/20 text-[9px] font-black uppercase text-slate-600 italic tracking-widest">
                 <tr>
-                  <th className="p-10">Identity</th>
-                  <th className="p-10 text-center">Activity</th>
+                  <th className="p-10">Terminal</th>
+                  <th className="p-10 text-center">Bets</th>
                   <th className="p-10 text-center">Float</th>
                   <th className="p-10 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {staff.map(s => (
-                  <tr key={s.id} className="hover:bg-white/[0.02] transition-all">
+                  <tr key={s.id} className="hover:bg-white/[0.02] transition-all group">
                     <td className="p-10">
                       <div className="flex items-center gap-5">
                         <Monitor size={20} className="text-slate-500" />
