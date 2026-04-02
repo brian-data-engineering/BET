@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
 import { Monitor, Loader2, Send, RefreshCw } from 'lucide-react';
-import StaffList from './StaffList'; // Assuming you save the second file as StaffList.js
+import StaffList from './staff'; // Assuming you save the second file as StaffList.js
 
 export default function ManageStaff() {
   const [staff, setStaff] = useState([]);
