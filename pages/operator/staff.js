@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
-import { Monitor, PlusCircle, Ticket, Loader2, Send, RefreshCw } from 'lucide-react';
+import { Monitor, PlusCircle, Ticket, Loader2, Send, RefreshCw, ShieldCheck } from 'lucide-react';
 
 export default function ManageStaff() {
   const [staff, setStaff] = useState([]);
@@ -10,14 +10,17 @@ export default function ManageStaff() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
+  // 1. DATA ENGINE: Fetches staff and joins ticket counts from both live and settled tables
   const fetchStaffWithStats = useCallback(async (id) => {
+    if (!id) return;
     setFetching(true);
     try {
       const { data: profiles, error: pError } = await supabase
         .from('profiles')
         .select('*')
         .eq('parent_id', id)
-        .eq('role', 'cashier');
+        .eq('role', 'cashier')
+        .order('username', { ascending: true });
 
       if (pError) throw pError;
 
@@ -35,7 +38,7 @@ export default function ManageStaff() {
 
       setStaff(staffWithCounts);
     } catch (err) {
-      console.error("Staff Fetch Error:", err);
+      console.error("Critical Node Fetch Error:", err);
     } finally {
       setFetching(false);
     }
@@ -43,31 +46,28 @@ export default function ManageStaff() {
 
   useEffect(() => {
     let isMounted = true;
-    let subscription;
-
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user && isMounted) {
         setOperatorId(user.id);
         fetchStaffWithStats(user.id);
 
-        // STALENESS KILLER: Listen for balance/ticket updates across the shop
-        subscription = supabase
-          .channel('staff-realtime')
+        // REAL-TIME LISTENER: Refresh table if cashiers place bets or get funded
+        const channel = supabase
+          .channel('staff-sync')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-            fetchStaffWithStats(user.id); // Refresh when any profile changes
+            fetchStaffWithStats(user.id);
           })
           .subscribe();
+
+        return () => supabase.removeChannel(channel);
       }
     };
-
     init();
-    return () => { 
-      isMounted = false; 
-      if (subscription) supabase.removeChannel(subscription);
-    };
+    return () => { isMounted = false; };
   }, [fetchStaffWithStats]);
 
+  // 2. DEPLOYMENT: Creates a new Cashier Auth & Profile
   const handleCreateCashier = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -81,7 +81,8 @@ export default function ManageStaff() {
 
       if (error) throw error;
       setForm({ email: '', password: '', username: '' });
-      fetchStaffWithStats(operatorId);
+      await fetchStaffWithStats(operatorId);
+      alert("Terminal Node Successfully Deployed.");
     } catch (error) {
       alert("Deployment Error: " + error.message);
     } finally {
@@ -89,21 +90,27 @@ export default function ManageStaff() {
     }
   };
 
-  // QUICK FUND: Move money from Operator to Cashier
+  // 3. QUICK FUND: Refactored with 'p_' parameters for immediate balance reduction
   const quickFund = async (cashierId, cashierName) => {
-    const amount = prompt(`Enter amount to transfer to ${cashierName}:`);
-    if (!amount || isNaN(amount) || amount <= 0) return;
+    const amount = prompt(`Enter liquidity volume for ${cashierName.toUpperCase()}:`);
+    if (!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
 
+    setFetching(true); // Show activity during transfer
     try {
       const { error } = await supabase.rpc('transfer_credits', {
-        sender_id: operatorId,
-        receiver_id: cashierId,
-        amount_to_transfer: parseFloat(amount)
+        p_sender_id: operatorId,
+        p_receiver_id: cashierId,
+        p_amount: parseFloat(amount)
       });
+
       if (error) throw error;
-      fetchStaffWithStats(operatorId);
+      
+      // Force immediate UI refresh to show reduced operator balance & increased cashier balance
+      await fetchStaffWithStats(operatorId);
     } catch (err) {
-      alert("Transfer Failed: " + err.message);
+      alert("Transfer Protocol Failed: " + err.message);
+    } finally {
+      setFetching(false);
     }
   };
 
@@ -113,63 +120,61 @@ export default function ManageStaff() {
     <OperatorLayout>
       <div className="p-8 space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* Header with Visual Balance */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-white/5 pb-10">
-          <div>
-            <div className="flex items-center gap-2 mb-2 text-blue-500">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-blue-500">
               <RefreshCw size={12} className={fetching ? 'animate-spin' : ''} />
               <span className="text-[10px] font-black uppercase tracking-[0.4em] italic">Infrastructure Management</span>
             </div>
-            <h1 className="text-5xl font-black uppercase italic tracking-tighter text-white">Network Nodes</h1>
+            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Network Nodes</h1>
           </div>
 
           <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5 flex flex-col items-end shadow-2xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-24 h-24 bg-[#10b981]/5 blur-3xl rounded-full" />
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] italic mb-1 relative z-10">Consolidated Node Float</span>
-            <span className="text-3xl font-black text-[#10b981] italic tracking-tighter relative z-10">
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] italic mb-1">Consolidated Node Float</span>
+            <span className="text-3xl font-black text-[#10b981] italic tracking-tighter tabular-nums">
               KES {totalShopFloat.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* Deployment Form */}
-          <div className="lg:col-span-4 space-y-6">
+          {/* DEPLOYMENT FORM */}
+          <div className="lg:col-span-4">
              <div className="bg-[#111926] p-10 rounded-[3rem] border border-white/5 space-y-8 sticky top-8 shadow-2xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center border border-blue-500/20">
-                    <PlusCircle size={20} className="text-blue-500" />
-                  </div>
-                  <h2 className="font-black uppercase text-xs italic tracking-widest text-white">Deploy Node</h2>
+                <div className="flex items-center gap-3 border-b border-white/5 pb-6">
+                   <PlusCircle size={18} className="text-blue-500" />
+                   <h2 className="font-black uppercase text-xs italic tracking-widest">Deploy Node</h2>
                 </div>
                 
-                <form onSubmit={handleCreateCashier} className="space-y-5">
+                <form onSubmit={handleCreateCashier} className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Node Username</label>
-                    <input value={form.username} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all placeholder:text-white/5" placeholder="CASHIER_X" onChange={e => setForm({...form, username: e.target.value})} required />
+                    <input value={form.username} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all" placeholder="CASHIER_01" onChange={e => setForm({...form, username: e.target.value})} required />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Node Auth (Email)</label>
-                    <input value={form.email} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all placeholder:text-white/5" placeholder="terminal@lucra.bet" onChange={e => setForm({...form, email: e.target.value})} required />
+                    <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Auth Email</label>
+                    <input value={form.email} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all" placeholder="terminal@lucra.bet" onChange={e => setForm({...form, email: e.target.value})} required />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Access Key</label>
                     <input value={form.password} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none focus:border-blue-500 transition-all" type="password" placeholder="••••••••" onChange={e => setForm({...form, password: e.target.value})} required />
                   </div>
 
-                  <button disabled={loading} className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl hover:bg-white hover:text-black transition-all active:scale-[0.97] italic text-xs uppercase tracking-[0.2em] mt-4 shadow-xl shadow-blue-600/10">
+                  <button disabled={loading} className="w-full bg-blue-600 text-white font-black py-6 rounded-2xl hover:bg-white hover:text-black transition-all active:scale-[0.97] italic text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-600/10">
                     {loading ? <Loader2 className="animate-spin mx-auto" size={18} /> : "Initialize Terminal"}
                   </button>
                 </form>
-              </div>
+             </div>
           </div>
 
-          {/* Ledger */}
+          {/* LEDGER TABLE */}
           <div className="lg:col-span-8">
             <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
-              <div className="p-10 border-b border-white/5 bg-white/[0.01] flex justify-between items-center">
+              <div className="p-10 border-b border-white/5 bg-white/[0.01]">
                 <h2 className="font-black uppercase text-xs italic tracking-widest flex items-center gap-3">
-                   <div className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse shadow-[0_0_10px_#10b981]" />
+                   <div className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse" />
                    Live Terminal Registry
                 </h2>
               </div>
@@ -179,7 +184,7 @@ export default function ManageStaff() {
                   <thead className="bg-black/20 text-slate-600 uppercase text-[9px] font-black italic tracking-widest">
                     <tr>
                       <th className="p-10">Node Identity</th>
-                      <th className="p-10 text-center">Volume</th>
+                      <th className="p-10 text-center">Bets</th>
                       <th className="p-10 text-center">Liquidity</th>
                       <th className="p-10 text-right">Actions</th>
                     </tr>
@@ -199,32 +204,34 @@ export default function ManageStaff() {
                           </div>
                         </td>
                         <td className="p-10 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center gap-2 text-[#10b981]">
-                              <Ticket size={12} />
+                            <div className="flex items-center justify-center gap-2 text-[#10b981]">
+                              <Ticket size={14} />
                               <span className="text-base font-black italic">{s.ticketCount}</span>
                             </div>
-                            <span className="text-[8px] font-black uppercase opacity-20 italic tracking-widest">Tickets</span>
-                          </div>
                         </td>
                         <td className="p-10 text-center">
                           <span className="text-lg font-black italic text-[#10b981] tabular-nums">
-                            {parseFloat(s.balance || 0).toLocaleString()}
+                            KES {parseFloat(s.balance || 0).toLocaleString()}
                           </span>
                         </td>
                         <td className="p-10 text-right">
                            <button 
                              onClick={() => quickFund(s.id, s.username)}
-                             className="bg-white/5 p-4 rounded-2xl hover:bg-[#10b981] hover:text-black transition-all border border-white/5 flex items-center gap-2 ml-auto group/btn"
+                             className="bg-white/5 p-4 px-6 rounded-2xl hover:bg-[#10b981] hover:text-black transition-all border border-white/5 flex items-center gap-2 ml-auto group/btn"
                            >
-                             <Send size={14} className="group-hover/btn:scale-110 transition-transform" />
-                             <span className="text-[10px] font-black uppercase italic">Fund</span>
+                             <Send size={14} />
+                             <span className="text-[10px] font-black uppercase italic">Fund Node</span>
                            </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {staff.length === 0 && !fetching && (
+                   <div className="p-20 text-center text-slate-700 font-black uppercase italic text-xs tracking-widest">
+                      Zero Active Terminal Nodes Found
+                   </div>
+                )}
               </div>
             </div>
           </div>
