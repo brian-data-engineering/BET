@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
-import { Lock, UserCheck, AlertCircle } from 'lucide-react';
+import { Lock, UserCheck, AlertCircle, Zap, ShieldAlert } from 'lucide-react';
 
 export default function OperatorLogin() {
   const [email, setEmail] = useState('');
@@ -15,72 +15,76 @@ export default function OperatorLogin() {
     setLoading(true);
     setErrorMsg(null);
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      // 1. Initial Auth Check
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (authError) {
-      setErrorMsg(authError.message);
+      if (authError) throw authError;
+
+      // 2. Immediate Role Verification (The "Anti-Sneak" Guard)
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', authData.user.id)
+        .single();
+
+      const allowedRoles = ['operator', 'cashier', 'admin', 'super_admin'];
+      
+      if (profileError || !allowedRoles.includes(profile?.role)) {
+        // KILL SESSION IMMEDIATELY if role is wrong
+        await supabase.auth.signOut();
+        throw new Error("ACCESS DENIED: Credentials lack Operator clearance.");
+      }
+
+      // SUCCESS: Route to the encrypted dashboard
+      router.push('/operator/dashboard');
+    } catch (err) {
+      setErrorMsg(err.message);
       setLoading(false);
-      return;
     }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', authData.user.id)
-      .single();
-
-    if (profileError || !['operator', 'cashier', 'admin', 'super_admin'].includes(profile?.role)) {
-      await supabase.auth.signOut();
-      setErrorMsg("Access Denied: Operator Clearance Required.");
-      setLoading(false);
-      return;
-    }
-
-    // SUCCESS: Send to the Operator Dashboard
-    router.push('/operator/dashboard');
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex items-center justify-center p-6 font-sans">
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-[2.5rem] p-10 shadow-xl relative overflow-hidden">
+    <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center p-6 font-sans relative overflow-hidden">
+      {/* Background Ambience */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#10b981]/5 blur-[120px] rounded-full pointer-events-none" />
+      
+      <div className="w-full max-w-md bg-[#111926] border border-white/5 rounded-[3rem] p-12 shadow-2xl relative z-10">
         
-        {/* Subtle background glow - Blue for Operator */}
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-blue-500/5 blur-[80px] rounded-full" />
-        
-        <form onSubmit={handleLogin} className="relative z-10 space-y-6">
-          <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
-              <UserCheck className="text-blue-600" size={32} />
+        <form onSubmit={handleLogin} className="space-y-8">
+          <div className="text-center space-y-3">
+            <div className="w-20 h-20 bg-[#10b981]/10 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-[#10b981]/20 shadow-lg shadow-[#10b981]/5">
+              <Zap className="text-[#10b981]" size={40} />
             </div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter italic text-slate-900">Operator Desk</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Staff Identity Required</p>
+            <h1 className="text-4xl font-black uppercase tracking-tighter italic text-white">Lucra<span className="text-[#10b981]">Node</span></h1>
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.4em] italic">Operator Terminal Access</p>
           </div>
 
           {errorMsg && (
-            <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-center gap-3">
-              <AlertCircle className="text-red-500 shrink-0" size={18} />
-              <p className="text-xs font-bold text-red-600 leading-tight">{errorMsg}</p>
+            <div className="bg-red-500/10 border border-red-500/20 p-5 rounded-2xl flex items-center gap-4 animate-shake">
+              <ShieldAlert className="text-red-500 shrink-0" size={20} />
+              <p className="text-[11px] font-black uppercase italic text-red-500 leading-tight tracking-wider">{errorMsg}</p>
             </div>
           )}
 
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 font-black uppercase ml-1 italic">Staff Email</label>
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 italic tracking-widest">Node Identity (Email)</label>
               <input 
                 type="email" 
-                placeholder="staff@lucra.bet" 
-                className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all text-sm font-medium text-slate-900 placeholder:text-slate-300" 
+                placeholder="staff_auth@lucra.bet" 
+                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold text-white placeholder:text-white/10" 
                 onChange={e => setEmail(e.target.value)} 
                 required
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 font-black uppercase ml-1 italic">Access Key</label>
+            <div className="space-y-2">
+              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 italic tracking-widest">Encryption Key (Password)</label>
               <input 
                 type="password" 
-                placeholder="••••••••" 
-                className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all text-sm font-medium text-slate-900 placeholder:text-slate-300" 
+                placeholder="••••••••••••" 
+                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold text-white placeholder:text-white/10" 
                 onChange={e => setPassword(e.target.value)} 
                 required
               />
@@ -89,18 +93,25 @@ export default function OperatorLogin() {
 
           <button 
             disabled={loading} 
-            className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl hover:bg-blue-600 transition-all active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 italic uppercase"
+            className="w-full bg-[#10b981] text-black font-black py-6 rounded-2xl hover:bg-white transition-all active:scale-[0.98] shadow-xl shadow-[#10b981]/10 flex items-center justify-center gap-3 italic uppercase text-xs tracking-[0.2em]"
           >
             {loading ? (
-              <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
             ) : (
               <>
-                <Lock size={18} className="fill-current" />
-                Open Terminal
+                <Lock size={16} />
+                Initialize Session
               </>
             )}
           </button>
         </form>
+      </div>
+
+      {/* Security Footer */}
+      <div className="absolute bottom-10 text-center w-full">
+        <p className="text-[8px] text-slate-600 font-black uppercase tracking-[0.5em] italic">
+          Authorized Personnel Only // Encrypted by Lucra Core v2.0
+        </p>
       </div>
     </div>
   );
