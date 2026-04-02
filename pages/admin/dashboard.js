@@ -7,7 +7,6 @@ import {
   Wallet, 
   TrendingUp, 
   Activity, 
-  PlusCircle, 
   ShieldCheck 
 } from 'lucide-react';
 
@@ -21,7 +20,7 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
-    // Return early if profile is null (Prevents errors)
+    // Only run data fetching if the profile has actually loaded
     if (!profile?.id) return;
 
     const fetchLiveStats = async () => {
@@ -69,8 +68,20 @@ export default function AdminDashboard() {
     return () => { supabase.removeChannel(betSub); };
   }, [profile]);
 
-  // Vercel Build Protection: If no profile, don't even try to render the HTML
-  if (!profile) return null;
+  // VERCEL & BLANK SCREEN FIX:
+  // Instead of returning null, we render the Layout with a tiny loading indicator inside.
+  // This keeps the sidebar visible while the profile context hydrates.
+  if (!profile) {
+    return (
+      <AdminLayout>
+        <div className="h-screen flex items-center justify-center bg-[#0b0f1a]">
+          <div className="text-[10px] font-black text-slate-800 uppercase tracking-[0.4em] animate-pulse italic">
+            Connecting to Lucra Node...
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -131,6 +142,11 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   ))}
+                  {stats.recentBets.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="p-10 text-center text-slate-600 uppercase text-[10px] font-bold italic tracking-widest">No active transmissions</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
