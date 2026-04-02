@@ -18,51 +18,41 @@ export default function OperatorSidebar() {
   const [profile, setProfile] = useState({ id: null, username: 'Loading...', balance: 0, role: '' });
 
   useEffect(() => {
-    const fetchFreshProfile = async () => {
+    const initSidebar = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Fetch from 'profiles' table
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, username, balance, role')
-          .eq('id', user.id)
-          .single();
+      if (!user) return;
 
-        if (!error && data) {
-          setProfile(data);
-        }
-      }
+      // Initial Fetch
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, balance, role')
+        .eq('id', user.id)
+        .single();
+
+      if (!error && data) setProfile(data);
+
+      // LIVE LEDGER SYNC
+      const channel = supabase
+        .channel(`sidebar-sync-${user.id}`)
+        .on('postgres_changes', 
+          { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'profiles',
+            filter: `id=eq.${user.id}` 
+          }, 
+          (payload) => {
+            setProfile(prev => ({ ...prev, balance: payload.new.balance }));
+          }
+        )
+        .subscribe();
+
+      return () => supabase.removeChannel(channel);
     };
 
-    fetchFreshProfile();
-
-    // LIVE REFRESH: Listens for balance updates from Treasury injections or Cashier transactions
-    const channel = supabase
-      .channel('operator-sidebar-sync')
-      .on('postgres_changes', 
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'profiles' 
-        }, 
-        (payload) => {
-          // Only update if the change belongs to the currently logged-in user
-          setProfile(prev => {
-            if (payload.new.id === prev.id) {
-              return { ...prev, balance: payload.new.balance };
-            }
-            return prev;
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    initSidebar();
   }, []);
 
-  // ROLE-BASED ACCESS CONTROL (RBAC)
   const allMenuItems = [
     { name: 'Terminal', path: '/operator/dashboard', icon: <LayoutDashboard size={18} />, roles: ['operator', 'cashier'] },
     { name: 'Staff Nodes', path: '/operator/staff', icon: <Monitor size={18} />, roles: ['operator'] },
@@ -79,7 +69,6 @@ export default function OperatorSidebar() {
 
   return (
     <div className="w-72 bg-[#0b0f1a] border-r border-white/5 flex flex-col h-screen sticky top-0 z-50 shadow-2xl">
-      {/* BRANDING & IDENTITY */}
       <div className="p-8 border-b border-white/5 space-y-6">
         <div className="flex items-center gap-3">
           <Activity size={18} className="text-[#10b981] animate-pulse" />
@@ -89,20 +78,12 @@ export default function OperatorSidebar() {
         </div>
         
         <div className="bg-[#111926] p-5 rounded-[2rem] border border-white/5 relative overflow-hidden group">
-          {/* Subtle background decoration */}
           <Database className="absolute -right-2 -bottom-2 text-white opacity-[0.02] group-hover:opacity-[0.05] transition-opacity" size={60} />
-          
           <div className="flex items-center gap-2 mb-2 relative z-10">
             <UserCircle size={12} className="text-slate-500" />
-            <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] italic">
-              {profile.role || 'Initializing'}
-            </p>
+            <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] italic">{profile.role || 'Initializing'}</p>
           </div>
-          
-          <p className="text-sm font-black text-white truncate uppercase italic tracking-tight relative z-10">
-            {profile.username}
-          </p>
-          
+          <p className="text-sm font-black text-white truncate uppercase italic tracking-tight relative z-10">{profile.username}</p>
           <div className="mt-4 pt-4 border-t border-white/5 relative z-10">
             <p className="text-[8px] text-[#10b981] font-black uppercase tracking-widest mb-1">Available Liquidity</p>
             <p className="text-xl font-black text-white italic tracking-tighter">
@@ -112,45 +93,28 @@ export default function OperatorSidebar() {
         </div>
       </div>
 
-      {/* NAVIGATION */}
       <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar">
         {filteredMenu.map((item) => {
           const isActive = router.pathname === item.path;
           return (
-            <Link 
-              key={item.name} 
-              href={item.path}
-              className={`flex items-center gap-4 px-5 py-4 rounded-2xl font-black text-[11px] uppercase italic tracking-widest transition-all group ${
-                isActive 
-                  ? 'bg-[#10b981] text-black shadow-xl shadow-[#10b981]/10' 
-                  : 'text-slate-500 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <span className={isActive ? 'text-black' : 'text-[#10b981] group-hover:text-white transition-colors'}>
-                {item.icon}
-              </span>
+            <Link key={item.name} href={item.path} className={`flex items-center gap-4 px-5 py-4 rounded-2xl font-black text-[11px] uppercase italic tracking-widest transition-all group ${isActive ? 'bg-[#10b981] text-black shadow-xl shadow-[#10b981]/10' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}>
+              <span className={isActive ? 'text-black' : 'text-[#10b981] group-hover:text-white transition-colors'}>{item.icon}</span>
               {item.name}
             </Link>
           );
         })}
       </nav>
 
-      {/* SYSTEM STATUS & FOOTER */}
       <div className="p-6 border-t border-white/5 bg-[#080b13]">
-        <div className="mb-4 px-4 py-2 flex items-center justify-between">
-           <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#10b981] shadow-[0_0_8px_#10b981]" />
-              <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest italic">Node Online</span>
-           </div>
-           <span className="text-[8px] font-black text-slate-700 uppercase tracking-widest">v2.1</span>
+        <div className="mb-4 px-4 py-2 flex items-center justify-between text-[8px] font-black uppercase tracking-widest italic">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#10b981] shadow-[0_0_8px_#10b981]" />
+            <span className="text-slate-600">Node Online</span>
+          </div>
+          <span className="text-slate-700 text-[10px]">v2.1</span>
         </div>
-
-        <button 
-          onClick={handleLogout}
-          className="flex items-center gap-4 w-full px-5 py-4 text-rose-500/80 font-black text-[10px] uppercase italic tracking-widest hover:bg-rose-500/10 rounded-2xl transition-all border border-transparent hover:border-rose-500/10 active:scale-95"
-        >
-          <LogOut size={16} />
-          Terminate Session
+        <button onClick={handleLogout} className="flex items-center gap-4 w-full px-5 py-4 text-rose-500/80 font-black text-[10px] uppercase italic tracking-widest hover:bg-rose-500/10 rounded-2xl transition-all active:scale-95">
+          <LogOut size={16} /> Terminate Session
         </button>
       </div>
     </div>
