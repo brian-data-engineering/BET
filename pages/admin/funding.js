@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { ShieldCheck, Send, UserCheck, Zap, ArrowRightLeft } from 'lucide-react';
+import { ShieldCheck, Send, UserCheck, Zap, ArrowRightLeft, History, Clock } from 'lucide-react';
 
 export default function MasterFunding() {
   const [adminProfile, setAdminProfile] = useState(null);
   const [accounts, setAccounts] = useState([]);
+  const [history, setHistory] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [amount, setAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 1. Get the current user's profile first (Matching operator.js pattern)
+  // 1. Get Admin Profile
   const getSessionAndProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -21,35 +22,29 @@ export default function MasterFunding() {
           .select('*')
           .eq('id', user.id)
           .single();
-
         if (error) throw error;
         setAdminProfile(profile);
         return profile;
       }
     } catch (err) {
-      console.error("Auth Protocol Error:", err.message);
+      console.error("Auth Error:", err.message);
     }
     return null;
   };
 
-  // 2. Fetch the target accounts
+  // 2. Fetch Target Accounts
   const fetchTargets = async (profile) => {
     const currentProfile = profile || adminProfile;
     if (!currentProfile) return;
-
     try {
       let query = supabase.from('profiles').select('id, username, balance, role, parent_id');
-
-      // Logic confirmed by your SQL results: super_admin sees operators
       if (currentProfile.role === 'super_admin') {
         query = query.eq('role', 'operator');
       } else {
         query = query.eq('role', 'cashier').eq('parent_id', currentProfile.id);
       }
-
       const { data, error } = await query.order('username', { ascending: true });
       if (error) throw error;
-      
       setAccounts(data || []);
     } catch (err) {
       console.error("Sync Error:", err.message);
@@ -58,11 +53,30 @@ export default function MasterFunding() {
     }
   };
 
+  // 3. Fetch Money Trail (Transactions)
+  const fetchHistory = async (profile) => {
+    const currentProfile = profile || adminProfile;
+    if (!currentProfile) return;
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .or(`sender_id.eq.${currentProfile.id},receiver_id.eq.${currentProfile.id}`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      setHistory(data || []);
+    } catch (err) {
+      console.error("History Error:", err.message);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       const profile = await getSessionAndProfile();
       if (profile) {
         await fetchTargets(profile);
+        await fetchHistory(profile);
       }
     };
     init();
@@ -84,9 +98,9 @@ export default function MasterFunding() {
     } else {
       setAmount('');
       setSelectedId('');
-      // Refresh both admin balance and list
       const updatedProfile = await getSessionAndProfile();
       await fetchTargets(updatedProfile);
+      await fetchHistory(updatedProfile);
       alert("SUCCESS: Liquidity Injection Confirmed.");
     }
     setIsProcessing(false);
@@ -125,7 +139,6 @@ export default function MasterFunding() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-          
           {/* FUNDING FORM */}
           <div className="lg:col-span-5 bg-[#111926] p-10 rounded-[3rem] border border-white/5 space-y-8">
             <div className="flex items-center gap-3 border-b border-white/5 pb-6">
@@ -181,7 +194,7 @@ export default function MasterFunding() {
                     <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">
                       {accounts.find(c => c.id === selectedId)?.username}
                     </h3>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest italic">
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest italic text-white/50">
                       Node Status: ACTIVE {accounts.find(c => c.id === selectedId)?.role}
                     </p>
                   </div>
@@ -189,12 +202,12 @@ export default function MasterFunding() {
                 
                 <div className="space-y-6 pt-10 border-t border-white/5">
                   <div className="flex justify-between items-center bg-[#0b0f1a] p-5 rounded-2xl border border-white/5">
-                     <span className="text-[10px] font-black uppercase text-slate-500 italic">Current Float</span>
+                     <span className="text-[10px] font-black uppercase text-slate-500 italic tracking-widest">Current Float</span>
                      <span className="text-white font-bold italic">KES {parseFloat(accounts.find(c => c.id === selectedId)?.balance).toLocaleString()}</span>
                   </div>
                   
                   <div className="space-y-2">
-                    <p className="text-[10px] text-[#10b981] font-black uppercase italic ml-1">Projected Float</p>
+                    <p className="text-[10px] text-[#10b981] font-black uppercase italic ml-1 tracking-widest">Projected Float</p>
                     <div className="flex justify-between items-center bg-[#10b981]/5 p-6 rounded-3xl border border-[#10b981]/10">
                        <p className="text-4xl font-black text-white tracking-tighter italic">
                           KES {(parseFloat(accounts.find(c => c.id === selectedId)?.balance || 0) + (parseFloat(amount) || 0)).toLocaleString()}
@@ -210,6 +223,48 @@ export default function MasterFunding() {
                 <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em] italic leading-relaxed">
                   Treasury Standby<br/>Select Target Node to Initialize Injection
                 </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RECENT MONEY TRAIL TABLE */}
+        <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+          <div className="p-8 border-b border-white/5 bg-white/[0.01] flex items-center gap-3">
+            <History size={18} className="text-[#10b981]" />
+            <h2 className="text-xs font-black uppercase italic tracking-widest">Recent Money Trail</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-[#0b0f1a]/50 text-slate-600 uppercase text-[9px] font-black tracking-widest italic">
+                <tr>
+                  <th className="p-6">Timestamp</th>
+                  <th className="p-6">Destination</th>
+                  <th className="p-6 text-right">Amount (KES)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {history.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-white/[0.02] transition-all">
+                    <td className="p-6 flex items-center gap-2 text-slate-400">
+                      <Clock size={12} />
+                      <span className="text-[10px] font-bold tracking-tighter">
+                        {new Date(tx.created_at).toLocaleTimeString()}
+                      </span>
+                    </td>
+                    <td className="p-6 font-black uppercase italic text-sm tracking-tighter">
+                      {tx.receiver_username || 'NODE_UNKNOWN'}
+                    </td>
+                    <td className="p-6 text-right text-[#10b981] font-black italic">
+                      {parseFloat(tx.amount).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {history.length === 0 && (
+              <div className="p-10 text-center text-slate-700 font-black uppercase italic text-[10px] tracking-widest">
+                No Transactions Found
               </div>
             )}
           </div>
