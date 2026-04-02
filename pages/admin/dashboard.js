@@ -12,6 +12,7 @@ import {
 
 export default function AdminDashboard() {
   const { profile } = useContext(AdminContext);
+  const [mounted, setMounted] = useState(false);
   const [stats, setStats] = useState({ 
     totalBets: 0, 
     totalVolume: 0, 
@@ -19,17 +20,23 @@ export default function AdminDashboard() {
     recentBets: [] 
   });
 
+  // 1. Handle Mounting to prevent hydration mismatch
   useEffect(() => {
-    // Only run data fetching if the profile has actually loaded
-    if (!profile?.id) return;
+    setMounted(true);
+  }, []);
+
+  // 2. Data Fetching
+  useEffect(() => {
+    if (!mounted || !profile?.id) return;
 
     const fetchLiveStats = async () => {
       try {
         const isSuper = ['admin', 'super_admin'].includes(profile?.role);
         let profilesQuery = supabase.from('profiles').select('balance', { count: 'exact' });
         
+        // Filter based on role
         if (!isSuper) {
-          profilesQuery = profilesQuery.eq('parent_id', profile.id).eq('role', 'cashier');
+          profilesQuery = profilesQuery.eq('parent_id', profile.id);
         } else {
           profilesQuery = profilesQuery.eq('role', 'operator');
         }
@@ -43,11 +50,9 @@ export default function AdminDashboard() {
             .limit(8)
         ]);
 
-        const volume = managedRes.data?.reduce((acc, c) => acc + parseFloat(c.balance || 0), 0) || 0;
-
         setStats({ 
           totalBets: betsRes.count || 0, 
-          totalVolume: volume, 
+          totalVolume: managedRes.data?.reduce((acc, c) => acc + parseFloat(c.balance || 0), 0) || 0, 
           managedAccounts: managedRes.count || 0,
           recentBets: recentRes.data || []
         });
@@ -58,20 +63,19 @@ export default function AdminDashboard() {
 
     fetchLiveStats();
 
+    // Realtime Bet Subscription
     const betSub = supabase
       .channel('dashboard-sync')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'betsnow' }, () => {
-        fetchLiveStats();
-      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'betsnow' }, () => fetchLiveStats())
       .subscribe();
 
     return () => { supabase.removeChannel(betSub); };
-  }, [profile]);
+  }, [mounted, profile]);
 
-  // VERCEL & BLANK SCREEN FIX:
-  // Instead of returning null, we render the Layout with a tiny loading indicator inside.
-  // This keeps the sidebar visible while the profile context hydrates.
-  if (!profile) {
+  // --- RENDERING LOGIC ---
+
+  // While waiting for the profile to sync in the browser
+  if (!mounted || !profile) {
     return (
       <AdminLayout>
         <div className="h-screen flex items-center justify-center bg-[#0b0f1a]">
@@ -83,9 +87,10 @@ export default function AdminDashboard() {
     );
   }
 
+  // Once profile is confirmed, show the actual UI
   return (
     <AdminLayout>
-      <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white">
+      <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
         {/* Header */}
         <div className="flex justify-between items-end">
@@ -101,7 +106,7 @@ export default function AdminDashboard() {
           <div className="bg-[#10b981]/5 px-5 py-3 rounded-2xl border border-[#10b981]/10 flex items-center gap-2">
             <div className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse" />
             <span className="text-[10px] font-black text-[#10b981] uppercase italic tracking-widest">
-              {profile?.username || 'ONLINE'}
+              {profile?.username}
             </span>
           </div>
         </div>
@@ -114,7 +119,7 @@ export default function AdminDashboard() {
           <StatCard title="Entities" value={stats.managedAccounts} icon={<Users />} />
         </div>
 
-        {/* Main Body */}
+        {/* Recent Transmissions Table */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           <div className="xl:col-span-2 bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
             <div className="p-8 border-b border-white/5 flex items-center gap-3 bg-white/[0.01]">
@@ -142,23 +147,18 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   ))}
-                  {stats.recentBets.length === 0 && (
-                    <tr>
-                      <td colSpan="4" className="p-10 text-center text-slate-600 uppercase text-[10px] font-bold italic tracking-widest">No active transmissions</td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="bg-gradient-to-br from-[#10b981] to-[#059669] p-8 rounded-[2.5rem] text-black h-fit shadow-xl shadow-[#10b981]/20">
+          {/* Quick Actions Side Card */}
+          <div className="bg-gradient-to-br from-[#10b981] to-[#059669] p-8 rounded-[2.5rem] text-black h-fit shadow-xl">
                <h3 className="text-xl font-black uppercase italic tracking-tighter mb-2">Provisioning</h3>
                <p className="text-[10px] font-bold uppercase mb-6 italic opacity-80 leading-relaxed">Expand your network nodes or distribute float instantly.</p>
                <button 
                  onClick={() => window.location.href = profile?.role?.includes('admin') ? '/admin/operator' : '/operator/staff'} 
-                 className="w-full bg-white text-black font-black py-4 rounded-2xl text-xs uppercase italic tracking-widest hover:shadow-2xl active:scale-95 transition-all"
+                 className="w-full bg-white text-black font-black py-4 rounded-2xl text-xs uppercase italic tracking-widest hover:shadow-2xl transition-all"
                >
                  {profile?.role?.includes('admin') ? 'Manage Operators' : 'Manage Cashiers'}
                </button>
@@ -172,7 +172,7 @@ export default function AdminDashboard() {
 function StatCard({ title, value, icon, isMoney, color = "text-white" }) {
   return (
     <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group">
-      <div className="absolute -top-4 -right-4 p-8 text-white opacity-[0.03] group-hover:opacity-[0.08] transition-opacity scale-150 rotate-12">{icon}</div>
+      <div className="absolute -top-4 -right-4 p-8 text-white opacity-[0.03] scale-150 rotate-12">{icon}</div>
       <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.2em] mb-3 italic">{title}</p>
       <p className={`text-3xl font-black tracking-tighter italic ${color}`}>
         {isMoney && <span className="text-sm mr-2 opacity-30 not-italic font-bold">KES</span>}
