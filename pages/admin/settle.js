@@ -25,7 +25,6 @@ export default function SettlementPage() {
   const fetchPendingTickets = async () => {
     setLoading(true);
     try {
-      // 1. Fetch raw tickets without the 'cashier' join to avoid relationship errors
       const { data, error } = await supabase
         .from('betsnow')
         .select('*')
@@ -34,10 +33,8 @@ export default function SettlementPage() {
 
       if (error) throw error;
 
-      // 2. Map through tickets and fetch match results for each
       const ticketsWithResults = await Promise.all((data || []).map(async (ticket) => {
         const matchIds = ticket.selections?.map(s => s.matchId) || [];
-        
         const { data: results } = await supabase
           .from('soccer_results')
           .select('*')
@@ -46,7 +43,6 @@ export default function SettlementPage() {
         return { 
           ...ticket, 
           available_results: results || [],
-          // Fallback for cashier name since we removed the join
           display_cashier: ticket.cashier_id ? `ID: ${ticket.cashier_id.substring(0, 5)}` : 'System'
         };
       }));
@@ -61,7 +57,6 @@ export default function SettlementPage() {
 
   const checkLegStatus = (selection, result) => {
     if (!result) return 'PENDING';
-    
     const h = result.home_score;
     const a = result.away_score;
     const hp1 = result.home_p1_score;
@@ -90,9 +85,7 @@ export default function SettlementPage() {
   const handleSettle = async (ticket, finalStatus) => {
     if (processingId) return;
     setProcessingId(ticket.id);
-    
     try {
-      // 1. Log the settlement
       await supabase.from('settlement_logs').insert({
         ticket_id: ticket.id,
         ticket_serial: ticket.ticket_serial,
@@ -101,7 +94,6 @@ export default function SettlementPage() {
         settlement_data: { selections: ticket.selections }
       });
 
-      // 2. Update ticket status
       const { error } = await supabase
         .from('betsnow')
         .update({ 
@@ -129,7 +121,6 @@ export default function SettlementPage() {
   return (
     <AdminLayout>
       <div className="p-8 bg-[#0b0f1a] min-h-screen text-white space-y-8">
-        
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -138,13 +129,12 @@ export default function SettlementPage() {
             </div>
             <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Lucra Settlement</h1>
           </div>
-
           <div className="relative w-full md:w-80">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
             <input 
               type="text"
               placeholder="SEARCH SERIAL OR TEAM..."
-              className="w-full bg-[#111926] border border-white/5 rounded-2xl py-3 pl-12 pr-4 text-xs font-bold uppercase italic focus:border-[#f59e0b] outline-none transition-all placeholder:opacity-20"
+              className="w-full bg-[#111926] border border-white/5 rounded-2xl py-3 pl-12 pr-4 text-xs font-bold uppercase italic focus:border-[#f59e0b] outline-none"
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
@@ -165,9 +155,8 @@ export default function SettlementPage() {
               const isLost = ticketEvaluation.some(l => l.status === 'LOST');
 
               return (
-                <div key={ticket.id} className="bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden transition-all hover:border-white/10">
+                <div key={ticket.id} className="bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden">
                   <div className="p-6 flex flex-col lg:flex-row gap-8">
-                    
                     <div className="min-w-[200px] space-y-2">
                       <div className="flex items-center gap-2">
                         <Hash size={12} className="text-slate-500" />
@@ -184,4 +173,51 @@ export default function SettlementPage() {
                       {ticketEvaluation.map((sel, idx) => (
                         <div key={idx} className="flex items-center justify-between bg-[#0b0f1a] p-3 rounded-2xl border border-white/[0.03]">
                           <div className="max-w-[70%]">
-                            <span className="text-
+                            <span className="text-[9px] font-black text-slate-600 uppercase block leading-none mb-1">{sel.marketName}</span>
+                            <span className="text-xs font-bold italic truncate block">{sel.matchName}</span>
+                            <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-[#f59e0b] mt-1 inline-block">Pick: {sel.selection}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {sel.status === 'WON' && <CheckCircle2 size={18} className="text-[#10b981]" />}
+                            {sel.status === 'LOST' && <XCircle size={18} className="text-red-500" />}
+                            {sel.status === 'PENDING' && <Clock size={18} className="text-slate-700" />}
+                            <span className={`text-[10px] font-black uppercase italic ${sel.status === 'WON' ? 'text-[#10b981]' : sel.status === 'LOST' ? 'text-red-500' : 'text-slate-700'}`}>{sel.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col justify-center gap-3 min-w-[160px]">
+                      {canSettleWon ? (
+                        <button 
+                          onClick={() => handleSettle(ticket, 'won')}
+                          disabled={processingId === ticket.id}
+                          className="w-full bg-[#10b981] text-[#0b0f1a] py-4 rounded-2xl font-black uppercase italic text-xs shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                        >
+                          {processingId === ticket.id ? 'PAYING...' : 'APPROVE PAYOUT'}
+                        </button>
+                      ) : isLost ? (
+                        <button 
+                          onClick={() => handleSettle(ticket, 'lost')}
+                          disabled={processingId === ticket.id}
+                          className="w-full bg-red-500/10 text-red-500 border border-red-500/20 py-4 rounded-2xl font-black uppercase italic text-xs"
+                        >
+                          MARK AS LOST
+                        </button>
+                      ) : (
+                        <div className="text-center p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                          <AlertCircle size={20} className="mx-auto text-slate-700 mb-2" />
+                          <span className="text-[9px] font-black text-slate-600 uppercase">Awaiting Results</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </AdminLayout>
+  );
+}
