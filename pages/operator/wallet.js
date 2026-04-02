@@ -1,139 +1,173 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
-import { Monitor, Loader2, Send, RefreshCw } from 'lucide-react';
-import StaffList from './staff'; 
+import { ArrowDownRight, Loader2, Send } from 'lucide-react';
 
-export default function ManageStaff() {
-  const [staff, setStaff] = useState([]);
-  const [operatorProfile, setOperatorProfile] = useState(null); // Added this
-  const [operatorId, setOperatorId] = useState(null);
-  const [form, setForm] = useState({ email: '', password: '', username: '' });
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
-  const [processingId, setProcessingId] = useState(null);
+export default function ShopWallet() {
+  const [amount, setAmount] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [cashiers, setCashiers] = useState([]);
+  const [operatorProfile, setOperatorProfile] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async (id) => {
-    if (!id) return;
-    setFetching(true);
-    
-    // 1. Fetch Operator's own balance for the Layout/Wallet
-    const { data: opData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (opData) setOperatorProfile(opData);
+  const syncData = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-    // 2. Fetch Staff
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('parent_id', id)
-      .eq('role', 'cashier')
-      .order('username', { ascending: true });
-    
-    if (profiles) {
-      const enriched = await Promise.all(profiles.map(async (c) => {
-        const [n, s] = await Promise.all([
-          supabase.from('betsnow').select('id', { count: 'exact', head: true }).eq('cashier_id', c.id),
-          supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('cashier_id', c.id)
-        ]);
-        return { ...c, ticketCount: (n.count || 0) + (s.count || 0) };
-      }));
-      setStaff(enriched);
-    }
-    setFetching(false);
+    // fresh pull of the "Truth"
+    const [pRes, cRes, tRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', user.id).single(),
+      supabase.from('profiles').select('*').eq('role', 'cashier').eq('parent_id', user.id).order('username', { ascending: true }),
+      // Note the alias 'receiver' must match what we use in the JSX below
+      supabase.from('transactions')
+        .select('*, receiver:profiles!transactions_receiver_id_fkey(username)')
+        .eq('sender_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
+    ]);
+
+    if (pRes.data) setOperatorProfile(pRes.data);
+    if (cRes.data) setCashiers(cRes.data || []);
+    if (tRes.data) setTransactions(tRes.data || []);
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) { 
-        setOperatorId(user.id); 
-        fetchData(user.id); 
-      }
-    };
-    init();
-  }, [fetchData]);
+  useEffect(() => { syncData(); }, [syncData]);
 
-  const handleQuickFund = async (id, name) => {
-    if (processingId) return;
-    const val = prompt(`Send Whole Number Amount to ${name.toUpperCase()}:`);
-    if (val === null) return; 
+  const handleTransfer = async () => {
+    const cleanAmount = Math.trunc(Number(amount));
+    if (!targetId || !cleanAmount || cleanAmount <= 0) return;
 
-    const cleanAmount = Math.trunc(Number(val));
-    if (!cleanAmount || cleanAmount <= 0) return;
-
-    setProcessingId(id); 
+    setIsProcessing(true); // LOCK THE UI
     try {
       const { error } = await supabase.rpc('transfer_credits', {
-        p_sender_id: operatorId,
-        p_receiver_id: id,
+        p_sender_id: operatorProfile.id,
+        p_receiver_id: targetId,
         p_amount: cleanAmount
       });
-      if (error) alert(error.message);
-      else await fetchData(operatorId);
+
+      if (error) throw error;
+
+      // Reset local inputs immediately
+      setAmount('');
+      setTargetId('');
+
+      // Refresh everything from DB
+      await syncData(); 
+      
     } catch (err) {
-      console.error(err);
+      alert("Transfer Failed: " + err.message);
+      await syncData(); // Sync anyway to see current state
     } finally {
-      setProcessingId(null); 
+      setIsProcessing(false); // UNLOCK
     }
   };
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.rpc('admin_create_cashier', { 
-      target_email: form.email, 
-      target_password: form.password, 
-      target_username: form.username, 
-      op_id: operatorId 
-    });
-    if (error) alert(error.message);
-    else { 
-      setForm({ email: '', password: '', username: '' }); 
-      await fetchData(operatorId); 
-    }
-    setLoading(false);
-  };
+  if (loading) return (
+    <div className="h-screen bg-[#0b0f1a] flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#10b981]" />
+    </div>
+  );
 
   return (
-    <OperatorLayout profile={operatorProfile}> 
-      <div className="p-8 space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
+    <OperatorLayout profile={operatorProfile}>
+      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
+        
+        {/* Header / Vault Display */}
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
-            <div className="flex items-center gap-2 text-blue-500 font-black uppercase text-[10px] italic mb-1">
-              <RefreshCw size={12} className={fetching ? 'animate-spin' : ''} /> System Sync
-            </div>
-            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Terminal Nodes</h1>
+            <h1 className="text-6xl font-black uppercase italic tracking-tighter">Liquidity Hub</h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em] mt-2 italic">
+                Node: {operatorProfile?.username}
+            </p>
           </div>
-          <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5 shadow-2xl">
-            <span className="text-[9px] font-black text-slate-500 uppercase italic block mb-1">Network Float</span>
-            <span className="text-3xl font-black text-[#10b981] italic">
-              KES {Math.floor(staff.reduce((acc, s) => acc + Number(s.balance || 0), 0)).toLocaleString()}
+          <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 shadow-2xl">
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic block mb-1">True Vault Balance</span>
+            <span className="text-4xl font-black text-[#10b981] italic tracking-tighter">
+              KES {Math.floor(operatorProfile?.balance || 0).toLocaleString()}
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-4 bg-[#111926] p-10 rounded-[3rem] border border-white/5 h-fit shadow-2xl">
-            <h2 className="text-xs font-black uppercase italic mb-8">Deploy Node</h2>
-            <form onSubmit={handleCreate} className="space-y-5">
-              <input value={form.username} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white" placeholder="USERNAME" onChange={e => setForm({...form, username: e.target.value})} required />
-              <input value={form.email} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white" placeholder="EMAIL" onChange={e => setForm({...form, email: e.target.value})} required />
-              <input value={form.password} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white" type="password" placeholder="PASSWORD" onChange={e => setForm({...form, password: e.target.value})} required />
-              <button disabled={loading} className="w-full bg-blue-600 py-6 rounded-2xl font-black text-xs uppercase italic tracking-widest hover:bg-white hover:text-black transition-all">
-                {loading ? <Loader2 className="animate-spin mx-auto" /> : "Deploy Node"}
-              </button>
-            </form>
+          {/* Transfer Form */}
+          <div className={`lg:col-span-7 bg-[#111926] p-12 rounded-[3rem] border border-white/5 space-y-10 shadow-2xl transition-all ${isProcessing ? 'opacity-50 pointer-events-none grayscale' : 'opacity-100'}`}>
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Target Terminal</label>
+                <select 
+                  className="w-full bg-[#0b0f1a] p-6 rounded-2xl border border-white/10 text-white font-bold outline-none focus:border-[#10b981]" 
+                  value={targetId} 
+                  onChange={e => setTargetId(e.target.value)}
+                >
+                  <option value="">Choose Node...</option>
+                  {cashiers.map(c => (
+                    <option key={c.id} value={c.id}>
+                        {c.username.toUpperCase()} (FLOAT: {Math.floor(c.balance).toLocaleString()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Transfer Volume</label>
+                <input 
+                    type="number" 
+                    className="w-full bg-[#0b0f1a] p-8 rounded-2xl border border-white/10 text-5xl font-black text-[#10b981] outline-none placeholder:text-white/5" 
+                    placeholder="0" 
+                    value={amount} 
+                    onChange={e => setAmount(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <button 
+                onClick={handleTransfer} 
+                disabled={isProcessing || !targetId || !amount} 
+                className="w-full bg-[#10b981] text-black font-black py-7 rounded-2xl hover:bg-white active:scale-95 transition-all italic text-xs uppercase tracking-[0.3em] shadow-xl flex items-center justify-center gap-3"
+            >
+              {isProcessing ? (
+                <><Loader2 className="animate-spin" size={18} /> Syncing Vault...</>
+              ) : (
+                <><Send size={16} /> Authorize Dispatch</>
+              )}
+            </button>
           </div>
 
-          <StaffList 
-            staff={staff} 
-            onSelectStaff={handleQuickFund} 
-            processingId={processingId} 
-          />
+          {/* Audit Trail */}
+          <div className="lg:col-span-5 bg-[#111926] p-10 rounded-[3rem] border border-white/5 shadow-2xl space-y-6 overflow-hidden">
+            <h2 className="text-[10px] font-black uppercase text-slate-500 italic tracking-widest flex items-center gap-2">
+                Recent Audit Trail
+            </h2>
+            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              {transactions.length === 0 ? (
+                <p className="text-center py-10 text-slate-600 text-[10px] uppercase font-bold italic">No recent activity</p>
+              ) : (
+                transactions.map(tx => (
+                  <div key={tx.id} className="flex justify-between items-center p-5 bg-[#0b0f1a] rounded-2xl border border-white/5">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-[#10b981]/5 rounded-xl text-[#10b981]">
+                        <ArrowDownRight size={16} />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black uppercase italic text-white/70 block">
+                            {tx.receiver?.username || 'System Node'}
+                        </span>
+                        <span className="text-[8px] text-slate-600 font-bold uppercase">
+                            {new Date(tx.created_at).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-sm font-black italic text-[#10b981]">
+                        KES {Math.floor(tx.amount).toLocaleString()}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </OperatorLayout>
