@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import Betslip from '../../components/cashier/BetSlip'; // Matches your BetSlip.js
-import PrintableTicket from '../../components/cashier/PrintableTicket'; // Matches your PrintableTicket.js
+import Betslip from '../../components/cashier/BetSlip'; 
+import PrintableTicket from '../../components/cashier/PrintableTicket'; 
 import { Loader2, RefreshCw, Zap } from 'lucide-react';
 
 export default function CashierDashboard() {
@@ -16,11 +16,9 @@ export default function CashierDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1. INITIALIZE USER & BALANCE
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
-    
     setUser(authUser);
     
     const { data: profile } = await supabase
@@ -34,14 +32,12 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // 2. LOAD TICKET LOGIC
   const handleLoadTicket = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
 
     try {
-      // Use explicit text casting in the query to ensure 1129 (number) matches "1129" (text)
       const { data: ticket, error } = await supabase
         .from('betsnow')
         .select('*')
@@ -58,14 +54,12 @@ export default function CashierDashboard() {
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
-      // If it's already paid, we just set the ticket for reprinting
       if (ticket.is_paid || ticket.ticket_serial) {
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           setTimeout(() => { window.print(); }, 500);
         }
       } else {
-        // Load into active slip for processing
         setCurrentTicket(ticket); 
         setCart(selections);
         setStake(ticket.stake?.toString() || "100");
@@ -78,38 +72,36 @@ export default function CashierDashboard() {
     }
   };
 
-  // 3. PAYMENT LOGIC
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     if (!numStake || numStake <= 0) return alert("Enter stake");
     if (numStake > cashierBalance) return alert("⚠️ INSUFFICIENT FLOAT");
-    if (!user) return alert("Session expired. Please refresh.");
+    if (!user) return alert("Session expired.");
 
-    // Identify the code - ensure it is a string
-    const targetCode = (currentTicket?.booking_code || cart[0]?.booking_code || searchQuery).toString();
-    if (!targetCode) return alert("No booking code found to process.");
+    const targetCode = currentTicket?.booking_code || searchQuery;
+    if (!targetCode) return alert("No booking code found.");
 
     setIsProcessing(true);
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
+      // CALLING THE ATOMIC RPC
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
-        p_booking_code: targetCode,
+        p_booking_code: targetCode.toString(),
         p_cashier_id: user.id,
-        p_generated_serial: newSerial
+        p_generated_serial: newSerial,
+        p_stake: numStake
       });
 
       if (rpcError) throw rpcError;
 
-      // Update state with the finalized ticket from DB
       setCurrentTicket(paidTicket);
       
-      // Allow time for state to update before triggering print dialog
       setTimeout(() => {
         window.print();
         setCart([]);
         setStake("");
-        initTerminal(); // Refresh float balance
+        initTerminal(); // Refresh local balance from DB
         setIsProcessing(false);
       }, 800);
 
@@ -122,7 +114,6 @@ export default function CashierDashboard() {
   return (
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden">
-        
         {/* LEFT: SCANNER */}
         <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-xl">
@@ -191,7 +182,6 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* PRINTER (Hidden on screen, visible during window.print()) */}
       <div className="hidden print:block">
         <PrintableTicket 
           ticket={currentTicket} 
