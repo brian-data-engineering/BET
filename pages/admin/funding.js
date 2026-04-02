@@ -1,55 +1,76 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import AdminLayout, { AdminContext } from '../../components/admin/AdminLayout';
-import { ShieldCheck, Send, UserCheck, Zap, History } from 'lucide-react';
+import AdminLayout from '../../components/admin/AdminLayout';
+import { ShieldCheck, Send, UserCheck, Zap, ArrowRightLeft } from 'lucide-react';
 
 export default function MasterFunding() {
-  const { profile: adminProfile } = useContext(AdminContext);
+  const [adminProfile, setAdminProfile] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [amount, setAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const fetchTargets = async () => {
-    if (!adminProfile?.id) return;
+  // 1. Get the current user's profile first (Matching operator.js pattern)
+  const getSessionAndProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+        setAdminProfile(profile);
+        return profile;
+      }
+    } catch (err) {
+      console.error("Auth Protocol Error:", err.message);
+    }
+    return null;
+  };
+
+  // 2. Fetch the target accounts
+  const fetchTargets = async (profile) => {
+    const currentProfile = profile || adminProfile;
+    if (!currentProfile) return;
 
     try {
-      // Direct query based on your confirmed SQL results
       let query = supabase.from('profiles').select('id, username, balance, role, parent_id');
 
-      if (adminProfile.role === 'super_admin') {
+      // Logic confirmed by your SQL results: super_admin sees operators
+      if (currentProfile.role === 'super_admin') {
         query = query.eq('role', 'operator');
       } else {
-        query = query.eq('role', 'cashier').eq('parent_id', adminProfile.id);
+        query = query.eq('role', 'cashier').eq('parent_id', currentProfile.id);
       }
 
       const { data, error } = await query.order('username', { ascending: true });
       if (error) throw error;
-
-      console.table(data); // This will show your operators in the F12 console
+      
       setAccounts(data || []);
     } catch (err) {
-      console.error("Fetch failed:", err.message);
+      console.error("Sync Error:", err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTargets();
-  }, [adminProfile]);
+    const init = async () => {
+      const profile = await getSessionAndProfile();
+      if (profile) {
+        await fetchTargets(profile);
+      }
+    };
+    init();
+  }, []);
 
   const handleDispatch = async () => {
     const numAmount = parseFloat(amount);
-    const myBalance = Number(adminProfile?.balance || 0);
-
-    if (!selectedId || isNaN(numAmount) || numAmount <= 0) {
-      alert("Invalid Amount");
-      return;
-    }
-
-    if (numAmount > myBalance) {
-      alert("Insufficient Treasury Funds");
-      return;
-    }
+    if (!selectedId || !numAmount || numAmount <= 0) return;
 
     setIsProcessing(true);
     const { error } = await supabase.rpc('transfer_credits', {
@@ -59,63 +80,80 @@ export default function MasterFunding() {
     });
 
     if (error) {
-      alert("Error: " + error.message);
+      alert("Transfer Protocol Failed: " + error.message);
     } else {
       setAmount('');
       setSelectedId('');
-      fetchTargets();
-      alert("Injection Complete.");
+      // Refresh both admin balance and list
+      const updatedProfile = await getSessionAndProfile();
+      await fetchTargets(updatedProfile);
+      alert("SUCCESS: Liquidity Injection Confirmed.");
     }
     setIsProcessing(false);
   };
 
-  if (!adminProfile) return <AdminLayout><div className="h-screen bg-[#0b0f1a]" /></AdminLayout>;
+  if (!adminProfile) return (
+    <AdminLayout>
+      <div className="h-screen bg-[#0b0f1a] flex items-center justify-center">
+        <Zap className="text-[#10b981] animate-pulse" size={40} />
+      </div>
+    </AdminLayout>
+  );
 
   return (
     <AdminLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white">
+      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* TREASURY HEADER */}
-        <div className="flex justify-between items-center bg-[#111926] p-10 rounded-[2.5rem] border border-white/5 shadow-2xl">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <ShieldCheck className="text-[#10b981]" size={18} />
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Node: {adminProfile.username}</span>
+        {/* HEADER SECTION */}
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="text-[#10b981]" size={20} />
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] italic">
+                Node ID: {adminProfile.username}
+              </span>
             </div>
-            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Master Treasury</h1>
+            <h1 className="text-5xl font-black uppercase tracking-tighter italic">Treasury</h1>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-[#10b981] font-black uppercase italic mb-1">Available Float</p>
-            <p className="text-4xl font-black italic tracking-tighter">
-              KES {Number(adminProfile.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
+
+          <div className="bg-[#111926] border border-white/5 p-8 rounded-[2.5rem] min-w-[350px] shadow-2xl">
+              <p className="text-[10px] text-[#10b981] font-black uppercase italic mb-2 tracking-widest">Available Float</p>
+              <h2 className="text-4xl font-black text-white italic tracking-tighter">
+                KES {parseFloat(adminProfile.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </h2>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          {/* FORM AREA */}
-          <div className="bg-[#111926] p-10 rounded-[3rem] border border-white/5 space-y-8">
-            <div className="space-y-4">
-              <label className="text-[9px] font-black text-slate-500 uppercase italic tracking-[0.2em] ml-2">Target Node</label>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          
+          {/* FUNDING FORM */}
+          <div className="lg:col-span-5 bg-[#111926] p-10 rounded-[3rem] border border-white/5 space-y-8">
+            <div className="flex items-center gap-3 border-b border-white/5 pb-6">
+              <ArrowRightLeft size={18} className="text-[#10b981]" />
+              <h2 className="font-black uppercase text-xs italic tracking-widest">Injection Protocol</h2>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 tracking-widest italic">Target Account</label>
               <select 
-                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-2xl text-sm font-bold uppercase text-white focus:border-[#10b981] outline-none"
+                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-2xl text-sm font-bold uppercase text-white outline-none focus:border-[#10b981]"
                 value={selectedId}
                 onChange={e => setSelectedId(e.target.value)}
               >
-                <option value="">Select Account...</option>
-                {accounts.map(acc => (
-                  <option key={acc.id} value={acc.id} className="bg-[#111926]">
-                    {acc.username.toUpperCase()} (KES {Number(acc.balance).toLocaleString()})
+                <option value="">Choose Node...</option>
+                {accounts.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.username.toUpperCase()} (KES {parseFloat(c.balance).toLocaleString()})
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="space-y-4">
-              <label className="text-[9px] font-black text-slate-500 uppercase italic tracking-[0.2em] ml-2">Funding Volume (KES)</label>
+            <div className="space-y-3">
+              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 tracking-widest italic">Volume (KES)</label>
               <input 
                 type="number" 
-                className="w-full bg-[#0b0f1a] border border-white/10 p-6 rounded-2xl text-[#10b981] font-black text-4xl outline-none focus:border-[#10b981]"
+                className="w-full bg-[#0b0f1a] border border-white/10 p-6 rounded-2xl text-[#10b981] font-black text-3xl outline-none focus:border-[#10b981]"
                 placeholder="0.00"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
@@ -124,41 +162,54 @@ export default function MasterFunding() {
 
             <button 
               onClick={handleDispatch}
-              disabled={isProcessing || !selectedId || !amount}
-              className="w-full bg-[#10b981] text-black font-black py-6 rounded-2xl hover:bg-white transition-all disabled:opacity-20 uppercase italic tracking-widest shadow-lg shadow-[#10b981]/5"
+              disabled={isProcessing || !amount || !selectedId}
+              className="w-full bg-[#10b981] hover:bg-white text-black font-black py-6 rounded-2xl flex items-center justify-center gap-4 transition-all disabled:opacity-10 uppercase italic text-sm tracking-widest shadow-xl shadow-[#10b981]/10"
             >
-              {isProcessing ? 'Authorizing...' : 'Execute Injection'}
+              {isProcessing ? 'Processing...' : 'Authorize Dispatch'}
             </button>
           </div>
 
-          {/* PREVIEW AREA */}
-          <div className="flex items-center justify-center border-2 border-dashed border-white/5 rounded-[3rem] p-12">
+          {/* PREVIEW PANEL */}
+          <div className="lg:col-span-7 flex flex-col justify-center">
             {selectedId ? (
-              <div className="text-center space-y-6 animate-in fade-in zoom-in duration-300">
-                <div className="w-24 h-24 bg-[#10b981]/10 rounded-full flex items-center justify-center mx-auto border border-[#10b981]/20">
-                  <UserCheck className="text-[#10b981]" size={40} />
+              <div className="bg-[#1c2636]/30 p-12 rounded-[3rem] border border-[#10b981]/20 space-y-8">
+                <div className="flex items-center gap-6">
+                  <div className="w-20 h-20 bg-[#10b981]/10 rounded-3xl flex items-center justify-center text-[#10b981] border border-[#10b981]/20 shadow-lg shadow-[#10b981]/10">
+                    <UserCheck size={40} />
+                  </div>
+                  <div>
+                    <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">
+                      {accounts.find(c => c.id === selectedId)?.username}
+                    </h3>
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest italic">
+                      Node Status: ACTIVE {accounts.find(c => c.id === selectedId)?.role}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-3xl font-black uppercase italic">{accounts.find(a => a.id === selectedId)?.username}</h3>
-                  <div className="flex items-center justify-center gap-4 mt-4">
-                    <div className="text-right">
-                      <p className="text-[8px] text-slate-500 font-bold uppercase">Current</p>
-                      <p className="text-sm font-bold italic">KES {Number(accounts.find(a => a.id === selectedId)?.balance).toLocaleString()}</p>
-                    </div>
-                    <div className="h-8 w-px bg-white/10" />
-                    <div className="text-left">
-                      <p className="text-[8px] text-[#10b981] font-bold uppercase">New Total</p>
-                      <p className="text-sm font-bold italic text-[#10b981]">
-                        KES {(Number(accounts.find(a => a.id === selectedId)?.balance || 0) + (Number(amount) || 0)).toLocaleString()}
-                      </p>
+                
+                <div className="space-y-6 pt-10 border-t border-white/5">
+                  <div className="flex justify-between items-center bg-[#0b0f1a] p-5 rounded-2xl border border-white/5">
+                     <span className="text-[10px] font-black uppercase text-slate-500 italic">Current Float</span>
+                     <span className="text-white font-bold italic">KES {parseFloat(accounts.find(c => c.id === selectedId)?.balance).toLocaleString()}</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-[#10b981] font-black uppercase italic ml-1">Projected Float</p>
+                    <div className="flex justify-between items-center bg-[#10b981]/5 p-6 rounded-3xl border border-[#10b981]/10">
+                       <p className="text-4xl font-black text-white tracking-tighter italic">
+                          KES {(parseFloat(accounts.find(c => c.id === selectedId)?.balance || 0) + (parseFloat(amount) || 0)).toLocaleString()}
+                       </p>
+                       <Zap className="text-[#10b981] animate-pulse" size={32} />
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="opacity-20 flex flex-col items-center">
-                <Zap className="mb-4" size={48} />
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] italic">Identify Target Node</p>
+              <div className="border-2 border-dashed border-white/5 rounded-[3rem] flex flex-col items-center justify-center text-center p-20 opacity-20">
+                <Zap className="mb-4 text-slate-500" size={48} />
+                <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em] italic leading-relaxed">
+                  Treasury Standby<br/>Select Target Node to Initialize Injection
+                </p>
               </div>
             )}
           </div>
