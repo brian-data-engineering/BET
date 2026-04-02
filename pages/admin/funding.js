@@ -1,230 +1,119 @@
 import { useState, useEffect, useContext } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout, { AdminContext } from '../../components/admin/AdminLayout';
-import { 
-  Wallet, 
-  Send, 
-  ArrowUpRight, 
-  UserCheck, 
-  ShieldCheck, 
-  Zap, 
-  History 
-} from 'lucide-react';
+import { Wallet, Send, UserCheck, ShieldCheck, Zap } from 'lucide-react';
 
 export default function MasterFunding() {
   const { profile: adminProfile } = useContext(AdminContext);
-  
   const [accounts, setAccounts] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [amount, setAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // FETCH TARGETS: Populates the dropdown based on your database roles
   const fetchTargets = async () => {
-    if (!adminProfile?.id) return;
-
+    // CRITICAL: We fetch everything first to break the "Blank" cycle
     try {
-      let query = supabase.from('profiles').select('id, username, balance, role');
-      
-      const roleStr = (adminProfile.role || '').toLowerCase();
-      const isAdmin = roleStr.includes('admin');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, balance, role')
+        .neq('id', adminProfile?.id); // Just get everyone except the logged-in admin
 
-      if (isAdmin) {
-        // As Super Admin, you fund Operators (WAZIRI, TESTSHOPS, etc.)
-        query = query.eq('role', 'operator');
-      } else {
-        // As an Operator, you fund your specific Cashiers (k, brayo, etc.)
-        query = query.eq('role', 'cashier').eq('parent_id', adminProfile.id);
-      }
-      
-      const { data: targets, error } = await query.order('username', { ascending: true });
-      
       if (error) throw error;
-      setAccounts(targets || []);
+      console.log("Targets Found:", data); // Check your F12 console for this!
+      setAccounts(data || []);
     } catch (err) {
-      console.error("Treasury Sync Error:", err.message);
+      console.error("Fetch Error:", err);
     }
   };
 
   useEffect(() => {
-    fetchTargets();
-
-    // REALTIME: Refresh recipient balances instantly when any transfer occurs
-    const targetSub = supabase.channel('funding-live-sync')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => {
-        fetchTargets();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(targetSub); };
+    if (adminProfile?.id) {
+      fetchTargets();
+    }
   }, [adminProfile]);
 
   const handleDispatch = async () => {
-    const numAmount = parseFloat(amount);
-    
-    if (!selectedId || !numAmount || numAmount <= 0) {
-      alert("Verification Failed: Select a target and valid KES amount.");
-      return;
-    }
-
-    if (numAmount > (adminProfile?.balance || 0)) {
-      alert("Treasury Exhausted: Insufficient liquidity!");
-      return;
-    }
-
+    if (!selectedId || !amount || parseFloat(amount) <= 0) return;
     setIsProcessing(true);
     
-    // EXECUTE TRANSACTION: Uses your Postgres RPC to ensure atomicity
+    // This calls the SQL function you created in Supabase
     const { error } = await supabase.rpc('transfer_credits', {
       sender_id: adminProfile.id,
       receiver_id: selectedId,
-      amount_to_transfer: numAmount
+      amount_to_transfer: parseFloat(amount)
     });
 
     if (error) {
-      alert("Dispatch Protocol Error: " + error.message);
+      alert("Transfer Failed: " + error.message);
     } else {
+      alert("Transfer Successful!");
       setAmount('');
-      setSelectedId('');
-      alert(`SUCCESS: KES ${numAmount.toLocaleString()} injected into network.`);
+      fetchTargets(); // Refresh list to see new balances
     }
     setIsProcessing(false);
   };
 
-  const selectedRecipient = accounts.find(c => c.id === selectedId);
-
-  // Handles the blank loading state shown in image_51118f.png
-  if (!adminProfile) return (
-    <AdminLayout>
-      <div className="h-screen bg-[#0b0f1a] flex items-center justify-center">
-        <Zap className="text-[#10b981] animate-pulse" size={48} />
-      </div>
-    </AdminLayout>
-  );
+  if (!adminProfile) return <div className="bg-[#0b0f1a] h-screen" />;
 
   return (
     <AdminLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
+      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white">
         
-        {/* TREASURY HEADER */}
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="text-[#10b981]" size={20} />
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] italic">
-                Node ID: {adminProfile?.username}
-              </span>
-            </div>
-            <h1 className="text-5xl font-black uppercase tracking-tighter italic leading-none">Treasury</h1>
-          </div>
-
-          <div className="bg-[#111926] border border-white/5 p-8 rounded-[2.5rem] min-w-[350px] shadow-2xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                 <Zap size={100} />
-              </div>
-              <p className="text-[10px] text-[#10b981] font-black uppercase italic mb-2 tracking-widest relative z-10">Total Liquidity</p>
-              <h2 className="text-4xl font-black text-white italic tracking-tighter relative z-10 leading-none">
-                KES {adminProfile?.balance?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
-              </h2>
+        <div className="flex justify-between items-center">
+          <h1 className="text-5xl font-black uppercase italic tracking-tighter">Treasury</h1>
+          <div className="bg-[#111926] p-6 rounded-2xl border border-[#10b981]/20">
+            <p className="text-[10px] text-[#10b981] font-black uppercase tracking-widest">Your Balance</p>
+            <p className="text-3xl font-black italic">KES {adminProfile?.balance?.toLocaleString()}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          
-          {/* FUNDING DISPATCH FORM */}
-          <div className="bg-[#111926] p-10 rounded-[3rem] border border-white/5 shadow-2xl space-y-8">
-            <div className="flex items-center gap-3 border-b border-white/5 pb-6">
-              <div className="p-2 bg-[#10b981]/10 rounded-xl text-[#10b981]">
-                <Send size={18} />
-              </div>
-              <h2 className="font-black uppercase text-xs italic tracking-widest">Injection Protocol</h2>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 tracking-widest italic tracking-[0.2em]">Target Node</label>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-[#111926] p-10 rounded-[2rem] border border-white/5 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-500">Select Recipient</label>
               <select 
-                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-2xl text-sm font-bold uppercase text-white outline-none focus:border-[#10b981] transition-all cursor-pointer"
+                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-xl text-white font-bold"
                 value={selectedId}
-                onChange={e => setSelectedId(e.target.value)}
+                onChange={(e) => setSelectedId(e.target.value)}
               >
-                <option value="">Select Recipient...</option>
-                {accounts.map(c => (
-                  <option key={c.id} value={c.id} className="bg-[#111926]">
-                    {c.username} — KES {Number(c.balance).toLocaleString()}
+                <option value="">-- Choose Account --</option>
+                {accounts.map(acc => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.username} ({acc.role}) - KES {acc.balance?.toLocaleString()}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="space-y-3">
-              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 tracking-widest italic tracking-[0.2em]">KES Volume</label>
-              <div className="relative">
-                <input 
-                  type="number" 
-                  className="w-full bg-[#0b0f1a] border border-white/10 p-6 rounded-2xl text-[#10b981] font-black text-3xl outline-none focus:border-[#10b981] transition-all"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                />
-              </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-500">Amount (KES)</label>
+              <input 
+                type="number" 
+                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-xl text-[#10b981] text-2xl font-black"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
             </div>
 
             <button 
               onClick={handleDispatch}
-              disabled={isProcessing || !amount || !selectedId}
-              className="w-full bg-[#10b981] hover:bg-white text-black font-black py-6 rounded-2xl flex items-center justify-center gap-4 transition-all active:scale-[0.97] disabled:opacity-10 uppercase italic text-sm tracking-widest"
+              disabled={isProcessing || !selectedId || !amount}
+              className="w-full bg-[#10b981] text-black font-black py-5 rounded-xl uppercase italic tracking-widest disabled:opacity-20"
             >
-              {isProcessing ? 'Processing...' : 'Transfer KES'}
+              {isProcessing ? "Processing..." : "Confirm Transfer"}
             </button>
           </div>
 
-          {/* PROJECTED STATE PREVIEW */}
-          <div className="flex flex-col justify-center">
+          <div className="border-2 border-dashed border-white/5 rounded-[2rem] flex items-center justify-center">
             {selectedId ? (
-              <div className="bg-[#1c2636]/30 p-12 rounded-[3rem] border border-[#10b981]/20 space-y-8 animate-in fade-in zoom-in-95 duration-300">
-                <div className="flex items-center gap-6">
-                  <div className="w-20 h-20 bg-[#10b981]/10 rounded-[2.2rem] flex items-center justify-center text-[#10b981] border border-[#10b981]/20 shadow-lg shadow-[#10b981]/10">
-                    <UserCheck size={40} />
-                  </div>
-                  <div>
-                    <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">
-                      {selectedRecipient?.username}
-                    </h3>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">
-                      Role: {selectedRecipient?.role}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="space-y-6 pt-10 border-t border-white/5">
-                  <div className="flex justify-between items-center bg-[#0b0f1a] p-4 rounded-xl border border-white/5">
-                     <span className="text-[10px] font-black uppercase text-slate-500 italic">Pre-Fund</span>
-                     <span className="text-white font-bold italic">KES {Number(selectedRecipient?.balance).toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <p className="text-[10px] text-[#10b981] font-black uppercase italic ml-1">Post-Injection Projection</p>
-                    <div className="flex justify-between items-center bg-[#10b981]/5 p-6 rounded-2xl border border-[#10b981]/10">
-                       <p className="text-3xl font-black text-white tracking-tighter italic">
-                          KES {(parseFloat(selectedRecipient?.balance || 0) + (parseFloat(amount) || 0)).toLocaleString()}
-                       </p>
-                       <ArrowUpRight className="text-[#10b981]" size={32} />
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 flex items-center gap-3">
-                     <History size={16} className="text-blue-500" />
-                     <p className="text-[9px] text-blue-400 font-bold uppercase italic leading-tight">
-                       This dispatch is recorded as an atomic transaction in the Lucra ledger.
-                     </p>
-                  </div>
-                </div>
+              <div className="text-center p-10 space-y-4">
+                <UserCheck size={48} className="mx-auto text-[#10b981]" />
+                <h2 className="text-2xl font-black uppercase italic">Ready to Fund</h2>
+                <p className="text-slate-400 text-sm">Recipient ID: {selectedId}</p>
               </div>
             ) : (
-              <div className="border-2 border-dashed border-white/5 rounded-[3rem] flex flex-col items-center justify-center text-center p-20 opacity-20 group hover:opacity-30 transition-opacity">
-                <Zap className="mb-4 text-slate-500 group-hover:text-[#10b981] transition-colors" size={48} />
-                <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em] italic">Identify Target Node</p>
-              </div>
+              <p className="text-slate-600 font-black uppercase italic tracking-widest">No Target Selected</p>
             )}
           </div>
         </div>
