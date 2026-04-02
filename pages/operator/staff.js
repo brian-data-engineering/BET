@@ -2,30 +2,30 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
 import { Monitor, Loader2, Send, RefreshCw } from 'lucide-react';
-import StaffList from './staff'; 
+import StaffList from './staff'; // Ensure the file 'staff.js' exists in this folder
 
 export default function ManageStaff() {
   const [staff, setStaff] = useState([]);
-  const [operatorProfile, setOperatorProfile] = useState(null); // Added this
+  const [operatorProfile, setOperatorProfile] = useState(null); // Fixes blank wallet
   const [operatorId, setOperatorId] = useState(null);
   const [form, setForm] = useState({ email: '', password: '', username: '' });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
-  const [processingId, setProcessingId] = useState(null);
+  const [processingId, setProcessingId] = useState(null); // The "Double-Click" Lock
 
   const fetchData = useCallback(async (id) => {
     if (!id) return;
     setFetching(true);
     
-    // 1. Fetch Operator's own balance for the Layout/Wallet
-    const { data: opData } = await supabase
+    // 1. Fetch Operator Profile (For the Sidebar/Wallet)
+    const { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', id)
       .single();
-    if (opData) setOperatorProfile(opData);
+    if (profile) setOperatorProfile(profile);
 
-    // 2. Fetch Staff
+    // 2. Fetch Staff Nodes
     const { data: profiles } = await supabase
       .from('profiles')
       .select('*')
@@ -58,31 +58,40 @@ export default function ManageStaff() {
   }, [fetchData]);
 
   const handleQuickFund = async (id, name) => {
+    // STOP: Prevent a second click while the first is working
     if (processingId) return;
+
     const val = prompt(`Send Whole Number Amount to ${name.toUpperCase()}:`);
     if (val === null) return; 
 
     const cleanAmount = Math.trunc(Number(val));
     if (!cleanAmount || cleanAmount <= 0) return;
 
-    setProcessingId(id); 
+    setProcessingId(id); // LOCK THE NODE
+    
     try {
       const { error } = await supabase.rpc('transfer_credits', {
         p_sender_id: operatorId,
         p_receiver_id: id,
         p_amount: cleanAmount
       });
-      if (error) alert(error.message);
-      else await fetchData(operatorId);
+
+      if (error) {
+        alert(error.message);
+      } else {
+        // REFRESH EVERYTHING (Sidebar balance + Staff list)
+        await fetchData(operatorId);
+      }
     } catch (err) {
       console.error(err);
     } finally {
-      setProcessingId(null); 
+      setProcessingId(null); // UNLOCK
     }
   };
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     const { error } = await supabase.rpc('admin_create_cashier', { 
       target_email: form.email, 
@@ -99,7 +108,7 @@ export default function ManageStaff() {
   };
 
   return (
-    <OperatorLayout profile={operatorProfile}> 
+    <OperatorLayout profile={operatorProfile}>
       <div className="p-8 space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
@@ -120,9 +129,9 @@ export default function ManageStaff() {
           <div className="lg:col-span-4 bg-[#111926] p-10 rounded-[3rem] border border-white/5 h-fit shadow-2xl">
             <h2 className="text-xs font-black uppercase italic mb-8">Deploy Node</h2>
             <form onSubmit={handleCreate} className="space-y-5">
-              <input value={form.username} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white" placeholder="USERNAME" onChange={e => setForm({...form, username: e.target.value})} required />
-              <input value={form.email} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white" placeholder="EMAIL" onChange={e => setForm({...form, email: e.target.value})} required />
-              <input value={form.password} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white" type="password" placeholder="PASSWORD" onChange={e => setForm({...form, password: e.target.value})} required />
+              <input value={form.username} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none" placeholder="USERNAME" onChange={e => setForm({...form, username: e.target.value})} required />
+              <input value={form.email} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none" placeholder="EMAIL" onChange={e => setForm({...form, email: e.target.value})} required />
+              <input value={form.password} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold text-white outline-none" type="password" placeholder="PASSWORD" onChange={e => setForm({...form, password: e.target.value})} required />
               <button disabled={loading} className="w-full bg-blue-600 py-6 rounded-2xl font-black text-xs uppercase italic tracking-widest hover:bg-white hover:text-black transition-all">
                 {loading ? <Loader2 className="animate-spin mx-auto" /> : "Deploy Node"}
               </button>
