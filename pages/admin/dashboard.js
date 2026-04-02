@@ -16,7 +16,7 @@ export default function AdminDashboard() {
       try {
         const isSuper = ['admin', 'super_admin'].includes(profile?.role);
         
-        // 1. Query for managed entities (Operators or Cashiers)
+        // 1. Fetch managed accounts
         let managedQuery = supabase.from('profiles').select('balance');
         if (isSuper) {
           managedQuery = managedQuery.eq('role', 'operator');
@@ -24,7 +24,6 @@ export default function AdminDashboard() {
           managedQuery = managedQuery.eq('parent_id', profile.id);
         }
 
-        // 2. Run all queries in parallel for maximum speed
         const [managedRes, betsRes, recentRes] = await Promise.all([
           managedQuery,
           supabase.from('betsnow').select('*', { count: 'exact', head: true }),
@@ -34,9 +33,11 @@ export default function AdminDashboard() {
             .limit(8)
         ]);
 
-        // 3. Process Volume (Handling numeric strings from Postgres)
-        const volume = managedRes.data?.reduce((acc, curr) => 
-          acc + Number(curr.balance || 0), 0) || 0;
+        // DEBUG LOGS - Check your browser console (F12) to see these!
+        console.log("Managed Entities Found:", managedRes.data?.length);
+        console.log("Total Bets Count:", betsRes.count);
+
+        const volume = managedRes.data?.reduce((acc, curr) => acc + Number(curr.balance || 0), 0) || 0;
 
         setStats({ 
           totalBets: betsRes.count || 0, 
@@ -46,23 +47,17 @@ export default function AdminDashboard() {
         });
 
       } catch (err) {
-        console.error("Dashboard Sync Error:", err.message);
+        console.error("Sync Error:", err.message);
       }
     };
 
     fetchLiveStats();
 
-    // REALTIME: Listen for new bets and refresh stats automatically
-    const betSubscription = supabase
-      .channel('dashboard-live-sync')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'betsnow' }, () => {
-        fetchLiveStats();
-      })
+    const channel = supabase.channel('live-db-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'betsnow' }, () => fetchLiveStats())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(betSubscription);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [profile]);
 
   return (
@@ -96,58 +91,50 @@ export default function AdminDashboard() {
           <StatCard title="Entities" value={stats.managedAccounts} icon={<Users />} />
         </div>
 
-        {/* Main Body */}
+        {/* Live Feed */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          <div className="xl:col-span-2 bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden">
-            <div className="p-8 border-b border-white/5 flex items-center gap-3">
+          <div className="xl:col-span-2 bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="p-8 border-b border-white/5 flex items-center gap-3 bg-white/[0.01]">
               <Activity size={20} className="text-[#10b981]" />
               <h2 className="text-sm font-black uppercase tracking-[0.2em] italic text-slate-300">Live Transmission</h2>
             </div>
-            <table className="w-full text-left">
-              <thead className="bg-[#0b0f1a]/50 text-slate-600 text-[9px] font-black uppercase tracking-widest italic">
-                <tr>
-                  <th className="p-6">Serial ID</th>
-                  <th className="p-6">Stake</th>
-                  <th className="p-6 text-right">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {stats.recentBets.map((bet) => (
-                  <tr key={bet.id} className="hover:bg-white/[0.01] transition-colors">
-                    <td className="p-6 font-black text-[#10b981] uppercase italic text-sm">
-                      {bet.ticket_serial || 'NO-SERIAL'}
-                    </td>
-                    <td className="p-6 text-slate-200 font-bold">
-                      KES {Number(bet.stake).toLocaleString()}
-                    </td>
-                    <td className="p-6 text-right text-slate-500 text-[10px] uppercase font-black italic tracking-widest">
-                      {new Date(bet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                  </tr>
-                ))}
-                {stats.recentBets.length === 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-[#0b0f1a]/50 text-slate-600 text-[9px] font-black uppercase tracking-widest italic">
                   <tr>
-                    <td colSpan="3" className="p-12 text-center text-slate-700 text-[10px] font-black uppercase tracking-[0.4em] italic">
-                      Waiting for incoming data...
-                    </td>
+                    <th className="p-6 uppercase">Serial ID</th>
+                    <th className="p-6 uppercase">Stake</th>
+                    <th className="p-6 text-right uppercase">Timestamp</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {stats.recentBets.map((bet) => (
+                    <tr key={bet.id} className="hover:bg-white/[0.01] transition-colors">
+                      <td className="p-6 font-black text-[#10b981] uppercase italic text-sm">{bet.ticket_serial}</td>
+                      <td className="p-6 text-slate-200 font-bold text-sm">KES {Number(bet.stake).toLocaleString()}</td>
+                      <td className="p-6 text-right text-slate-500 text-[10px] uppercase font-black italic tracking-widest">
+                        {new Date(bet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                    </tr>
+                  ))}
+                  {stats.recentBets.length === 0 && (
+                    <tr>
+                      <td colSpan="3" className="p-16 text-center text-slate-700 text-[10px] font-black uppercase tracking-[0.4em] italic">
+                        Waiting for incoming data...
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Quick Action Card */}
-          <div className="bg-gradient-to-br from-[#10b981] to-[#059669] p-8 rounded-[2.5rem] text-black h-fit shadow-xl shadow-[#10b981]/20">
-            <h3 className="text-xl font-black uppercase italic tracking-tighter mb-2">Provisioning</h3>
-            <p className="text-[10px] font-bold uppercase mb-6 italic opacity-80 leading-relaxed">
-              Expand your network nodes or distribute float instantly.
-            </p>
-            <button 
-              onClick={() => window.location.href = '/admin/operator'} 
-              className="w-full bg-white text-black font-black py-4 rounded-2xl text-xs uppercase italic tracking-widest hover:shadow-inner active:scale-95 transition-all"
-            >
-              Manage Network
-            </button>
+          <div className="bg-gradient-to-br from-[#10b981] to-[#059669] p-8 rounded-[2.5rem] text-black h-fit shadow-xl">
+               <h3 className="text-xl font-black uppercase italic tracking-tighter mb-2">Provisioning</h3>
+               <p className="text-[10px] font-bold uppercase mb-6 italic opacity-80 leading-relaxed">Expand your network nodes or distribute float instantly.</p>
+               <button onClick={() => window.location.href = '/admin/operator'} className="w-full bg-white text-black font-black py-4 rounded-2xl text-xs uppercase italic tracking-widest hover:shadow-2xl transition-all">
+                 Manage Network
+               </button>
           </div>
         </div>
       </div>
@@ -158,9 +145,7 @@ export default function AdminDashboard() {
 function StatCard({ title, value, icon, isMoney, color = "text-white" }) {
   return (
     <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group">
-      <div className="absolute -top-4 -right-4 p-8 text-white opacity-[0.03] group-hover:opacity-[0.07] transition-opacity scale-150 rotate-12">
-        {icon}
-      </div>
+      <div className="absolute -top-4 -right-4 p-8 text-white opacity-[0.03] scale-150 rotate-12">{icon}</div>
       <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.2em] mb-3 italic">{title}</p>
       <p className={`text-3xl font-black tracking-tighter italic ${color}`}>
         {isMoney && <span className="text-sm mr-2 opacity-30 not-italic font-bold">KES</span>}
