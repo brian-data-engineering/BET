@@ -5,6 +5,7 @@ import { Ticket, Users, Wallet, TrendingUp, Activity, ShieldCheck } from 'lucide
 
 export default function AdminDashboard() {
   const { profile } = useContext(AdminContext);
+  const [error, setError] = useState(null);
   const [stats, setStats] = useState({ 
     totalBets: 0, totalVolume: 0, managedAccounts: 0, recentBets: [] 
   });
@@ -16,7 +17,7 @@ export default function AdminDashboard() {
       try {
         const isSuper = ['admin', 'super_admin', 'superadmin'].includes(profile?.role);
         
-        // 1. Fetch managed accounts
+        // 1. Fetch managed entities
         let managedQuery = supabase.from('profiles').select('balance');
         if (isSuper) {
           managedQuery = managedQuery.eq('role', 'operator');
@@ -33,7 +34,11 @@ export default function AdminDashboard() {
             .limit(8)
         ]);
 
-        // Calculate Volume (Ensuring strings like "100" become numbers)
+        // Check for specific Supabase errors
+        if (managedRes.error) throw new Error(`Profiles: ${managedRes.error.message}`);
+        if (betsRes.error) throw new Error(`Bets Count: ${betsRes.error.message}`);
+        if (recentRes.error) throw new Error(`Recent Bets: ${recentRes.error.message}`);
+
         const volume = managedRes.data?.reduce((acc, curr) => acc + Number(curr.balance || 0), 0) || 0;
 
         setStats({ 
@@ -42,19 +47,16 @@ export default function AdminDashboard() {
           managedAccounts: managedRes.data?.length || 0,
           recentBets: recentRes.data || []
         });
+        setError(null);
 
       } catch (err) {
-        console.error("Dashboard Sync Error:", err.message);
+        console.error("Dashboard Error:", err);
+        setError(err.message);
       }
     };
 
     fetchLiveStats();
-
-    // Realtime Listener
-    const channel = supabase.channel('dashboard-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'betsnow' }, () => fetchLiveStats())
-      .subscribe();
-
+    const channel = supabase.channel('db-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'betsnow' }, () => fetchLiveStats()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profile]);
 
@@ -62,6 +64,13 @@ export default function AdminDashboard() {
     <AdminLayout>
       <div className="p-8 space-y-8 bg-[#0b0f1a] min-h-screen text-white">
         
+        {/* Error Banner */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl text-red-500 text-xs font-mono">
+            [CONNECTION_ERROR]: {error}
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex justify-between items-end">
           <div>
@@ -76,7 +85,7 @@ export default function AdminDashboard() {
           <div className="bg-[#10b981]/5 px-5 py-3 rounded-2xl border border-[#10b981]/10 flex items-center gap-2">
             <div className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse" />
             <span className="text-[10px] font-black text-[#10b981] uppercase italic tracking-widest">
-              {profile?.username || 'ONLINE'}
+              {profile?.username || 'SYSTEM_ONLINE'}
             </span>
           </div>
         </div>
@@ -89,50 +98,21 @@ export default function AdminDashboard() {
           <StatCard title="Entities" value={stats.managedAccounts} icon={<Users />} />
         </div>
 
-        {/* Table Area */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          <div className="xl:col-span-2 bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden">
-            <div className="p-8 border-b border-white/5 flex items-center gap-3">
-              <Activity size={20} className="text-[#10b981]" />
-              <h2 className="text-sm font-black uppercase tracking-[0.2em] italic text-slate-300">Live Transmission</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-[#0b0f1a]/50 text-slate-600 text-[9px] font-black uppercase tracking-widest italic">
-                  <tr>
-                    <th className="p-6">Serial ID</th>
-                    <th className="p-6">Stake</th>
-                    <th className="p-6 text-right">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {stats.recentBets.map((bet) => (
-                    <tr key={bet.id} className="hover:bg-white/[0.01] transition-colors">
-                      <td className="p-6 font-black text-[#10b981] uppercase italic text-sm">{bet.ticket_serial}</td>
-                      <td className="p-6 text-slate-200 font-bold text-sm">KES {Number(bet.stake).toLocaleString()}</td>
-                      <td className="p-6 text-right text-slate-500 text-[10px] uppercase font-black italic tracking-widest">
-                        {new Date(bet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                    </tr>
-                  ))}
-                  {stats.recentBets.length === 0 && (
-                    <tr>
-                      <td colSpan="3" className="p-16 text-center text-slate-700 text-[10px] font-black uppercase tracking-[0.4em] italic">
-                        No active transmissions found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-[#10b981] to-[#059669] p-8 rounded-[2.5rem] text-black">
-               <h3 className="text-xl font-black uppercase italic tracking-tighter mb-2">Provisioning</h3>
-               <button onClick={() => window.location.href = '/admin/operator'} className="w-full bg-white text-black font-black py-4 rounded-2xl text-xs uppercase italic tracking-widest mt-4">
-                 Manage Network
-               </button>
-          </div>
+        {/* Live Table */}
+        <div className="xl:col-span-2 bg-[#111926] border border-white/5 rounded-[2.5rem] overflow-hidden">
+          <table className="w-full text-left">
+            <tbody className="divide-y divide-white/5">
+              {stats.recentBets.map((bet) => (
+                <tr key={bet.id}>
+                  <td className="p-6 font-black text-[#10b981] uppercase italic">{bet.ticket_serial}</td>
+                  <td className="p-6 text-slate-200 font-bold">KES {Number(bet.stake).toLocaleString()}</td>
+                  <td className="p-6 text-right text-slate-500 text-[10px] uppercase font-black">
+                    {new Date(bet.created_at).toLocaleTimeString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </AdminLayout>
@@ -141,8 +121,7 @@ export default function AdminDashboard() {
 
 function StatCard({ title, value, icon, isMoney, color = "text-white" }) {
   return (
-    <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group">
-      <div className="absolute -top-4 -right-4 p-8 text-white opacity-[0.03] scale-150 rotate-12">{icon}</div>
+    <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden">
       <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.2em] mb-3 italic">{title}</p>
       <p className={`text-3xl font-black tracking-tighter italic ${color}`}>
         {isMoney && "KES "}{value}
