@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
-import { ArrowDownRight, Send, Loader2, History, Clock, Wallet } from 'lucide-react';
+import { ArrowDownRight, Send, Loader2, History, Clock } from 'lucide-react';
 
 export default function ShopWallet() {
   const [amount, setAmount] = useState('');
@@ -19,11 +19,7 @@ export default function ShopWallet() {
     const [pRes, cRes, tRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('profiles').select('*').eq('role', 'cashier').eq('parent_id', user.id).order('username', { ascending: true }),
-      supabase.from('transactions')
-        .select('*, receiver:profiles!transactions_receiver_id_fkey(username)')
-        .eq('sender_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(8)
+      supabase.from('transactions').select('*, receiver:profiles!transactions_receiver_id_fkey(username)').eq('sender_id', user.id).order('created_at', { ascending: false }).limit(10)
     ]);
 
     if (pRes.data) setOperatorProfile(pRes.data);
@@ -35,18 +31,24 @@ export default function ShopWallet() {
   useEffect(() => { syncWalletData(); }, [syncWalletData]);
 
   const handleTransfer = async () => {
-    const numAmount = parseFloat(amount);
-    if (!targetId || !numAmount || numAmount <= 0) return;
+    // FIX: Force absolute integer math to prevent decimal "bleed" errors
+    const numAmount = Math.floor(parseFloat(amount));
+    
+    if (!targetId || !numAmount || numAmount <= 0) {
+      alert("Please enter a valid whole number.");
+      return;
+    }
 
-    // Safety: Ensure operator has enough balance
-    if (numAmount > (operatorProfile?.balance || 0)) {
-      alert("Insufficient funds in Hub.");
+    // Safety: Check against local balance before even calling the DB
+    const currentVaultBalance = Math.floor(operatorProfile?.balance || 0);
+    if (numAmount > currentVaultBalance) {
+      alert(`Insufficient Float. Your current max is KES ${currentVaultBalance.toLocaleString()}`);
       return;
     }
 
     setIsProcessing(true);
     try {
-      // EXACT MATCH: p_sender_id, p_receiver_id, p_amount
+      // MATCHING DB: p_sender_id, p_receiver_id, p_amount
       const { error } = await supabase.rpc('transfer_credits', {
         p_sender_id: operatorProfile.id,
         p_receiver_id: targetId,
@@ -55,101 +57,80 @@ export default function ShopWallet() {
 
       if (error) throw error;
 
-      // Reset UI and force a refresh after a short delay
       setAmount('');
       setTargetId('');
       
+      // Delay refresh to allow DB to settle
       setTimeout(async () => {
         await syncWalletData();
-        alert("Transfer Successful.");
-      }, 300);
+        alert("Assets Successfully Dispatched.");
+      }, 400);
 
     } catch (err) {
-      alert("Database Protocol Error: " + err.message);
+      console.error("Transfer Error:", err);
+      alert("Database Refused Transfer: Check your balance precision.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  if (loading) return <div className="h-screen bg-[#0b0f1a] flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div>;
+  if (loading) return <div className="h-screen bg-[#0b0f1a] flex items-center justify-center"><Loader2 className="animate-spin text-[#10b981]" /></div>;
 
   return (
     <OperatorLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
-        
-        {/* HEADER & BALANCE */}
-        <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-white/5 pb-10">
-          <div className="space-y-1">
-            <h1 className="text-6xl font-black uppercase italic tracking-tighter">Liquidity <span className="text-slate-700">Hub</span></h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em] italic">Node ID: {operatorProfile?.username}</p>
+        <div className="flex justify-between items-end border-b border-white/5 pb-10">
+          <div>
+            <h1 className="text-6xl font-black uppercase italic tracking-tighter">Liquidity Hub</h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em] mt-2 italic">Operator: {operatorProfile?.username}</p>
           </div>
           <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 shadow-2xl">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Available Float</span>
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic block mb-1 text-right">Vault Status</span>
             <span className="text-4xl font-black text-[#10b981] italic tracking-tighter">
-              KES {parseFloat(operatorProfile?.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              KES {Math.floor(operatorProfile?.balance || 0).toLocaleString()}
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* TRANSFER FORM */}
           <div className="lg:col-span-7 bg-[#111926] p-12 rounded-[3rem] border border-white/5 space-y-10 shadow-2xl">
             <div className="space-y-6">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Select Terminal Node</label>
-                <select 
-                  className="w-full bg-[#0b0f1a] p-6 rounded-2xl border border-white/10 text-white font-bold outline-none appearance-none" 
-                  value={targetId} 
-                  onChange={e => setTargetId(e.target.value)}
-                >
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Select Target Node</label>
+                <select className="w-full bg-[#0b0f1a] p-6 rounded-2xl border border-white/10 text-white font-bold outline-none appearance-none" value={targetId} onChange={e => setTargetId(e.target.value)}>
                   <option value="">Select Cashier...</option>
                   {cashiers.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.username.toUpperCase()} (KES {parseFloat(c.balance).toLocaleString()})
+                      {c.username.toUpperCase()} (KES {Math.floor(c.balance).toLocaleString()})
                     </option>
                   ))}
                 </select>
               </div>
-
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Volume (KES)</label>
-                <input 
-                  type="number" 
-                  className="w-full bg-[#0b0f1a] p-8 rounded-2xl border border-white/10 text-5xl font-black text-[#10b981] outline-none" 
-                  placeholder="0.00" 
-                  value={amount} 
-                  onChange={e => setAmount(e.target.value)} 
-                />
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Amount to Send</label>
+                <input type="number" step="1" className="w-full bg-[#0b0f1a] p-8 rounded-2xl border border-white/10 text-5xl font-black text-[#10b981] outline-none" placeholder="0" value={amount} onChange={e => setAmount(e.target.value)} />
               </div>
             </div>
-
-            <button 
-              onClick={handleTransfer} 
-              disabled={isProcessing || !targetId || !amount} 
-              className="w-full bg-blue-600 text-white font-black py-7 rounded-2xl hover:bg-white hover:text-black transition-all italic text-xs uppercase tracking-[0.3em] disabled:opacity-20"
-            >
-              {isProcessing ? 'Authorizing Dispatch...' : 'Execute Asset Transfer'}
+            <button onClick={handleTransfer} disabled={isProcessing || !targetId || !amount} className="w-full bg-[#10b981] text-black font-black py-7 rounded-2xl hover:bg-white transition-all italic text-xs uppercase tracking-[0.3em] shadow-xl disabled:opacity-20">
+              {isProcessing ? 'Processing...' : 'Execute Asset Transfer'}
             </button>
           </div>
 
-          {/* AUDIT LOG */}
           <div className="lg:col-span-5 bg-[#111926] p-10 rounded-[3rem] border border-white/5 shadow-2xl space-y-6">
-            <h2 className="text-[10px] font-black uppercase text-slate-500 italic tracking-widest flex items-center gap-2"><History size={14}/> Audit Trail</h2>
+            <h2 className="text-[10px] font-black uppercase text-slate-500 italic tracking-widest flex items-center gap-2"><History size={14}/> Recent Audit Trail</h2>
             <div className="space-y-4">
-              {transactions.length > 0 ? transactions.map(tx => (
+              {transactions.map(tx => (
                 <div key={tx.id} className="flex justify-between items-center p-5 bg-[#0b0f1a] rounded-2xl border border-white/5">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-500/5 rounded-xl text-blue-500"><ArrowDownRight size={16} /></div>
+                    <div className="p-3 bg-[#10b981]/5 rounded-xl text-[#10b981]"><ArrowDownRight size={16} /></div>
                     <div>
-                        <span className="text-xs font-black uppercase italic text-white/70 block">{tx.receiver?.username || 'Terminal'}</span>
-                        <span className="text-[8px] text-slate-600 font-bold uppercase italic flex items-center gap-1"><Clock size={8}/>{new Date(tx.created_at).toLocaleTimeString()}</span>
+                        <span className="text-xs font-black uppercase italic text-white/70 block">{tx.receiver?.username || 'Node'}</span>
+                        <span className="text-[8px] text-slate-600 font-bold uppercase italic"><Clock size={8} className="inline mr-1"/>{new Date(tx.created_at).toLocaleTimeString()}</span>
                     </div>
                   </div>
-                  <span className="text-sm font-black italic text-[#10b981]">KES {parseFloat(tx.amount).toLocaleString()}</span>
+                  <span className="text-sm font-black italic text-[#10b981]">KES {Math.floor(tx.amount).toLocaleString()}</span>
                 </div>
-              )) : (
-                <div className="text-center py-10 text-slate-700 text-[10px] font-black uppercase italic italic tracking-widest">No recent dispatches</div>
-              )}
+              ))}
             </div>
           </div>
         </div>
