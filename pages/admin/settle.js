@@ -57,27 +57,59 @@ export default function SettlementPage() {
 
   const checkLegStatus = (selection, result) => {
     if (!result) return 'PENDING';
-    const h = result.home_score;
-    const a = result.away_score;
-    const hp1 = result.home_p1_score;
-    const ap1 = result.away_p1_score;
+    
+    const h = parseFloat(result.home_score);
+    const a = parseFloat(result.away_score);
+    const hp1 = parseFloat(result.home_p1_score);
+    const ap1 = parseFloat(result.away_p1_score);
+    const pick = selection.selection.toUpperCase();
 
-    switch (selection.marketName) {
+    switch (selection.marketName.toUpperCase()) {
       case '1X2':
-      case 'Winner':
-        if (selection.selection === '1') return h > a ? 'WON' : 'LOST';
-        if (selection.selection === '2') return a > h ? 'WON' : 'LOST';
-        if (selection.selection === 'X') return h === a ? 'WON' : 'LOST';
+      case 'WINNER':
+        if (pick === '1') return h > a ? 'WON' : 'LOST';
+        if (pick === '2') return a > h ? 'WON' : 'LOST';
+        if (pick === 'X') return h === a ? 'WON' : 'LOST';
         break;
+
       case '1ST HALF - 1X2':
-        if (selection.selection === '1') return hp1 > ap1 ? 'WON' : 'LOST';
-        if (selection.selection === '2') return ap1 > hp1 ? 'WON' : 'LOST';
-        if (selection.selection === 'X') return hp1 === ap1 ? 'WON' : 'LOST';
+        if (pick === '1') return hp1 > ap1 ? 'WON' : 'LOST';
+        if (pick === '2') return ap1 > hp1 ? 'WON' : 'LOST';
+        if (pick === 'X') return hp1 === ap1 ? 'WON' : 'LOST';
         break;
+
+      case 'DOUBLE CHANCE':
+      case '1ST HALF - DOUBLE CHANCE':
+        const scoreH = selection.marketName.includes('1ST HALF') ? hp1 : h;
+        const scoreA = selection.marketName.includes('1ST HALF') ? ap1 : a;
+        if (pick === '1/X' || pick === '1X') return scoreH >= scoreA ? 'WON' : 'LOST';
+        if (pick === 'X/2' || pick === 'X2') return scoreA >= scoreH ? 'WON' : 'LOST';
+        if (pick === '1/2') return scoreH !== scoreA ? 'WON' : 'LOST';
+        break;
+
+      case 'HANDICAP (1:0)':
+      case '1ST HALF - HANDICAP (1:0)':
+        const handiH = selection.marketName.includes('1ST HALF') ? hp1 : h;
+        const handiA = selection.marketName.includes('1ST HALF') ? ap1 : a;
+        if (pick === '1') return (handiH + 1) > handiA ? 'WON' : 'LOST';
+        if (pick === '2') return handiA > (handiH + 1) ? 'WON' : 'LOST';
+        if (pick === 'X') return (handiH + 1) === handiA ? 'WON' : 'LOST';
+        break;
+
       case 'BOTH TEAMS TO SCORE (GG/NG)':
         const isGG = h > 0 && a > 0;
-        return selection.selection === 'YES' ? (isGG ? 'WON' : 'LOST') : (!isGG ? 'WON' : 'LOST');
+        return pick === 'YES' || pick === 'GG' ? (isGG ? 'WON' : 'LOST') : (!isGG ? 'WON' : 'LOST');
+
       default:
+        // Generic Totals Check (Over/Under)
+        if (pick.includes('OVER') || pick.includes('UNDER')) {
+          const threshold = parseFloat(pick.replace(/[^\d.]/g, ''));
+          const relevantScore = selection.marketName.toUpperCase().includes('AWAY') ? a : 
+                               selection.marketName.toUpperCase().includes('HOME') ? h : (h + a);
+          
+          if (pick.includes('OVER')) return relevantScore > threshold ? 'WON' : 'LOST';
+          if (pick.includes('UNDER')) return relevantScore < threshold ? 'WON' : 'LOST';
+        }
         return 'PENDING';
     }
   };
@@ -148,7 +180,7 @@ export default function SettlementPage() {
               const results = ticket.available_results || [];
               const ticketEvaluation = (ticket.selections || []).map(sel => {
                 const res = results.find(r => String(r.event_id) === String(sel.matchId));
-                return { ...sel, status: checkLegStatus(sel, res) };
+                return { ...sel, status: checkLegStatus(sel, res), live_res: res };
               });
 
               const canSettleWon = ticketEvaluation.length > 0 && ticketEvaluation.every(l => l.status === 'WON');
@@ -175,7 +207,16 @@ export default function SettlementPage() {
                           <div className="max-w-[70%]">
                             <span className="text-[9px] font-black text-slate-600 uppercase block leading-none mb-1">{sel.marketName}</span>
                             <span className="text-xs font-bold italic truncate block">{sel.matchName}</span>
-                            <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-[#f59e0b] mt-1 inline-block">Pick: {sel.selection}</span>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-[#f59e0b] font-bold">Pick: {sel.selection}</span>
+                                {sel.live_res ? (
+                                    <span className="text-[10px] bg-[#10b981]/10 px-2 py-0.5 rounded text-[#10b981] font-black border border-[#10b981]/20">
+                                        RESULT: {sel.live_res.home_score} - {sel.live_res.away_score}
+                                    </span>
+                                ) : (
+                                    <span className="text-[10px] bg-slate-800/50 px-2 py-0.5 rounded text-slate-600 italic">No Data</span>
+                                )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-3">
                             {sel.status === 'WON' && <CheckCircle2 size={18} className="text-[#10b981]" />}
@@ -200,14 +241,30 @@ export default function SettlementPage() {
                         <button 
                           onClick={() => handleSettle(ticket, 'lost')}
                           disabled={processingId === ticket.id}
-                          className="w-full bg-red-500/10 text-red-500 border border-red-500/20 py-4 rounded-2xl font-black uppercase italic text-xs"
+                          className="w-full bg-red-500/10 text-red-500 border border-red-500/20 py-4 rounded-2xl font-black uppercase italic text-xs hover:bg-red-500 hover:text-white transition-all"
                         >
                           MARK AS LOST
                         </button>
                       ) : (
-                        <div className="text-center p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
-                          <AlertCircle size={20} className="mx-auto text-slate-700 mb-2" />
-                          <span className="text-[9px] font-black text-slate-600 uppercase">Awaiting Results</span>
+                        <div className="flex flex-col gap-2">
+                           <div className="text-center p-3 rounded-xl border border-white/5 bg-white/[0.02]">
+                             <AlertCircle size={16} className="mx-auto text-slate-700 mb-1" />
+                             <span className="text-[8px] font-black text-slate-600 uppercase block">Awaiting Results</span>
+                           </div>
+                           <div className="grid grid-cols-2 gap-2">
+                             <button 
+                               onClick={() => confirm("Pay manually?") && handleSettle(ticket, 'won')}
+                               className="py-2 rounded-lg bg-[#10b981]/10 text-[#10b981] text-[9px] font-black border border-[#10b981]/20 hover:bg-[#10b981] hover:text-black transition-all"
+                             >
+                               FORCE WON
+                             </button>
+                             <button 
+                               onClick={() => confirm("Lose manually?") && handleSettle(ticket, 'lost')}
+                               className="py-2 rounded-lg bg-red-500/10 text-red-500 text-[9px] font-black border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
+                             >
+                               FORCE LOST
+                             </button>
+                           </div>
                         </div>
                       )}
                     </div>
