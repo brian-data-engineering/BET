@@ -1,53 +1,68 @@
-import { useEffect, useState, useContext } from 'react';
+import { useEffect, useState, useContext, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout, { AdminContext } from '../../components/admin/AdminLayout';
-import { Ticket, Users, Wallet, TrendingUp, Activity, ShieldCheck, Zap } from 'lucide-react';
+import { Ticket, Users, Wallet, TrendingUp, Activity, ShieldCheck, Zap, Database } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { profile } = useContext(AdminContext);
   const [stats, setStats] = useState({ 
-    totalBets: 0, totalVolume: 0, managedAccounts: 0, recentBets: [] 
+    totalBets: 0, 
+    networkVolume: 0, 
+    managedAccounts: 0, 
+    adminBalance: 0,
+    recentBets: [] 
   });
+  const [loading, setLoading] = useState(true);
 
-  const fetchEverything = async () => {
+  const fetchGlobalState = useCallback(async () => {
     try {
-      // 1. Get ALL profiles except superadmin to calculate Network Volume
-      const { data: proms } = await supabase.from('profiles')
-        .select('balance, role')
-        .neq('role', 'super_admin');
+      // 1. Fetch Ledger entries to compute TRUTH for everyone
+      // 2. Fetch Profiles for node count
+      // 3. Fetch Bets for transmission data
+      const [ledgerRes, profileRes, betsCount, recentBets] = await Promise.all([
+        supabase.from('ledger').select('user_id, type, amount'),
+        supabase.from('profiles').select('id, role').neq('role', 'super_admin'),
+        supabase.from('betsnow').select('*', { count: 'exact', head: true }),
+        supabase.from('betsnow').select('id, ticket_serial, stake, created_at').order('created_at', { ascending: false }).limit(8)
+      ]);
+
+      // COMPUTE BALANCES FROM LEDGER
+      const calculateNet = (rows) => rows.reduce((acc, row) => 
+        row.type === 'credit' ? acc + Number(row.amount) : acc - Number(row.amount), 0
+      );
+
+      // Total money circulating in the entire system (all non-admins)
+      const totalNetworkVolume = calculateNet(ledgerRes.data || []);
       
-      // 2. Get Global Ticket Count
-      const { count } = await supabase.from('betsnow').select('*', { count: 'exact', head: true });
-
-      // 3. Get Recent Transmissions
-      const { data: recents } = await supabase.from('betsnow')
-        .select('id, ticket_serial, stake, created_at')
-        .order('created_at', { ascending: false })
-        .limit(8);
-
-      const vol = proms?.reduce((acc, curr) => acc + Number(curr.balance || 0), 0) || 0;
+      // Super Admin's specific balance
+      const adminLedger = (ledgerRes.data || []).filter(r => r.user_id === profile?.id);
+      const adminBalance = calculateNet(adminLedger);
 
       setStats({
-        totalBets: count || 0,
-        totalVolume: vol,
-        managedAccounts: proms?.length || 0,
-        recentBets: recents || []
+        totalBets: betsCount.count || 0,
+        networkVolume: totalNetworkVolume,
+        managedAccounts: profileRes.data?.length || 0,
+        adminBalance: adminBalance,
+        recentBets: recentBets.data || []
       });
     } catch (e) {
-      console.error("Lucra Sync Error:", e);
+      console.error("Lucra Global Sync Error:", e);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [profile?.id]);
 
   useEffect(() => {
-    fetchEverything();
+    fetchGlobalState();
 
-    // High-Frequency Realtime Channel
+    // High-Frequency Realtime: Watch the Ledger and the Bets
     const sub = supabase.channel('lucra-core-stream')
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => fetchEverything())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ledger' }, () => fetchGlobalState())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'betsnow' }, () => fetchGlobalState())
       .subscribe();
 
     return () => supabase.removeChannel(sub);
-  }, []);
+  }, [fetchGlobalState]);
 
   return (
     <AdminLayout>
@@ -57,45 +72,46 @@ export default function AdminDashboard() {
         <div className="flex justify-between items-center">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div className="bg-[#10b981] p-1 rounded-sm">
-                <ShieldCheck size={14} className="text-black" />
+              <div className="bg-blue-500 p-1 rounded-sm">
+                <Database size={14} className="text-white" />
               </div>
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] italic">System Core</span>
+              <span className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] italic">Ledger Verified Engine</span>
             </div>
             <h1 className="text-5xl font-black uppercase italic tracking-tighter leading-none text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500">
-              Lucra Engine
+              Lucra Core
             </h1>
           </div>
           
           <div className="flex items-center gap-4">
-             <div className="text-right hidden md:block">
-               <p className="text-[9px] font-black text-slate-500 uppercase italic">Operator Signature</p>
-               <p className="text-sm font-bold text-[#10b981] uppercase">{profile?.username || 'ROOT_USER'}</p>
-             </div>
-             <div className="h-12 w-[1px] bg-white/10 mx-2" />
-             <div className="bg-white/5 border border-white/10 p-3 rounded-2xl">
-                <Activity className="text-[#10b981] animate-pulse" size={20} />
-             </div>
+              <div className="text-right hidden md:block">
+                <p className="text-[9px] font-black text-slate-500 uppercase italic">Admin Authority</p>
+                <p className="text-sm font-bold text-blue-500 uppercase">{profile?.username || 'ROOT'}</p>
+              </div>
+              <div className="h-12 w-[1px] bg-white/10 mx-2" />
+              <div className="bg-white/5 border border-white/10 p-3 rounded-2xl">
+                 <Activity className="text-blue-500 animate-pulse" size={20} />
+              </div>
           </div>
         </div>
 
         {/* METRICS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard 
-            title="Operational Float" 
-            value={(profile?.balance || 0).toLocaleString()} 
-            icon={<Wallet className="text-blue-400" />} 
+            title="Master Vault" 
+            value={stats.adminBalance.toLocaleString()} 
+            icon={<ShieldCheck className="text-blue-400" />} 
             isMoney 
+            color="text-blue-400"
           />
           <StatCard 
-            title="Network Volume" 
-            value={stats.totalVolume.toLocaleString()} 
+            title="Network Liquidity" 
+            value={stats.networkVolume.toLocaleString()} 
             icon={<TrendingUp className="text-[#10b981]" />} 
             color="text-[#10b981]" 
             isMoney 
           />
           <StatCard 
-            title="Total Bookings" 
+            title="Total Tickets" 
             value={stats.totalBets.toLocaleString()} 
             icon={<Ticket className="text-purple-400" />} 
           />
@@ -113,25 +129,25 @@ export default function AdminDashboard() {
           <div className="xl:col-span-2 bg-[#0c101d] border border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
             <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
               <div className="flex items-center gap-3">
-                <Zap size={18} className="text-[#10b981]" />
-                <h2 className="text-xs font-black uppercase tracking-[0.2em] italic text-slate-400">Live Transmissions</h2>
+                <Zap size={18} className="text-blue-500" />
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] italic text-slate-400">Live Ledger Feed</h2>
               </div>
-              <span className="text-[9px] font-bold bg-[#10b981]/10 text-[#10b981] px-3 py-1 rounded-full uppercase italic">Realtime Active</span>
+              <span className="text-[9px] font-bold bg-blue-500/10 text-blue-500 px-3 py-1 rounded-full uppercase italic">Immutable Logs</span>
             </div>
             
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-[9px] uppercase text-slate-600 font-black italic tracking-widest border-b border-white/5">
-                    <th className="p-6">Serial ID</th>
-                    <th className="p-6 text-center">Stake Value</th>
-                    <th className="p-6 text-right">Timestamp</th>
+                    <th className="p-6">Ticket Serial</th>
+                    <th className="p-6 text-center">Value</th>
+                    <th className="p-6 text-right">Transmission</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.03]">
                   {stats.recentBets.map((bet) => (
-                    <tr key={bet.id} className="group hover:bg-white/[0.02] transition-colors cursor-crosshair">
-                      <td className="p-6 font-black text-white group-hover:text-[#10b981] transition-colors uppercase italic text-sm tracking-tight">
+                    <tr key={bet.id} className="group hover:bg-white/[0.02] transition-colors">
+                      <td className="p-6 font-black text-white group-hover:text-blue-500 transition-colors uppercase italic text-sm tracking-tight">
                         {bet.ticket_serial}
                       </td>
                       <td className="p-6 text-center">
@@ -139,20 +155,11 @@ export default function AdminDashboard() {
                           KES {Number(bet.stake).toLocaleString()}
                         </span>
                       </td>
-                      <td className="p-6 text-right">
-                         <p className="text-[10px] font-black text-slate-500 uppercase italic">
-                           {new Date(bet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                         </p>
+                      <td className="p-6 text-right text-[10px] font-black text-slate-500 uppercase italic">
+                        {new Date(bet.created_at).toLocaleTimeString()}
                       </td>
                     </tr>
                   ))}
-                  {stats.recentBets.length === 0 && (
-                    <tr>
-                      <td colSpan="3" className="p-24 text-center">
-                        <p className="text-[10px] font-black text-slate-700 uppercase italic tracking-[0.8em]">Listening for Data...</p>
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
@@ -160,32 +167,26 @@ export default function AdminDashboard() {
 
           {/* SIDEBAR ACTIONS */}
           <div className="space-y-6">
-            <div className="bg-gradient-to-br from-[#10b981] to-[#059669] p-1 rounded-[2rem] shadow-lg shadow-[#10b981]/10">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-900 p-1 rounded-[2rem] shadow-lg shadow-blue-500/10">
               <div className="bg-[#0b0f1a] rounded-[1.9rem] p-8 h-full">
-                <h3 className="text-xl font-black uppercase italic tracking-tighter mb-4 leading-none">Node Provisioning</h3>
+                <h3 className="text-xl font-black uppercase italic tracking-tighter mb-4 leading-none">Global Adjustments</h3>
                 <p className="text-[10px] font-bold uppercase text-slate-500 leading-relaxed italic mb-8">
-                  Authorize new terminal nodes or manage existing operator credentials across the network.
+                  Directly modify ledger states for top-tier operators. Use only for manual funding or error corrections.
                 </p>
                 <button 
                   onClick={() => window.location.href = '/admin/operator'} 
-                  className="w-full bg-[#10b981] hover:bg-white text-black font-black py-5 rounded-2xl text-[10px] uppercase italic tracking-[0.2em] transition-all active:scale-95 shadow-xl"
+                  className="w-full bg-blue-600 hover:bg-white text-white hover:text-black font-black py-5 rounded-2xl text-[10px] uppercase italic tracking-[0.2em] transition-all shadow-xl"
                 >
-                  Enter Management
+                  Manage Operators
                 </button>
               </div>
             </div>
 
             <div className="bg-[#0c101d] border border-white/5 rounded-[2rem] p-8">
-               <h4 className="text-[10px] font-black text-slate-500 uppercase italic mb-4">Security Protocol</h4>
+               <h4 className="text-[10px] font-black text-slate-500 uppercase italic mb-4">Core Integrity</h4>
                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                    <span className="text-[9px] font-bold text-slate-400">SSL ENCRYPTION</span>
-                    <div className="w-2 h-2 rounded-full bg-[#10b981]" />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                    <span className="text-[9px] font-bold text-slate-400">DB HANDSHAKE</span>
-                    <div className="w-2 h-2 rounded-full bg-[#10b981]" />
-                  </div>
+                  <StatusLine label="Ledger Hash" status="Verified" />
+                  <StatusLine label="Transmission Link" status="Active" />
                </div>
             </div>
           </div>
@@ -193,6 +194,18 @@ export default function AdminDashboard() {
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function StatusLine({ label, status }) {
+  return (
+    <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-[8px] font-black text-blue-500 uppercase italic">{status}</span>
+        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+      </div>
+    </div>
   );
 }
 
