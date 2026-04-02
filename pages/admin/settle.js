@@ -15,7 +15,14 @@ export default function SettlementPage() {
     setLoading(true);
     try {
       const [ticketsRes, resultsRes, mappingsRes] = await Promise.all([
-        supabase.from('betsnow').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
+        supabase
+          .from('betsnow')
+          .select('*')
+          .eq('status', 'pending')
+          // FIX: Filter out tickets without serial numbers
+          .not('ticket_serial', 'is', null)
+          .neq('ticket_serial', '')
+          .order('created_at', { ascending: false }),
         supabase.from('soccer_results').select('*').order('created_at', { ascending: false }).limit(300),
         supabase.from('team_mappings').select('*')
       ]);
@@ -73,12 +80,9 @@ export default function SettlementPage() {
     if (processingId) return;
     setProcessingId(ticket.id);
 
-    // LOGIC UPDATE: We only update status to 'won'. 
-    // We do NOT set is_paid to true here because the Cashier must trigger the Payout button
-    // for the ledger to flow correctly.
     const updateData = { 
         status, 
-        settled_at: status === 'lost' ? new Date() : null // Only close 'lost' tickets immediately
+        settled_at: status === 'lost' ? new Date() : null 
     };
 
     const { error } = await supabase
@@ -87,7 +91,6 @@ export default function SettlementPage() {
       .eq('id', ticket.id);
     
     if (!error) {
-        // Remove from the pending list UI
         setTickets(prev => prev.filter(t => t.id !== ticket.id));
     } else {
         alert(error.message);
@@ -127,10 +130,8 @@ export default function SettlementPage() {
               return (
                 <div key={ticket.id} className="bg-[#111926] border border-white/5 rounded-[2.5rem] p-8 flex flex-col lg:flex-row gap-8 items-stretch hover:border-white/10 transition-colors shadow-2xl relative overflow-hidden group">
                   
-                  {/* Status Indicator Bar */}
                   <div className={`absolute left-0 top-0 bottom-0 w-2 ${isWon ? 'bg-emerald-500' : isLost ? 'bg-red-500' : 'bg-slate-800'}`} />
 
-                  {/* Left: Financial Info */}
                   <div className="min-w-[220px] flex flex-col justify-between py-2 border-r border-white/5 pr-8">
                     <div>
                       <div className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-2 tracking-widest uppercase">
@@ -146,7 +147,6 @@ export default function SettlementPage() {
                     </div>
                   </div>
 
-                  {/* Middle: Selection Details */}
                   <div className="flex-1 space-y-3">
                     {ticket.enrichedSelections.map((s, i) => (
                       <div key={i} className="bg-[#0b0f1a] p-5 rounded-2xl border border-white/[0.03] flex justify-between items-center group/leg transition-all">
@@ -176,7 +176,6 @@ export default function SettlementPage() {
                     ))}
                   </div>
 
-                  {/* Right: Action Buttons */}
                   <div className="min-w-[200px] flex flex-col gap-3 justify-center pl-4">
                     {isWon && (
                         <button 
