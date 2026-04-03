@@ -8,6 +8,15 @@ export default function Betslip({ items = [], setItems }) {
   const [stake, setStake] = useState(100);
   const MAX_GAMES = 20;
 
+  // --- NEW: AUTO-CLEAR BOOKING CODE ON NEW INTERACTION ---
+  // If the user has a code showing but starts clicking new markets/games, 
+  // we clear the "Success" screen so they can see their new slip.
+  useEffect(() => {
+    if (bookingCode && items.length > 0) {
+      setBookingCode(null);
+    }
+  }, [items, bookingCode]);
+
   // --- AUTO-REMOVE EXPIRED MATCHES ---
   useEffect(() => {
     const checkInterval = setInterval(() => {
@@ -37,15 +46,12 @@ export default function Betslip({ items = [], setItems }) {
     return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [potentialWinningsRaw]);
 
-  // --- UPDATED MULTIBET-AWARE BOOKING LOGIC ---
   const handleBookBet = async () => {
     if (items.length === 0 || items.length > MAX_GAMES) return;
     
     setIsBooking(true);
     try {
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
-      
-      // 1. Collect all unique matchIds from the slip
       const matchIds = items.map(item => item.matchId).filter(Boolean);
       
       let countryValue = "Unknown";
@@ -53,28 +59,22 @@ export default function Betslip({ items = [], setItems }) {
 
       if (matchIds.length > 0) {
         try {
-          // 2. Fetch data for ALL matches in the slip at once
           const { data: eventsData } = await supabase
             .from('api_events')
             .select('country, display_league, league_name')
             .in('id', matchIds);
 
           if (eventsData && eventsData.length > 0) {
-            // 3. Remove duplicates using Set
             const countries = [...new Set(eventsData.map(e => e.country).filter(Boolean))];
             const leagues = [...new Set(eventsData.map(e => e.display_league || e.league_name).filter(Boolean))];
-
-            // 4. IMPLEMENT DOUBLE COMMA JOIN
-            // This prevents "League, Women" from being split incorrectly in Python
             countryValue = countries.length > 0 ? countries.join(', , ') : "Unknown";
             leagueValue = leagues.length > 0 ? leagues.join(', , ') : "Unknown League";
           }
         } catch (err) {
-          console.warn("Could not fetch multi-match mapping from api_events.");
+          console.warn("Could not fetch multi-match mapping.");
         }
       }
       
-      // 5. INSERT into betnow
       const { error } = await supabase.from('betsnow').insert([{ 
         booking_code: finalCode, 
         selections: items, 
@@ -90,7 +90,11 @@ export default function Betslip({ items = [], setItems }) {
 
       if (error) throw error;
       
+      // Clear the items locally so the UI knows we are done with this specific set
+      // This triggers the useEffect above to keep the code visible until the NEXT click
       setBookingCode(finalCode);
+      setItems([]); 
+
       if (navigator.clipboard) {
         navigator.clipboard.writeText(finalCode);
       }
@@ -104,7 +108,6 @@ export default function Betslip({ items = [], setItems }) {
 
   return (
     <div className="bg-[#111926] border border-white/5 lg:rounded-2xl overflow-hidden flex flex-col h-full w-full">
-      {/* HEADER */}
       <div className="bg-[#0b0f1a]/50 p-4 border-b border-white/5 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <Ticket size={18} className="text-[#10b981]" />
@@ -121,19 +124,19 @@ export default function Betslip({ items = [], setItems }) {
 
       <div className="flex-1 overflow-y-auto no-scrollbar">
         <div className="p-3">
-          {items.length === 0 ? (
-            <div className="py-20 flex flex-col items-center justify-center opacity-20">
-              <Ticket size={48} className="text-white mb-2" />
-              <p className="text-[10px] font-bold text-white uppercase tracking-widest">Empty Slip</p>
-            </div>
-          ) : bookingCode ? (
+          {bookingCode ? (
             <div className="py-6 text-center animate-in zoom-in-95">
               <CheckCircle2 size={44} className="text-[#10b981] mx-auto mb-3" />
               <div className="bg-[#0b0f1a] border-2 border-dashed border-[#10b981]/40 p-6 rounded-2xl mb-4">
                 <span className="text-4xl font-black tracking-[0.2em] text-[#f59e0b]">{bookingCode}</span>
                 <p className="text-[9px] text-slate-500 mt-2 font-bold uppercase">Code Copied!</p>
               </div>
-              <button onClick={() => {setBookingCode(null); setItems([]);}} className="text-[10px] font-bold text-[#10b981] uppercase hover:underline">Clear Slip</button>
+              <button onClick={() => setBookingCode(null)} className="text-[10px] font-bold text-[#10b981] uppercase hover:underline">Done</button>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-20 flex flex-col items-center justify-center opacity-20">
+              <Ticket size={48} className="text-white mb-2" />
+              <p className="text-[10px] font-bold text-white uppercase tracking-widest">Empty Slip</p>
             </div>
           ) : (
             <div className="flex flex-col">
