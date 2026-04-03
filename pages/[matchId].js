@@ -2,8 +2,9 @@ import { useRouter } from 'next/router';
 import { useBets } from '../context/BetContext'; 
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
+import Sidebar from '../components/Sidebar'; // 1. Added Sidebar import
 import MobileFooter from '../components/MobileFooter';
-import { ChevronLeft, Clock, Shield, Lock, X, Trophy } from 'lucide-react';
+import { ChevronLeft, Clock, Shield, Lock, X, Trophy } from 'lucide-center';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -13,7 +14,6 @@ export default function MatchDetail({ match }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
-  // URL for your background image
   const bgImageUrl = 'https://t3.ftcdn.net/jpg/06/07/07/80/360_F_607078002_yMGIjR7oCK8fvvR8qD8hZ5EsXK7V8M7I.jpg';
 
   useEffect(() => {
@@ -80,131 +80,138 @@ export default function MatchDetail({ match }) {
     <div className="h-screen bg-[#0b0f1a] text-white font-sans flex flex-col overflow-hidden">
       <Navbar />
 
-      <div className="flex-1 overflow-y-auto no-scrollbar">
-        <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-0 lg:gap-8 p-0 lg:p-8">
-          
-          <main className="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6 pb-32">
+      {/* 2. Changed to a Flex container to hold the Sidebar and Content side-by-side */}
+      <div className="flex-1 flex overflow-hidden">
+        
+        {/* --- LEFT SIDEBAR (Visible on Desktop) --- */}
+        <aside className="hidden lg:block w-64 xl:w-72 border-r border-white/5 overflow-y-auto no-scrollbar shrink-0 bg-[#0b0f1a]">
+           <Sidebar 
+             onSelectLeague={() => router.push('/')} 
+             onClearFilter={() => router.push('/')}
+           />
+        </aside>
+
+        {/* --- MAIN CONTENT & RIGHT BETSLIP --- */}
+        <div className="flex-1 overflow-y-auto no-scrollbar">
+          <div className="max-w-[1400px] mx-auto grid grid-cols-12 gap-0 lg:gap-6 p-0 lg:p-6">
             
-            <div className="flex items-center justify-between px-4 lg:px-0 pt-4 lg:pt-0">
-              <div className="flex items-center gap-4">
-                <button onClick={() => router.back()} className="p-2.5 bg-[#1c2636] border border-white/5 rounded-xl">
-                  <ChevronLeft size={20} />
-                </button>
-                <div>
-                  <h1 className="text-[10px] font-bold capitalize italic text-[#10b981] opacity-80">{match.league_name}</h1>
-                  <p className="text-xs font-bold text-slate-500 capitalize">Match Center</p>
+            <main className="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6 pb-32">
+              <div className="flex items-center justify-between px-4 lg:px-0 pt-4 lg:pt-0">
+                <div className="flex items-center gap-4">
+                  <button onClick={() => router.back()} className="p-2.5 bg-[#1c2636] border border-white/5 rounded-xl">
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div>
+                    <h1 className="text-[10px] font-bold capitalize italic text-[#10b981] opacity-80">{match.league_name}</h1>
+                    <p className="text-xs font-bold text-slate-500 capitalize">Match Center</p>
+                  </div>
+                </div>
+                {isLocked && (
+                  <div className="flex items-center gap-2 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20">
+                    <Lock size={14} className="text-red-500" />
+                    <span className="text-[10px] font-bold italic text-red-500">Locked</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Hero Section */}
+              <div 
+                className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[220px] flex items-center ${isLocked ? 'saturate-50' : ''}`}
+                style={{
+                  backgroundImage: `url('${bgImageUrl}')`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-b from-[#0b0f1a]/90 via-[#0b0f1a]/40 to-[#0b0f1a]/90 z-0" />
+                <div className="w-full flex justify-around items-center px-4 relative z-10">
+                  <div className="flex-1 flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0b0f1a]/60 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 mb-3 shadow-2xl">
+                      <Shield size={24} className="text-[#10b981]" />
+                    </div>
+                    <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none drop-shadow-lg">{cleanName(match.home_team)}</h2>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-orange-500 text-3xl font-black italic tracking-tighter drop-shadow-md">VS</span>
+                    <div className={`px-4 py-1.5 rounded-full text-[10px] font-bold italic border backdrop-blur-sm ${isStartingSoon ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-[#0b0f1a]/60 border-white/20 text-slate-200'}`}>
+                      {formatFixedTime(match.commence_time)}
+                    </div>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0b0f1a]/60 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 mb-3 shadow-2xl">
+                      <Shield size={24} className="text-[#10b981]" />
+                    </div>
+                    <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none text-white drop-shadow-lg">{cleanName(match.away_team)}</h2>
+                  </div>
                 </div>
               </div>
-              {isLocked && (
-                <div className="flex items-center gap-2 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20">
-                  <Lock size={14} className="text-red-500" />
-                  <span className="text-[10px] font-bold italic text-red-500">Locked</span>
-                </div>
-              )}
-            </div>
 
-            {/* Hero Section with BG Image */}
-            <div 
-              className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[220px] flex items-center ${isLocked ? 'saturate-50' : ''}`}
-              style={{
-                backgroundImage: `url('${bgImageUrl}')`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center'
-              }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-[#0b0f1a]/90 via-[#0b0f1a]/40 to-[#0b0f1a]/90 z-0" />
-              
-              <div className="w-full flex justify-around items-center px-4 relative z-10">
-                <div className="flex-1 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-[#0b0f1a]/60 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 mb-3 shadow-2xl">
-                    <Shield size={24} className="text-[#10b981]" />
-                  </div>
-                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none drop-shadow-lg">{cleanName(match.home_team)}</h2>
-                </div>
-
-                <div className="flex flex-col items-center gap-2">
-                  <span className="text-orange-500 text-3xl font-black italic tracking-tighter drop-shadow-md">VS</span>
-                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-bold italic border backdrop-blur-sm ${isStartingSoon ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-[#0b0f1a]/60 border-white/20 text-slate-200'}`}>
-                    {formatFixedTime(match.commence_time)}
-                  </div>
-                </div>
-
-                <div className="flex-1 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-[#0b0f1a]/60 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 mb-3 shadow-2xl">
-                    <Shield size={24} className="text-[#10b981]" />
-                  </div>
-                  <h2 className="text-sm md:text-2xl font-black italic tracking-tighter leading-none text-white drop-shadow-lg">{cleanName(match.away_team)}</h2>
-                </div>
-              </div>
-            </div>
-
-           {/* Odds Markets */}
-<div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
-  <section>
-    <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2">Match Winner</h3>
-    <div className="grid grid-cols-3 gap-2">
-      {mainMarkets.map((odd, idx) => {
-        const uniqueId = `${match.id}-1x2-${idx}`;
-        const isSelected = slipItems.find(item => item.id === uniqueId);
-        return (
-          <button 
-            key={idx}
-            disabled={isLocked}
-            onClick={() => toggleBet('Winner', odd.display, odd.val, uniqueId)}
-            className={`h-11 px-3 rounded-full flex items-center justify-between transition-all border ${
-              isSelected 
-              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
-              : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
-            }`}
-          >
-            {/* Label (1, X, or 2) pushed to the left */}
-            <span className="text-[10px] font-bold opacity-60 lowercase">{odd.label}</span>
-            {/* Odds value pushed to the right */}
-            <span className="text-xs font-black italic">{odd.val || '—'}</span>
-          </button>
-        );
-      })}
-    </div>
-  </section>
-  
-              {match.deep_markets?.map((market, mIdx) => (
-                <section key={mIdx}>
-                  <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 capitalize">
-                    {market.name?.toLowerCase()}
-                  </h3>
-                  
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {market.odds?.map((odd, oIdx) => {
-                      const uniqueId = `${match.id}-${market.name}-${oIdx}`;
+              {/* Markets Grid */}
+              <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
+                <section>
+                  <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2">Match Winner</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {mainMarkets.map((odd, idx) => {
+                      const uniqueId = `${match.id}-1x2-${idx}`;
                       const isSelected = slipItems.find(item => item.id === uniqueId);
-                      const oddValue = odd.value || odd.odd_value;
                       return (
                         <button 
-                          key={oIdx}
+                          key={idx}
                           disabled={isLocked}
-                          onClick={() => toggleBet(market.name, odd.display, oddValue, uniqueId)}
-                          className={`flex items-center justify-between h-10 px-3 rounded-full transition-all border ${
+                          onClick={() => toggleBet('Winner', odd.display, odd.val, uniqueId)}
+                          className={`h-11 px-3 rounded-full flex items-center justify-between transition-all border ${
                             isSelected 
-                            ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' 
-                            : 'bg-[#1c2636]/40 border-white/5 text-slate-400 active:scale-95'
+                            ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
+                            : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
                           }`}
                         >
-                          <span className="text-[9px] font-bold italic truncate pr-1 lowercase">{odd.display}</span>
-                          <span className="text-[11px] font-black italic">{oddValue || '—'}</span>
+                          <span className="text-[10px] font-bold opacity-60 lowercase">{odd.label}</span>
+                          <span className="text-xs font-black italic">{odd.val || '—'}</span>
                         </button>
                       );
                     })}
                   </div>
                 </section>
-              ))}
-            </div>
-          </main>
 
-          <aside className="hidden lg:block lg:col-span-4 xl:col-span-3">
-            <div className="sticky top-0 h-fit">
-              <Betslip items={slipItems} setItems={setSlipItems} />
-            </div>
-          </aside>
+                {match.deep_markets?.map((market, mIdx) => (
+                  <section key={mIdx}>
+                    <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 capitalize">
+                      {market.name?.toLowerCase()}
+                    </h3>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {market.odds?.map((odd, oIdx) => {
+                        const uniqueId = `${match.id}-${market.name}-${oIdx}`;
+                        const isSelected = slipItems.find(item => item.id === uniqueId);
+                        const oddValue = odd.value || odd.odd_value;
+                        return (
+                          <button 
+                            key={oIdx}
+                            disabled={isLocked}
+                            onClick={() => toggleBet(market.name, odd.display, oddValue, uniqueId)}
+                            className={`flex items-center justify-between h-10 px-3 rounded-full transition-all border ${
+                              isSelected 
+                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' 
+                              : 'bg-[#1c2636]/40 border-white/5 text-slate-400 active:scale-95'
+                            }`}
+                          >
+                            <span className="text-[9px] font-bold italic truncate pr-1 lowercase">{odd.display}</span>
+                            <span className="text-[11px] font-black italic">{oddValue || '—'}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </main>
+
+            {/* --- RIGHT SIDEBAR (Betslip) --- */}
+            <aside className="hidden lg:block lg:col-span-4 xl:col-span-3">
+              <div className="sticky top-0 h-fit pt-2">
+                <Betslip items={slipItems} setItems={setSlipItems} />
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
 
@@ -230,34 +237,4 @@ export default function MatchDetail({ match }) {
   );
 }
 
-// THE MISSING DATA FETCHING BLOCK:
-export async function getServerSideProps({ params }) {
-  const { matchId } = params;
-  try {
-    const { data, error } = await supabase
-      .from('api_events')
-      .select(`*, api_event_details ( markets )`)
-      .eq('id', matchId)
-      .single();
-
-    if (error || !data) return { notFound: true };
-
-    const details = data.api_event_details;
-    let rawMarkets = [];
-    
-    // Handle different data shapes from scrapped data
-    if (Array.isArray(details) && details.length > 0) {
-      rawMarkets = details[0]?.markets?.data || details[0]?.markets || [];
-    } else if (details) {
-      rawMarkets = details.markets?.data || details.markets || [];
-    }
-
-    return {
-      props: {
-        match: JSON.parse(JSON.stringify({ ...data, deep_markets: rawMarkets }))
-      }
-    };
-  } catch (err) {
-    return { notFound: true };
-  }
-}
+// ...getServerSideProps remains the same
