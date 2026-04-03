@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { 
   Search, Trophy, Activity, Smartphone, Ticket 
 } from 'lucide-react';
-import HomeBanner from './HomeBanner';
 
 const Navbar = ({ onSearch }) => {
   return (
@@ -54,11 +53,6 @@ const Navbar = ({ onSearch }) => {
           <Search size={18} className="group-hover:scale-110 transition-transform" />
           <span className="text-sm font-bold uppercase tracking-tight">Search</span>
         </div>
-      </div>
-
-      {/* --- BANNER SECTION: Full-Width Integrated Promo --- */}
-      <div className="bg-[#0b0f1a] w-full border-b border-white/5 overflow-hidden">
-        <HomeBanner />
       </div>
     </nav>
   );
