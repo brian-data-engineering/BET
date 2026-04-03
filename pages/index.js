@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import MobileFooter from '../components/MobileFooter';
+import HomeBanner from '../components/HomeBanner'; // Added Import
 import { useBets } from '../context/BetContext'; 
 import { Clock, AlertCircle, X, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -120,6 +121,12 @@ export default function Home({ initialMatches = [] }) {
 
           <div className="p-3 pb-32 lg:pb-10 flex-1">
             <div className="max-w-4xl mx-auto">
+              
+              {/* BANNER ADDED HERE: Disappears on scroll up, sits above matches */}
+              <div className="mb-6 rounded-2xl overflow-hidden shadow-2xl border border-white/5">
+                <HomeBanner />
+              </div>
+
               {displayMatches.length > 0 ? displayMatches.map((match) => {
                 const currentSelection = slipItems.find(item => item.matchId === match.id);
                 const { isStartingSoon } = getMatchStatus(match.commence_time);
