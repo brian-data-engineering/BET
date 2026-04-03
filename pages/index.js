@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
 import Sidebar from '../components/Sidebar';
 import MobileFooter from '../components/MobileFooter';
-import HomeBanner from '../components/HomeBanner'; // Added Import
+import HomeBanner from '../components/HomeBanner'; 
 import { useBets } from '../context/BetContext'; 
 import { Clock, AlertCircle, X, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -119,73 +119,77 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          <div className="p-3 pb-32 lg:pb-10 flex-1">
-            <div className="max-w-4xl mx-auto">
+          {/* FIX: Removed max-w-4xl and centering to fill the screen gaps */}
+          <div className="pb-32 lg:pb-10 flex-1 w-full">
+            <div className="w-full">
               
-              {/* BANNER ADDED HERE: Disappears on scroll up, sits above matches */}
-              <div className="mb-6 rounded-2xl overflow-hidden shadow-2xl border border-white/5">
+              {/* BANNER: Now stretches to touch the sidebar and betslip */}
+              <div className="mb-6 border-b border-white/5 shadow-2xl">
                 <HomeBanner />
               </div>
 
-              {displayMatches.length > 0 ? displayMatches.map((match) => {
-                const currentSelection = slipItems.find(item => item.matchId === match.id);
-                const { isStartingSoon } = getMatchStatus(match.commence_time);
-                const oddsData = [
-                  { label: '1', val: match.home_odds },
-                  { label: 'X', val: match.draw_odds },
-                  { label: '2', val: match.away_odds }
-                ];
+              {/* MATCH LIST: Kept px-4 to ensure text doesn't touch the very edge of the screen */}
+              <div className="px-4">
+                {displayMatches.length > 0 ? displayMatches.map((match) => {
+                  const currentSelection = slipItems.find(item => item.matchId === match.id);
+                  const { isStartingSoon } = getMatchStatus(match.commence_time);
+                  const oddsData = [
+                    { label: '1', val: match.home_odds },
+                    { label: 'X', val: match.draw_odds },
+                    { label: '2', val: match.away_odds }
+                  ];
 
-                return (
-                  <div 
-                    key={match.id} 
-                    className={`grid grid-cols-12 gap-2 py-4 border-b border-white/5 items-center transition-colors px-1 ${isStartingSoon ? 'bg-orange-500/5' : 'hover:bg-white/[0.02]'}`}
-                  >
-                    <Link href={`/${match.id}`} className="col-span-7 flex flex-col justify-center overflow-hidden">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-[10px] font-bold text-slate-400 capitalize tracking-tight truncate">
-                          {match.display_league || match.league_name}
-                        </span>
-                        <span className={`text-[10px] font-bold flex items-center gap-0.5 whitespace-nowrap ${isStartingSoon ? 'text-orange-500 animate-pulse' : 'text-slate-500'}`}>
-                          <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                          {isStartingSoon && <span className="ml-1 text-[8px] italic">Starts Soon!</span>}
-                        </span>
-                      </div>
-                      <div className="space-y-0.5">
-                        <p className="text-[15px] font-black italic capitalize leading-tight truncate tracking-tight">
-                          {cleanName(match.home_team)}
-                        </p>
-                        <p className="text-[15px] font-black italic capitalize leading-tight truncate tracking-tight text-white/90">
-                          {cleanName(match.away_team)}
-                        </p>
-                      </div>
-                    </Link>
-
-                    <div className="col-span-5 grid grid-cols-3 gap-1.5">
-                      {oddsData.map((o) => (
-                       <button
-                          key={o.label}
-                          onClick={() => toggleBet(o.label, o.val, match)}
-                          className={`h-9 px-4 rounded-full flex items-center justify-center transition-all ${
-                            currentSelection?.selection === o.label 
-                              ? 'bg-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/20' 
-                              : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95'
-                          }`}
-                        >
-                          <span className="text-[13px] font-black tracking-tight">
-                            {o.val ? parseFloat(o.val).toFixed(2) : '—'}
+                  return (
+                    <div 
+                      key={match.id} 
+                      className={`grid grid-cols-12 gap-2 py-4 border-b border-white/5 items-center transition-colors px-1 ${isStartingSoon ? 'bg-orange-500/5' : 'hover:bg-white/[0.02]'}`}
+                    >
+                      <Link href={`/${match.id}`} className="col-span-7 flex flex-col justify-center overflow-hidden">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-[10px] font-bold text-slate-400 capitalize tracking-tight truncate">
+                            {match.display_league || match.league_name}
                           </span>
-                        </button>
-                      ))}
+                          <span className={`text-[10px] font-bold flex items-center gap-0.5 whitespace-nowrap ${isStartingSoon ? 'text-orange-500 animate-pulse' : 'text-slate-500'}`}>
+                            <Clock size={10} /> {formatFixedTime(match.commence_time)}
+                            {isStartingSoon && <span className="ml-1 text-[8px] italic">Starts Soon!</span>}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-[15px] font-black italic capitalize leading-tight truncate tracking-tight">
+                            {cleanName(match.home_team)}
+                          </p>
+                          <p className="text-[15px] font-black italic capitalize leading-tight truncate tracking-tight text-white/90">
+                            {cleanName(match.away_team)}
+                          </p>
+                        </div>
+                      </Link>
+
+                      <div className="col-span-5 grid grid-cols-3 gap-1.5">
+                        {oddsData.map((o) => (
+                         <button
+                            key={o.label}
+                            onClick={() => toggleBet(o.label, o.val, match)}
+                            className={`h-9 px-4 rounded-full flex items-center justify-center transition-all ${
+                              currentSelection?.selection === o.label 
+                                ? 'bg-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/20' 
+                                : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95'
+                            }`}
+                          >
+                            <span className="text-[13px] font-black tracking-tight">
+                              {o.val ? parseFloat(o.val).toFixed(2) : '—'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                  );
+                }) : (
+                  <div className="py-32 text-center opacity-20 flex flex-col items-center">
+                    <AlertCircle size={48} className="mb-4 text-[#10b981]" />
+                    <p className="text-sm font-bold italic capitalize tracking-widest">No events available</p>
                   </div>
-                );
-              }) : (
-                <div className="py-32 text-center opacity-20 flex flex-col items-center">
-                  <AlertCircle size={48} className="mb-4 text-[#10b981]" />
-                  <p className="text-sm font-bold italic capitalize tracking-widest">No events available</p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </main>
