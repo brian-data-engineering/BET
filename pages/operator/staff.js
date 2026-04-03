@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
-import { Monitor, Loader2, Send, Database, UserPlus } from 'lucide-react';
+import { Monitor, Loader2, Send, Database, UserPlus, X } from 'lucide-react';
 
 export default function ManageStaff() {
   const [staff, setStaff] = useState([]);
@@ -9,7 +9,7 @@ export default function ManageStaff() {
   const [fetching, setFetching] = useState(true);
   const [processingId, setProcessingId] = useState(null);
 
-  // --- NEW STATE FOR CREATING CASHIERS ---
+  // --- FORM STATE ---
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', username: '' });
   const [creating, setCreating] = useState(false);
@@ -18,39 +18,45 @@ export default function ManageStaff() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [pRes, sRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('profiles')
+    // Fetch the current operator's profile first
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    if (profile) {
+      setOperatorProfile(profile);
+      
+      // Now fetch their specific cashiers
+      const { data: cashiers } = await supabase.from('profiles')
         .select('*')
         .eq('parent_id', user.id)
         .eq('role', 'cashier')
-        .order('username', { ascending: true })
-    ]);
+        .order('username', { ascending: true });
 
-    if (pRes.data) setOperatorProfile(pRes.data);
-    if (sRes.data) setStaff(sRes.data);
+      if (cashiers) setStaff(cashiers);
+    }
     setFetching(false);
   }, []);
 
   useEffect(() => { 
     fetchData();
+    
     const channel = supabase
       .channel('staff-mgmt-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        fetchData();
+      })
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
 
-  // --- NEW FUNCTION: CREATE CASHIER ---
   const handleCreateCashier = async (e) => {
     e.preventDefault();
     setCreating(true);
     
-    const { data, error } = await supabase.auth.signUp({
+    // We use the standard signUp but with the "No Session" flag
+    const { error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: {
-        // CRITICAL: Prevents the Operator from being logged out
         shouldCreateSession: false, 
         data: { 
           username: form.username,
@@ -61,24 +67,43 @@ export default function ManageStaff() {
     });
 
     if (error) {
-      alert(`Provisioning Failed: ${error.message}`);
+      alert(`Error: ${error.message}`);
     } else {
-      alert(`CASHIER ACTIVATED: ${form.username.toUpperCase()}`);
+      alert(`SUCCESS: Cashier ${form.username} created.`);
       setForm({ email: '', password: '', username: '' });
       setShowAddForm(false);
-      fetchData(); // Refresh list
+      fetchData(); // Manual refresh just in case
     }
     setCreating(false);
   };
 
   const handleDispatch = async (id, name) => {
-    // ... (Your existing handleDispatch code stays the same)
+    if (processingId) return;
+    const val = prompt(`Enter KES amount to dispatch to ${name.toUpperCase()}:`);
+    if (!val) return;
+    const amount = Math.trunc(Number(val));
+    if (!amount || amount <= 0) return;
+
+    setProcessingId(id);
+    try {
+      const { error } = await supabase.rpc('process_transfer', {
+        p_sender_id: operatorProfile.id,
+        p_receiver_id: id,
+        p_amount: amount
+      });
+      if (error) alert(`Dispatch Rejection: ${error.message}`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   return (
     <OperatorLayout profile={operatorProfile}>
       <div className="p-8 space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
+        {/* HEADER */}
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
             <div className="flex items-center gap-2 text-blue-500 font-black uppercase text-[10px] italic mb-1 tracking-widest">
@@ -87,13 +112,13 @@ export default function ManageStaff() {
             <h1 className="text-5xl font-black uppercase italic tracking-tighter">Terminal Nodes</h1>
           </div>
           
-          <div className="flex gap-4">
-            {/* NEW: Toggle Add Form */}
+          <div className="flex items-center gap-6">
             <button 
               onClick={() => setShowAddForm(!showAddForm)}
-              className="bg-blue-600 px-8 py-4 rounded-2xl font-black italic uppercase text-xs hover:bg-blue-500 transition-all flex items-center gap-2"
+              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-blue-600 text-white'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border`}
             >
-              <UserPlus size={16} /> {showAddForm ? 'Cancel' : 'Add Cashier'}
+              {showAddForm ? <X size={16} /> : <UserPlus size={16} />}
+              {showAddForm ? 'Cancel' : 'Register Cashier'}
             </button>
 
             <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5 shadow-2xl">
@@ -105,52 +130,72 @@ export default function ManageStaff() {
           </div>
         </div>
 
-        {/* NEW: The Provisioning Form UI */}
+        {/* ADD CASHIER FORM */}
         {showAddForm && (
-          <form onSubmit={handleCreateCashier} className="bg-[#111926] p-10 rounded-[3rem] border border-blue-500/30 grid grid-cols-4 gap-6 items-end animate-in fade-in slide-in-from-top-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase italic text-slate-500 ml-2">Username</label>
-              <input 
-                required
-                className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm focus:border-blue-500 outline-none" 
-                placeholder="CASHIER_01"
-                value={form.username}
-                onChange={e => setForm({...form, username: e.target.value})}
-              />
+          <form onSubmit={handleCreateCashier} className="bg-[#111926] p-8 rounded-[2.5rem] border border-blue-500/20 flex flex-wrap gap-4 items-end animate-in fade-in zoom-in duration-200">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Cashier Username</label>
+              <input required className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-blue-500" value={form.username} onChange={e => setForm({...form, username: e.target.value})} />
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase italic text-slate-500 ml-2">Email</label>
-              <input 
-                required
-                type="email"
-                className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm focus:border-blue-500 outline-none" 
-                placeholder="cashier@lucra.com"
-                value={form.email}
-                onChange={e => setForm({...form, email: e.target.value})}
-              />
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Email Address</label>
+              <input required type="email" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-blue-500" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase italic text-slate-500 ml-2">Access Key (Password)</label>
-              <input 
-                required
-                type="password"
-                className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm focus:border-blue-500 outline-none" 
-                placeholder="••••••••"
-                value={form.password}
-                onChange={e => setForm({...form, password: e.target.value})}
-              />
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Password</label>
+              <input required type="password" underline className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-blue-500" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
             </div>
-            <button 
-              disabled={creating}
-              className="bg-[#10b981] text-black p-4 rounded-2xl font-black uppercase italic text-xs hover:scale-[1.02] active:scale-95 transition-all"
-            >
-              {creating ? 'Initializing...' : 'Confirm Node Activation'}
+            <button disabled={creating} className="bg-[#10b981] text-black h-[54px] px-10 rounded-2xl font-black uppercase italic text-xs hover:brightness-110 active:scale-95 transition-all">
+              {creating ? 'Creating...' : 'Activate Node'}
             </button>
           </form>
         )}
 
+        {/* DATA TABLE */}
         <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
-          {/* ... (Rest of your table code remains exactly as it was) */}
+          <table className="w-full text-left">
+            <thead className="bg-black/20 text-[9px] font-black uppercase text-slate-600 italic tracking-widest">
+              <tr>
+                <th className="p-10">Node ID</th>
+                <th className="p-10 text-center">Current Liquidity</th>
+                <th className="p-10 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {staff.length === 0 ? (
+                <tr><td colSpan="3" className="p-20 text-center text-slate-500 italic uppercase font-black text-xs">No active terminal nodes found</td></tr>
+              ) : (
+                staff.map((s) => (
+                  <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="p-10">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500"><Monitor size={20} /></div>
+                        <span className="font-black uppercase italic text-xl tracking-tight">{s.username}</span>
+                      </div>
+                    </td>
+                    <td className="p-10 text-center font-black italic text-[#10b981] text-2xl">
+                      KES {parseFloat(s.balance || 0).toLocaleString()}
+                    </td>
+                    <td className="p-10 text-right">
+                      <button 
+                        onClick={() => handleDispatch(s.id, s.username)}
+                        disabled={processingId !== null}
+                        className="bg-white/5 p-5 px-8 rounded-2xl hover:bg-[#10b981] hover:text-black transition-all text-xs font-black uppercase italic group"
+                      >
+                        {processingId === s.id ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            DISPATCH <Send size={14} className="group-hover:translate-x-1 transition-transform" />
+                          </div>
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </OperatorLayout>
