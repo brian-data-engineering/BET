@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Trophy, ChevronRight, ChevronDown, FilterX, Globe, Activity, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/router'; // Import router for navigation
+import { Trophy, ChevronRight, ChevronDown, FilterX, Globe, Activity, Loader2, PlayCircle } from 'lucide-react';
 
 const Sidebar = ({ onSelectLeague, onClearFilter }) => {
+  const router = useRouter();
   const [tree, setTree] = useState({}); 
   const [expandedSport, setExpandedSport] = useState('soccer'); 
   const [expandedCountry, setExpandedCountry] = useState(null); 
+  const [expandedLeague, setExpandedLeague] = useState(null); // New state for games
   const [loading, setLoading] = useState(true);
 
   const sportMapping = {
@@ -25,9 +28,10 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
     const now = new Date().toISOString();
     const allowedSports = Object.keys(sportMapping);
 
+    // Added 'id', 'home_team', 'away_team' to the select
     const { data } = await supabase
       .from('api_events')
-      .select('sport_key, country, league_name')
+      .select('id, sport_key, country, league_name, home_team, away_team')
       .in('sport_key', allowedSports) 
       .gt('commence_time', now) 
       .order('country', { ascending: true });
@@ -42,18 +46,17 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
         if (/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league)) return;
         
         if (!newTree[sport]) newTree[sport] = {};
-        if (!newTree[sport][country]) newTree[sport][country] = new Set();
-        newTree[sport][country].add(league);
-      });
-
-      const finalTree = {};
-      Object.keys(newTree).forEach(s => {
-        finalTree[s] = {};
-        Object.keys(newTree[s]).sort().forEach(c => {
-          finalTree[s][c] = Array.from(newTree[s][c]).sort();
+        if (!newTree[sport][country]) newTree[sport][country] = {};
+        if (!newTree[sport][country][league]) newTree[sport][country][league] = [];
+        
+        // Push the specific game object into the league array
+        newTree[sport][country][league].push({
+          id: item.id,
+          name: `${item.home_team} vs ${item.away_team}`.replace(/['"]+/g, '')
         });
       });
-      setTree(finalTree);
+
+      setTree(newTree);
     }
     setLoading(false);
   };
@@ -61,6 +64,7 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
   const handleSportClick = (sportKey) => {
     setExpandedSport(expandedSport === sportKey ? null : sportKey);
     setExpandedCountry(null); 
+    setExpandedLeague(null);
   };
 
   return (
@@ -148,15 +152,43 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
 
                               {isCountryExpanded && (
                                 <div className="flex flex-col bg-white/[0.02] border-l-2 border-[#10b981]/30 ml-8 my-0.5 rounded-r-lg">
-                                  {countries[country].map(league => (
-                                    <button
-                                      key={league}
-                                      onClick={() => onSelectLeague(league, sportKey)}
-                                      className="w-full text-left px-4 py-3 text-[10px] font-bold text-slate-400 hover:text-[#10b981] hover:bg-[#10b981]/5 transition-all truncate italic border-b border-white/[0.02] last:border-0"
-                                    >
-                                      {league}
-                                    </button>
-                                  ))}
+                                  {Object.keys(countries[country]).map(league => {
+                                    const isLeagueExpanded = expandedLeague === `${sportKey}-${country}-${league}`;
+                                    return (
+                                      <div key={league} className="flex flex-col">
+                                        <button
+                                          onClick={() => {
+                                            setExpandedLeague(isLeagueExpanded ? null : `${sportKey}-${country}-${league}`);
+                                            onSelectLeague(league, sportKey);
+                                          }}
+                                          className={`w-full text-left px-4 py-3 text-[10px] font-bold transition-all truncate italic border-b border-white/[0.02] last:border-0 flex items-center justify-between ${
+                                            isLeagueExpanded ? 'text-[#10b981] bg-[#10b981]/5' : 'text-slate-400 hover:text-[#10b981] hover:bg-[#10b981]/5'
+                                          }`}
+                                        >
+                                          <span className="truncate pr-2">{league}</span>
+                                          {isLeagueExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} className="opacity-40" />}
+                                        </button>
+
+                                        {/* INDIVIDUAL GAMES LIST */}
+                                        {isLeagueExpanded && (
+                                          <div className="bg-black/20 flex flex-col py-1">
+                                            {countries[country][league].map(game => (
+                                              <button
+                                                key={game.id}
+                                                onClick={() => router.push(`/${game.id}`)}
+                                                className="w-full text-left px-6 py-2.5 text-[9px] font-medium text-slate-500 hover:text-white hover:bg-white/5 flex items-center gap-2 transition-all border-l border-[#10b981]/20"
+                                              >
+                                                <PlayCircle size={10} className="text-[#10b981]/50 shrink-0" />
+                                                <span className="truncate">
+                                                  {game.name.length > 25 ? `${game.name.substring(0, 25)}...` : game.name}
+                                                </span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
