@@ -2,9 +2,9 @@ import { useRouter } from 'next/router';
 import { useBets } from '../context/BetContext'; 
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
-import Sidebar from '../components/Sidebar'; // 1. Added Sidebar import
+import Sidebar from '../components/Sidebar'; // Added Sidebar import
 import MobileFooter from '../components/MobileFooter';
-import { ChevronLeft, Clock, Shield, Lock, X, Trophy } from 'lucide-center';
+import { ChevronLeft, Clock, Shield, Lock, X, Trophy } from 'lucide-react'; // Fixed build error
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -80,20 +80,18 @@ export default function MatchDetail({ match }) {
     <div className="h-screen bg-[#0b0f1a] text-white font-sans flex flex-col overflow-hidden">
       <Navbar />
 
-      {/* 2. Changed to a Flex container to hold the Sidebar and Content side-by-side */}
       <div className="flex-1 flex overflow-hidden">
-        
-        {/* --- LEFT SIDEBAR (Visible on Desktop) --- */}
-        <aside className="hidden lg:block w-64 xl:w-72 border-r border-white/5 overflow-y-auto no-scrollbar shrink-0 bg-[#0b0f1a]">
-           <Sidebar 
-             onSelectLeague={() => router.push('/')} 
-             onClearFilter={() => router.push('/')}
-           />
+        {/* Left Sidebar - Visible on Desktop */}
+        <aside className="hidden lg:block w-64 border-r border-white/5 bg-[#111926] shrink-0 overflow-y-auto no-scrollbar">
+          <Sidebar 
+            onSelectLeague={() => router.push('/')} 
+            onClearFilter={() => router.push('/')} 
+          />
         </aside>
 
-        {/* --- MAIN CONTENT & RIGHT BETSLIP --- */}
+        {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto no-scrollbar">
-          <div className="max-w-[1400px] mx-auto grid grid-cols-12 gap-0 lg:gap-6 p-0 lg:p-6">
+          <div className="max-w-[1400px] mx-auto grid grid-cols-12 gap-0 lg:gap-8 p-0 lg:p-8">
             
             <main className="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6 pb-32">
               <div className="flex items-center justify-between px-4 lg:px-0 pt-4 lg:pt-0">
@@ -146,7 +144,7 @@ export default function MatchDetail({ match }) {
                 </div>
               </div>
 
-              {/* Markets Grid */}
+              {/* Odds Markets */}
               <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
                 <section>
                   <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2">Match Winner</h3>
@@ -205,9 +203,9 @@ export default function MatchDetail({ match }) {
               </div>
             </main>
 
-            {/* --- RIGHT SIDEBAR (Betslip) --- */}
+            {/* Right Sidebar - Betslip */}
             <aside className="hidden lg:block lg:col-span-4 xl:col-span-3">
-              <div className="sticky top-0 h-fit pt-2">
+              <div className="sticky top-0 h-fit">
                 <Betslip items={slipItems} setItems={setSlipItems} />
               </div>
             </aside>
@@ -237,4 +235,32 @@ export default function MatchDetail({ match }) {
   );
 }
 
-// ...getServerSideProps remains the same
+export async function getServerSideProps({ params }) {
+  const { matchId } = params;
+  try {
+    const { data, error } = await supabase
+      .from('api_events')
+      .select(`*, api_event_details ( markets )`)
+      .eq('id', matchId)
+      .single();
+
+    if (error || !data) return { notFound: true };
+
+    const details = data.api_event_details;
+    let rawMarkets = [];
+    
+    if (Array.isArray(details) && details.length > 0) {
+      rawMarkets = details[0]?.markets?.data || details[0]?.markets || [];
+    } else if (details) {
+      rawMarkets = details.markets?.data || details.markets || [];
+    }
+
+    return {
+      props: {
+        match: JSON.parse(JSON.stringify({ ...data, deep_markets: rawMarkets }))
+      }
+    };
+  } catch (err) {
+    return { notFound: true };
+  }
+}
