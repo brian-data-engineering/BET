@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
-import { Lock, UserCheck, AlertCircle, Zap, ShieldAlert } from 'lucide-react';
+import { Lock, User, AlertCircle, Zap, ShieldAlert } from 'lucide-react';
 
 export default function OperatorLogin() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState(''); // Changed from email
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -16,30 +16,35 @@ export default function OperatorLogin() {
     setErrorMsg(null);
 
     try {
+      // GHOST LOGIC: Bridge username to the internal auth domain
+      const internalEmail = `${username.toLowerCase().trim()}@lucra.internal`;
+
       // 1. Initial Auth Check
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ 
+        email: internalEmail, 
+        password 
+      });
 
       if (authError) throw authError;
 
-      // 2. Immediate Role Verification (The "Anti-Sneak" Guard)
+      // 2. Immediate Role Verification
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', authData.user.id)
         .single();
 
-      const allowedRoles = ['operator', 'cashier', 'admin', 'super_admin'];
+      const allowedRoles = ['operator', 'super_admin']; // Cashiers should use the cashier login
       
       if (profileError || !allowedRoles.includes(profile?.role)) {
-        // KILL SESSION IMMEDIATELY if role is wrong
         await supabase.auth.signOut();
         throw new Error("ACCESS DENIED: Credentials lack Operator clearance.");
       }
 
-      // SUCCESS: Route to the encrypted dashboard
+      // SUCCESS
       router.push('/operator/dashboard');
     } catch (err) {
-      setErrorMsg(err.message);
+      setErrorMsg("PROTOCOL ERROR: " + err.message);
       setLoading(false);
     }
   };
@@ -69,18 +74,21 @@ export default function OperatorLogin() {
 
           <div className="space-y-5">
             <div className="space-y-2">
-              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 italic tracking-widest">Node Identity (Email)</label>
-              <input 
-                type="email" 
-                placeholder="staff_auth@lucra.bet" 
-                className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold text-white placeholder:text-white/10" 
-                onChange={e => setEmail(e.target.value)} 
-                required
-              />
+              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 italic tracking-widest">Operator Identity</label>
+              <div className="relative">
+                <input 
+                  type="text" // Changed from email
+                  placeholder="e.g. waziri" 
+                  className="w-full bg-[#0b0f1a] border border-white/10 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold text-white placeholder:text-white/10" 
+                  onChange={e => setUsername(e.target.value)} 
+                  required
+                />
+                <User className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 italic tracking-widest">Encryption Key (Password)</label>
+              <label className="text-[9px] text-slate-500 font-black uppercase ml-2 italic tracking-widest">Encryption Key</label>
               <input 
                 type="password" 
                 placeholder="••••••••••••" 
