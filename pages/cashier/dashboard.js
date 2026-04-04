@@ -20,32 +20,14 @@ export default function CashierDashboard() {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
     
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authUser.id)
-      .single();
-      
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
     if (profile) setUserProfile(profile);
 
     const { data: profiles } = await supabase.from('profiles').select('id, username, shop_name');
     if (profiles) setAllProfiles(profiles);
   }, []);
 
-  useEffect(() => { 
-    initTerminal(); 
-  }, [initTerminal]);
-
-  useEffect(() => {
-    const beforePrint = () => setIsProcessing(true);
-    const afterPrint = () => setIsProcessing(false);
-    window.addEventListener('beforeprint', beforePrint);
-    window.addEventListener('afterprint', afterPrint);
-    return () => {
-      window.removeEventListener('beforeprint', beforePrint);
-      window.removeEventListener('afterprint', afterPrint);
-    };
-  }, []);
+  useEffect(() => { initTerminal(); }, [initTerminal]);
 
   const handleLoadTicket = async () => {
     if (!searchQuery || isSearching) return;
@@ -65,26 +47,38 @@ export default function CashierDashboard() {
         return;
       }
 
-      // 1. Parse selections immediately to ensure array format
-      const rawSelections = ticket.selections 
+      // 1. Parse selections
+      let rawSelections = ticket.selections 
         ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
         : [];
 
+      // 2. OBJECTIVE: ENRICH WITH LEAGUE NAMES FROM api_events
+      const matchIds = rawSelections.map(s => s.matchId);
+      const { data: eventData } = await supabase
+        .from('api_events')
+        .select('id, display_league')
+        .in('id', matchIds);
+
+      const enrichedSelections = rawSelections.map(sel => {
+        const matchInfo = eventData?.find(e => String(e.id) === String(sel.matchId));
+        return { 
+          ...sel, 
+          leagueName: matchInfo?.display_league || "Soccer" 
+        };
+      });
+
       if (ticket.ticket_serial) {
-        // REPRINT PAID TICKET
-        setCurrentTicket({ ...ticket, selections: rawSelections });
+        // REPRINT MODE
+        setCurrentTicket({ ...ticket, selections: enrichedSelections });
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => window.print());
-          });
+          setTimeout(() => window.print(), 500);
         }
       } else {
-        // LOAD UNPAID BOOKING
+        // BOOKING MODE
         const now = new Date().getTime();
-        const validSelections = rawSelections.filter(item => {
+        const validSelections = enrichedSelections.filter(item => {
           if (!item.startTime) return true;
           const matchDate = new Date(item.startTime).getTime();
-          // Filter out matches that started more than 1 minute ago
           return (matchDate - now) > -60000; 
         });
 
@@ -93,7 +87,6 @@ export default function CashierDashboard() {
           return;
         }
 
-        // Sync both the slip and the active cart
         setCurrentTicket({ ...ticket, selections: validSelections }); 
         setCart(validSelections);
         setStake(ticket.stake?.toString() || "100");
@@ -101,7 +94,6 @@ export default function CashierDashboard() {
       setSearchQuery('');
     } catch (err) {
       console.error("Load Error:", err);
-      alert("❌ ERROR LOADING TICKET");
     } finally {
       setIsSearching(false);
     }
@@ -109,11 +101,11 @@ export default function CashierDashboard() {
 
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
-    if (!numStake || numStake <= 0) return alert("Enter valid stake");
+    if (!numStake || numStake <= 0) return alert("Enter stake");
     if (numStake > (userProfile?.balance || 0)) return alert("⚠️ INSUFFICIENT FLOAT");
     
     const targetCode = currentTicket?.booking_code;
-    if (!targetCode) return alert("No valid booking code found.");
+    if (!targetCode) return alert("No booking code.");
 
     setIsProcessing(true);
     try {
@@ -131,11 +123,11 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // Ensure PrintableTicket receives the fully populated object
+      // Update currentTicket with the enriched cart data (leagues + times)
       setCurrentTicket({
         ...(paidTicket || currentTicket),
         ticket_serial: newSerial, 
-        selections: savedCartForPrint, // CRITICAL: Use the cart array with startTime/matchName
+        selections: savedCartForPrint, 
         stake: numStake,
         total_odds: totalOdds,
         potential_payout: potentialPayout,
@@ -146,18 +138,15 @@ export default function CashierDashboard() {
       setStake("");
       setIsProcessing(false); 
 
-      // Print Sequence
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           window.print();
-          initTerminal(); // Refresh balance
+          initTerminal(); 
           setTimeout(() => setCurrentTicket(null), 3000);
         });
       });
-
     } catch (err) {
-      console.error("Payment Error:", err);
-      alert("❌ DATABASE REJECTED: " + (err.message || "Check connection"));
+      alert("❌ ERROR: " + err.message);
       setIsProcessing(false);
     }
   };
@@ -165,7 +154,6 @@ export default function CashierDashboard() {
   return (
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden">
-        {/* Left Side: Search & Stats */}
         <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-xl">
             <div className="flex items-center gap-3 mb-8">
@@ -182,11 +170,7 @@ export default function CashierDashboard() {
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
                 className="w-full bg-[#111926] border-2 border-white/5 rounded-2xl py-6 pl-6 pr-32 text-2xl font-black outline-none focus:border-[#10b981] transition-all uppercase"
               />
-              <button 
-                onClick={handleLoadTicket}
-                disabled={isSearching}
-                className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic hover:brightness-110 transition-all"
-              >
+              <button onClick={handleLoadTicket} disabled={isSearching} className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic hover:brightness-110">
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
@@ -198,52 +182,35 @@ export default function CashierDashboard() {
                   KES {(userProfile?.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <button 
-                onClick={initTerminal}
-                className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center hover:bg-white/5 group transition-colors"
-              >
-                <RefreshCw size={24} className={`${isSearching ? "animate-spin" : ""} group-hover:rotate-180 transition-all duration-500`} />
+              <button onClick={initTerminal} className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center">
+                <RefreshCw size={24} className={isSearching ? "animate-spin" : ""} />
               </button>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Betslip */}
         <div className="w-[420px] flex flex-col bg-[#0b0f1a]">
           <div className="flex-1 overflow-hidden">
             <Betslip 
-              cart={cart}
-              setCart={setCart} 
-              stake={stake}
-              onStakeChange={setStake}
+              cart={cart} setCart={setCart} 
+              stake={stake} onStakeChange={setStake}
               onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))}
               onClear={() => { setCart([]); setStake(""); setCurrentTicket(null); }}
-              isProcessing={isProcessing}
-              user={userProfile} 
+              isProcessing={isProcessing} user={userProfile} 
             />
           </div>
-          
           {cart.length > 0 && (
             <div className="p-6 bg-[#0b0f1a] border-t border-white/5">
-              <button 
-                onClick={handleProcessPayment}
-                disabled={isProcessing}
-                className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50 shadow-lg shadow-[#10b981]/10"
-              >
-                {isProcessing ? <><Loader2 className="animate-spin" /><span>PROCESSING...</span></> : "CONFIRM & PRINT"}
+              <button onClick={handleProcessPayment} disabled={isProcessing} className="w-full bg-[#10b981] text-black py-5 rounded-xl font-black text-lg">
+                {isProcessing ? "PROCESSING..." : "CONFIRM & PRINT"}
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Invisible Print Component */}
       {currentTicket && (
-        <PrintableTicket 
-          ticket={currentTicket} 
-          profiles={allProfiles} 
-          user={userProfile} 
-        />
+        <PrintableTicket ticket={currentTicket} profiles={allProfiles} user={userProfile} />
       )}
     </CashierLayout>
   );
