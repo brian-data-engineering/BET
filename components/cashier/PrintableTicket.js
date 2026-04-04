@@ -2,17 +2,19 @@ import React from 'react';
 import Barcode from 'react-barcode';
 
 export default function PrintableTicket({ ticket, cart, user }) {
-  // 1. DATA PRIORITIZATION
-  // Always use the saved 'ticket' data first. If null, fall back to the live 'cart'.
-  const isSavedTicket = !!ticket;
-  const selections = ticket?.selections || cart || [];
+  // 1. DATA SOURCE SELECTION
+  // If 'ticket' exists, we are reprinting from DB. If not, we use the active 'cart'.
+  const isSaved = !!ticket;
+  const selections = isSaved ? ticket.selections : (cart || []);
+
+  // 2. DYNAMIC MAPPING (No Hardcoding)
+  // Pulls directly from your 'betsnow' table columns or active state
+  const displayStake = isSaved ? ticket.stake : 0;
+  const displayOdds = isSaved ? ticket.total_odds : 1.00;
+  const displayPayout = isSaved ? ticket.potential_payout : 0;
+  const serialNumber = isSaved ? ticket.ticket_serial : "TICKET PENDING";
   
-  // Use DB columns specifically: 'stake', 'total_odds', 'potential_payout'
-  const displayStake = isSavedTicket ? ticket.stake : 0;
-  const displayOdds = isSavedTicket ? ticket.total_odds : 1.00;
-  const displayPayout = isSavedTicket ? ticket.potential_payout : 0;
-  const serialNumber = ticket?.ticket_serial || "TICKET PENDING";
-  
+  // Resolve Cashier Identity
   const cashierName = user?.username || user?.email?.split('@')[0] || "Admin";
 
   if (selections.length === 0) return null;
@@ -25,8 +27,8 @@ export default function PrintableTicket({ ticket, cart, user }) {
   return (
     <div className="print-only bg-white text-black w-[80mm] font-sans p-1 leading-tight">
       
-      {/* HEADER: CSS-ONLY LOGO */}
-      <div className="flex flex-col items-center mb-4">
+      {/* HEADER: TYPOGRAPHY BASED LOGO */}
+      <div className="flex flex-col items-center mb-4 pt-2">
         <div className="border-[4px] border-black px-6 py-1">
           <span className="text-[26px] font-[900] italic tracking-tighter leading-none">LUCRA</span>
         </div>
@@ -39,12 +41,13 @@ export default function PrintableTicket({ ticket, cart, user }) {
           <span>Shop: #016</span>
           <span>Cashier: {cashierName}</span>
         </div>
-        <div>Time: {formatDate()}</div>
-        <div className="font-bold">No.: {serialNumber}</div>
-        <div>Total Stake: {displayStake} KSh</div>
+        <div className="flex justify-between">
+          <span>Date: {formatDate()}</span>
+        </div>
+        <div className="font-bold mt-0.5">Ticket No: {serialNumber}</div>
       </div>
 
-      {/* SELECTIONS: MATCHING MBOGIBET BOXED LAYOUT */}
+      {/* SELECTIONS GRID (Matching MbogiBet Boxed Style) */}
       <div className="border-t border-black">
         {selections.map((item, index) => (
           <div key={index} className="border-b border-x border-black p-2 relative text-[11px]">
@@ -54,13 +57,13 @@ export default function PrintableTicket({ ticket, cart, user }) {
                 {item.display_league || "Soccer"}
               </span>
               <span>
-                {item.startTime ? new Date(item.startTime).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : ''}
+                {item.startTime ? new Date(item.startTime).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : 'LIVE'}
               </span>
             </div>
 
             {/* Match Name with Black ID Box */}
             <div className="flex items-start gap-2 mb-1">
-              <span className="bg-black text-white px-1 py-0.5 rounded-sm text-[10px] font-mono font-bold shrink-0">
+              <span className="bg-black text-white px-1.5 py-0.5 rounded-sm text-[9px] font-mono font-bold shrink-0">
                 {item.matchId?.slice(-4) || "0000"}
               </span>
               <span className="font-black uppercase text-[12px] leading-tight">
@@ -71,38 +74,40 @@ export default function PrintableTicket({ ticket, cart, user }) {
             {/* Selection & Odds */}
             <div className="flex justify-between items-end mt-2">
               <div className="leading-none">
-                <div className="text-[10px] font-bold text-gray-700">{item.marketName || '1X2'}</div>
+                <div className="text-[10px] font-bold text-gray-700">{item.marketName || 'Match Result'}</div>
                 <div className="text-[11px] font-[900] underline uppercase italic mt-1">
                    {item.selection}
                 </div>
               </div>
-              <div className="text-[14px] font-black">
-                {parseFloat(item.odds || 0).toFixed(2)}
+              <div className="text-[15px] font-black italic">
+                @{parseFloat(item.odds || 0).toFixed(2)}
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* FINANCIAL SUMMARY */}
+      {/* FINANCIAL SUMMARY: FULLY DYNAMIC */}
       <div className="mt-2 space-y-1 font-bold text-[12px]">
-        <div className="flex justify-between border-b border-black py-0.5">
-          <span>Express</span>
+        <div className="flex justify-between border-b border-black py-1">
+          <span className="uppercase">Total Odds</span>
           <span>{parseFloat(displayOdds).toFixed(2)}</span>
         </div>
-        <div className="flex justify-between border-b border-black py-0.5">
-          <span>Total Stake</span>
-          <span>{displayStake} KSh</span>
+        <div className="flex justify-between border-b border-black py-1">
+          <span className="uppercase">Total Stake</span>
+          <span>{parseFloat(displayStake).toFixed(2)} KES</span>
         </div>
-        <div className="flex justify-between items-center bg-black text-white px-2 py-1.5 mt-1">
-          <span className="text-[11px]">Payout</span>
-          <span className="text-[18px] font-black italic">
-            {parseFloat(displayPayout).toLocaleString('en-KE')} KSh
+        
+        {/* Payout Display */}
+        <div className="flex justify-between items-center bg-black text-white px-2 py-2 mt-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider">Potential Win</span>
+          <span className="text-[19px] font-black italic">
+            {parseFloat(displayPayout).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
           </span>
         </div>
       </div>
 
-      {/* FOOTER & BARCODE */}
+      {/* BARCODE & FOOTER */}
       <div className="mt-4 flex flex-col items-center">
         <Barcode 
           value={serialNumber} 
@@ -110,12 +115,13 @@ export default function PrintableTicket({ ticket, cart, user }) {
           height={45} 
           displayValue={false} 
           margin={0}
+          lineColor="#000000"
         />
-        <div className="text-[10px] font-bold mt-1 uppercase tracking-widest">{serialNumber}</div>
-        <div className="text-[9px] mt-3 text-center font-bold border-t border-black pt-2 w-full uppercase">
-          Thank you!<br />
-          Bets are final. No slip, no pay.<br />
-          18+ Play Responsibly.
+        <div className="text-[10px] font-bold mt-1 tracking-widest">{serialNumber}</div>
+        <div className="text-[9px] mt-4 text-center font-bold border-t-2 border-black pt-2 w-full uppercase leading-tight">
+          Thank you for choosing Lucra!<br />
+          All bets are final. No slip, no pay.<br />
+          Ticket expires in 7 days.
         </div>
       </div>
 
