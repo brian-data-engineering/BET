@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
 import Betslip from '../../components/cashier/BetSlip'; 
 import PrintableTicket from '../../components/cashier/PrintableTicket'; 
-import { Loader2, Search, Printer, CreditCard } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 
 export default function CashierDashboard() {
   const [cart, setCart] = useState([]);
@@ -16,6 +16,7 @@ export default function CashierDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // 1. Initialize Terminal Data
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
@@ -29,13 +30,15 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // Optimized Print Trigger
+  // 2. Optimized Print Trigger
   const handlePrint = () => {
+    // Small delay ensures the PrintableTicket component has finished rendering the new serial
     setTimeout(() => {
       window.print();
-    }, 500);
+    }, 700);
   };
 
+  // 3. Load Ticket / Booking Code
   const handleLoadTicket = async () => {
     if (!searchQuery || isSearching) return;
     setIsSearching(true);
@@ -54,12 +57,11 @@ export default function CashierDashboard() {
         return;
       }
 
-      // 1. Parse Selections
+      // Parse and Enrich Selections
       let rawSelections = ticket.selections 
         ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
         : [];
 
-      // 2. Fetch League Names (Enrichment)
       const matchIds = rawSelections.map(s => s.matchId);
       const { data: eventData } = await supabase
         .from('api_events')
@@ -75,13 +77,13 @@ export default function CashierDashboard() {
       });
 
       if (ticket.ticket_serial) {
-        // Handle Reprints
+        // REPRINT LOGIC
         setCurrentTicket({ ...ticket, selections: enrichedSelections });
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           handlePrint();
         }
       } else {
-        // Handle New Bookings
+        // NEW BOOKING LOGIC
         setCurrentTicket({ ...ticket, selections: enrichedSelections }); 
         setCart(enrichedSelections);
         setStake(ticket.stake?.toString() || "100");
@@ -95,19 +97,18 @@ export default function CashierDashboard() {
     }
   };
 
+  // 4. Process Payment (The "Place Ticket" Action)
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     if (!numStake || numStake <= 0) return alert("Enter stake");
     if (numStake > (userProfile?.balance || 0)) return alert("⚠️ INSUFFICIENT FLOAT");
-    
     if (!currentTicket?.booking_code) return alert("No booking loaded.");
 
     setIsProcessing(true);
 
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-      const currentCart = [...cart];
-
+      
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
@@ -117,11 +118,11 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // Update local state for the PrintableTicket component
+      // Update state for the hidden PrintableTicket component
       const finalTicket = {
         ...currentTicket,
         ticket_serial: newSerial,
-        selections: currentCart,
+        selections: cart,
         stake: numStake,
         created_at: new Date().toISOString()
       };
@@ -130,11 +131,10 @@ export default function CashierDashboard() {
       setCart([]);
       setStake("");
       
-      // Trigger Print and Refresh
       handlePrint();
-      initTerminal();
+      initTerminal(); // Refresh balance
 
-      // Clear ticket after print window closes
+      // Cleanup print data after a few seconds
       setTimeout(() => setCurrentTicket(null), 5000);
 
     } catch (err) {
@@ -148,62 +148,63 @@ export default function CashierDashboard() {
     <CashierLayout>
       <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* LEFT & CENTER: SEARCH & ACTIONS */}
+        {/* LEFT COLUMN: SEARCH & STATS */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
-            <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2">
-              <Search className="text-yellow-500" /> LOAD TICKET
+            <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2 italic">
+              <Search className="text-yellow-500" /> LOAD TERMINAL CODE
             </h2>
             <div className="flex gap-2">
               <input 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
-                placeholder="Enter Booking Code or Serial..."
-                className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-3 text-white font-mono text-lg focus:border-yellow-500 outline-none transition-all"
+                placeholder="Enter Booking Code..."
+                className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-yellow-500 outline-none transition-all placeholder:text-zinc-700"
               />
               <button 
                 onClick={handleLoadTicket}
                 disabled={isSearching}
-                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-black px-6 rounded-xl transition-all flex items-center gap-2"
+                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-black px-8 rounded-xl transition-all flex items-center gap-2"
               >
-                {isSearching ? <Loader2 className="animate-spin" /> : "SEARCH"}
+                {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
           </div>
 
-          {/* Quick Stats / Info can go here */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
-              <p className="text-zinc-500 text-xs font-bold uppercase">Your Balance</p>
-              <p className="text-white text-2xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
+            <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Available Float</p>
+              <p className="text-white text-3xl font-black italic">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
             </div>
-            <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
-              <p className="text-zinc-500 text-xs font-bold uppercase">Terminal Status</p>
-              <p className="text-green-500 text-2xl font-black flex items-center gap-2">
-                ONLINE <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Shop Name</p>
+              <p className="text-yellow-500 text-xl font-black uppercase truncate">
+                {userProfile?.shop_name || "LUCRA TERMINAL"}
               </p>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: BETSLIP */}
+        {/* RIGHT COLUMN: THE BETSLIP */}
         <div className="lg:col-span-1">
           <Betslip 
             cart={cart}
             setCart={setCart}
             stake={stake}
-            setStake={setStake}
+            onStakeChange={setStake} // Matches the prop name in Betslip.js
+            onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))}
+            onClear={() => { setCart([]); setCurrentTicket(null); }}
             onProcess={handleProcessPayment}
             isProcessing={isProcessing}
-            userBalance={userProfile?.balance || 0}
+            user={userProfile}
           />
         </div>
       </div>
 
-      {/* HIDDEN PRINT COMPONENT - Rendered at bottom of page */}
+      {/* HIDDEN PRINT ENGINE */}
       {currentTicket && (
-        <div className="hidden">
+        <div style={{ display: 'none' }}>
           <PrintableTicket 
             ticket={currentTicket} 
             profiles={allProfiles} 
