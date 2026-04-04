@@ -16,7 +16,6 @@ export default function CashierDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // --- 1. INITIALIZE TERMINAL & AUTH ---
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
@@ -37,21 +36,17 @@ export default function CashierDashboard() {
     initTerminal(); 
   }, [initTerminal]);
 
-  // --- 2. GLOBAL PRINT EVENT HANDLERS ---
   useEffect(() => {
     const beforePrint = () => setIsProcessing(true);
     const afterPrint = () => setIsProcessing(false);
-
     window.addEventListener('beforeprint', beforePrint);
     window.addEventListener('afterprint', afterPrint);
-
     return () => {
       window.removeEventListener('beforeprint', beforePrint);
       window.removeEventListener('afterprint', afterPrint);
     };
   }, []);
 
-  // --- 3. TICKET LOADING LOGIC ---
   const handleLoadTicket = async () => {
     if (!searchQuery || isSearching) return;
     setIsSearching(true);
@@ -78,9 +73,7 @@ export default function CashierDashboard() {
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              window.print();
-            });
+            requestAnimationFrame(() => window.print());
           });
         }
       } else {
@@ -109,7 +102,6 @@ export default function CashierDashboard() {
     }
   };
 
-  // --- 4. PAYMENT PROCESSING & PRINT TRIGGER ---
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     if (!numStake || numStake <= 0) return alert("Enter valid stake");
@@ -120,11 +112,9 @@ export default function CashierDashboard() {
 
     setIsProcessing(true);
     try {
-      // SNAPSHOT MATH: Calculate totals locally so they aren't 0 on the printout
       const savedCartForPrint = [...cart];
       const totalOdds = savedCartForPrint.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1);
       const potentialPayout = numStake * totalOdds;
-
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
@@ -136,21 +126,20 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // ATTACH DATA: Manually add the stake and calculated payout to the state used by PrintableTicket
+      // Ensure state is updated with the NEW serial and calculated totals
       setCurrentTicket({
-        ...paidTicket,
+        ...(paidTicket || currentTicket),
+        ticket_serial: newSerial, 
         selections: savedCartForPrint,
         stake: numStake,
         total_odds: totalOdds,
         potential_payout: potentialPayout
       });
       
-      // UI RESET
       setCart([]);
       setStake("");
       setIsProcessing(false); 
 
-      // DOUBLE FRAME WAIT
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           window.print();
@@ -169,15 +158,12 @@ export default function CashierDashboard() {
   return (
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden">
-        
-        {/* LEFT: SCANNER */}
         <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-xl">
             <div className="flex items-center gap-3 mb-8">
               <Zap className="text-[#10b981]" fill="#10b981" size={24} />
               <h2 className="text-2xl font-black italic uppercase tracking-tighter">Lucra Terminal</h2>
             </div>
-
             <div className="relative">
               <input 
                 type="text"
@@ -195,7 +181,6 @@ export default function CashierDashboard() {
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
-
             <div className="grid grid-cols-2 gap-4 mt-8">
               <div className="bg-[#111926] p-6 rounded-2xl border border-white/5">
                 <p className="text-[10px] font-bold opacity-30 uppercase mb-1 tracking-widest">Active Float</p>
@@ -213,7 +198,6 @@ export default function CashierDashboard() {
           </div>
         </div>
 
-        {/* RIGHT: BETSLIP */}
         <div className="w-[420px] flex flex-col bg-[#0b0f1a]">
           <div className="flex-1 overflow-hidden">
             <Betslip 
@@ -227,7 +211,6 @@ export default function CashierDashboard() {
               user={userProfile} 
             />
           </div>
-          
           {cart.length > 0 && (
             <div className="p-6 bg-[#0b0f1a] border-t border-white/5">
               <button 
@@ -235,26 +218,14 @@ export default function CashierDashboard() {
                 disabled={isProcessing}
                 className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50 shadow-lg shadow-[#10b981]/10"
               >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="animate-spin" />
-                    <span>PROCESSING...</span>
-                  </>
-                ) : (
-                  "CONFIRM & PRINT"
-                )}
+                {isProcessing ? <><Loader2 className="animate-spin" /><span>PROCESSING...</span></> : "CONFIRM & PRINT"}
               </button>
             </div>
           )}
         </div>
       </div>
-
       {currentTicket && (
-        <PrintableTicket 
-          ticket={currentTicket} 
-          profiles={allProfiles} 
-          user={userProfile} 
-        />
+        <PrintableTicket ticket={currentTicket} profiles={allProfiles} user={userProfile} />
       )}
     </CashierLayout>
   );
