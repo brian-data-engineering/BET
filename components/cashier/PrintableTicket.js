@@ -20,7 +20,7 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
 
   return (
     <div className="print-only bg-white text-black w-[72mm] font-sans p-0 leading-tight">
-      {/* HEADER SECTION - Tightened for "First Glimpse" visibility */}
+      {/* HEADER SECTION */}
       <div className="flex flex-col items-center pt-2 mb-1">
         <img 
           src="https://i.ibb.co/67wb7Zm1/download.png" 
@@ -44,7 +44,7 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         </div>
       </div>
 
-      {/* MATCH SELECTIONS - With Borders like the second image */}
+      {/* MATCH SELECTIONS */}
       <div className="px-1 space-y-1">
         {selections.map((item, index) => {
           const rawTimeDisplay = item?.startTime?.includes('T') 
@@ -53,13 +53,11 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
 
           return (
             <div key={`${item.matchId}-${index}`} className="border border-black p-1 rounded-sm">
-              {/* League & Time Row */}
               <div className="flex justify-between text-[8px] font-bold uppercase opacity-80 mb-0.5">
                 <span>{item?.leagueName || "Soccer"}</span>
                 <span>{rawTimeDisplay}</span>
               </div>
               
-              {/* Match Name Row */}
               <div className="flex items-start gap-1">
                 <span className="font-mono font-bold text-[9px] border border-black px-0.5">
                   {item?.matchId ? String(item.matchId).slice(-4) : "0000"}
@@ -69,7 +67,6 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
                 </span>
               </div>
 
-              {/* Market & Odds Row */}
               <div className="flex justify-between items-center mt-1 pt-1 border-t border-black/10">
                 <div className="text-[10px] font-bold italic">
                   {item?.marketName || '1X2'} : <span className="underline">{item?.selection}</span>
@@ -96,7 +93,11 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
           </div>
         </div>
 
-        <div className="flex justify-between items-center bg-black text-white px-2 py-1.5 mt-1 rounded-sm">
+        {/* FORCE BACKGROUND PRINTING HERE */}
+        <div 
+          className="flex justify-between items-center bg-black text-white px-2 py-1.5 mt-1 rounded-sm"
+          style={{ backgroundColor: 'black', color: 'white', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        >
           <span className="text-[9px] uppercase font-black leading-none">Potential<br/>Payout</span>
           <span className="text-[18px] font-black italic tabular-nums">
             {displayPayout.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -128,11 +129,13 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         @media print {
           .print-only { 
             display: block !important; 
-            width: 72mm; /* Standard printable width for 80mm paper */
+            width: 72mm;
             background: white !important;
             margin: 0;
             padding: 0;
             color: black !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
