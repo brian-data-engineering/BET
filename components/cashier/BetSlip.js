@@ -4,12 +4,12 @@ import { useEffect } from 'react';
 export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove, onClear, isProcessing }) {
   
   // --- LUCRA AUTO-SYNC LOGIC (CASHIER SIDE) ---
-  // This cleans the cart state in real-time if a match expires while the cashier is looking at it.
   useEffect(() => {
     const checkInterval = setInterval(() => {
       const now = new Date().getTime();
       
       setCart(prevCart => {
+        // Filter out matches that have already started or are within the 60s lock window
         const filtered = prevCart.filter(item => {
           if (!item.startTime) return true;
 
@@ -17,18 +17,18 @@ export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove,
           const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
           const matchDate = new Date(cleanTime).getTime();
 
-          // 2. APPLY OFFSET: Shift match time back 3 hours to align with EAT vs UTC
-          const lockThreshold = matchDate - (3 * 60 * 60 * 1000); 
+          // If the date is invalid, keep it to be safe
+          if (isNaN(matchDate)) return true;
 
-          // 3. Compare with a 60-second buffer
-          // We return true (keep) only if we are still more than 60s away from kickoff
-          return (lockThreshold - now) > 60000; 
+          // 2. NO OFFSET: DB time is treated as EAT kickoff.
+          // Keep the item only if kickoff is more than 60 seconds away.
+          return (matchDate - now) > 60000; 
         });
 
-        // Only trigger a re-render if something was actually removed
+        // Only update if the count changed (prevents flickering)
         return filtered.length !== prevCart.length ? filtered : prevCart;
       });
-    }, 3000); // Check every 3 seconds for a snappier Cashier experience
+    }, 3000); 
 
     return () => clearInterval(checkInterval);
   }, [setCart]);
