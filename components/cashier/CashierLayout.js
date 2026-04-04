@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { LayoutDashboard, Receipt, BarChart3, LogOut, Wallet, User } from 'lucide-react';
+import { LayoutDashboard, Receipt, BarChart3, LogOut, User } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function CashierLayout({ children }) {
@@ -13,7 +13,7 @@ export default function CashierLayout({ children }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('username, balance')
         .eq('id', user.id)
@@ -24,7 +24,6 @@ export default function CashierLayout({ children }) {
 
     fetchProfile();
 
-    // REAL-TIME SUBSCRIPTION: Auto-update balance on the sidebar
     const channel = supabase
       .channel('profile_changes')
       .on('postgres_changes', { 
@@ -51,11 +50,15 @@ export default function CashierLayout({ children }) {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white flex">
-      {/* Sidebar */}
-      <aside className="w-20 md:w-72 border-r border-white/5 flex flex-col p-6 bg-[#0b0f1a] shadow-2xl">
+    /* CRITICAL FIX: 
+       1. Added 'print:bg-white' and 'print:text-black' to reset the theme during print.
+       2. Added 'print:block' to ensure the main container stays visible.
+    */
+    <div className="min-h-screen bg-black text-white flex print:bg-white print:text-black print:block">
+      
+      {/* Sidebar: Added 'print:hidden' so it doesn't push the ticket off the page */}
+      <aside className="w-20 md:w-72 border-r border-white/5 flex flex-col p-6 bg-[#0b0f1a] shadow-2xl print:hidden">
         
-        {/* Brand Logo */}
         <div className="mb-12 px-2">
           <h1 className="text-2xl font-black italic tracking-tighter uppercase hidden md:block">
             Lucra<span className="text-[#10b981]">.POS</span>
@@ -63,7 +66,6 @@ export default function CashierLayout({ children }) {
           <div className="md:hidden w-10 h-10 bg-[#10b981] rounded-xl mx-auto shadow-lg shadow-[#10b981]/20" />
         </div>
 
-        {/* CASHIER IDENTITY CARD (The Fix) */}
         <div className="hidden md:block mb-10 p-5 bg-white/5 rounded-[2rem] border border-white/5">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-[#10b981]/10 rounded-lg">
@@ -86,7 +88,6 @@ export default function CashierLayout({ children }) {
           </div>
         </div>
         
-        {/* Navigation */}
         <nav className="flex-1 space-y-3">
           {navItems.map((item) => (
             <Link key={item.path} href={item.path}>
@@ -102,7 +103,6 @@ export default function CashierLayout({ children }) {
           ))}
         </nav>
 
-        {/* Footer Actions */}
         <div className="pt-6 border-t border-white/5">
           <button 
             onClick={handleLogout} 
@@ -114,8 +114,8 @@ export default function CashierLayout({ children }) {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-[#0b0f1a]">
+      {/* Main Content: Removed overflow-y-auto during print to prevent scroll-clipping */}
+      <main className="flex-1 overflow-y-auto bg-[#0b0f1a] print:bg-white print:overflow-visible print:p-0">
         {children}
       </main>
     </div>
