@@ -16,7 +16,7 @@ export default function CashierDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // --- INITIALIZE TERMINAL & AUTH ---
+  // --- 1. INITIALIZE TERMINAL & AUTH ---
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
@@ -37,9 +37,24 @@ export default function CashierDashboard() {
     initTerminal(); 
   }, [initTerminal]);
 
-  // --- TICKET LOADING LOGIC ---
+  // --- 2. GLOBAL PRINT EVENT HANDLERS ---
+  // Extra safety to ensure background timers in child components stay paused
+  useEffect(() => {
+    const beforePrint = () => setIsProcessing(true);
+    const afterPrint = () => setIsProcessing(false);
+
+    window.addEventListener('beforeprint', beforePrint);
+    window.addEventListener('afterprint', afterPrint);
+
+    return () => {
+      window.removeEventListener('beforeprint', beforePrint);
+      window.removeEventListener('afterprint', afterPrint);
+    };
+  }, []);
+
+  // --- 3. TICKET LOADING LOGIC ---
   const handleLoadTicket = async () => {
-    if (!searchQuery) return;
+    if (!searchQuery || isSearching) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
 
@@ -56,17 +71,23 @@ export default function CashierDashboard() {
         return;
       }
 
-      const rawSelections = Array.isArray(ticket.selections) 
-        ? ticket.selections 
-        : JSON.parse(ticket.selections || '[]');
+      // Safe parse for selections
+      const rawSelections = ticket.selections 
+        ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
+        : [];
 
       if (ticket.ticket_serial) {
+        // TICKET ALREADY PAID: Prepare for reprint
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          // Small delay to allow confirm dialog to close properly
-          setTimeout(() => { window.print(); }, 300);
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              window.print();
+            });
+          });
         }
       } else {
+        // BOOKING CODE: Load into active slip
         const now = new Date().getTime();
         const validSelections = rawSelections.filter(item => {
           if (!item.startTime) return true;
@@ -92,7 +113,7 @@ export default function CashierDashboard() {
     }
   };
 
-  // --- PAYMENT PROCESSING (WITH UI STABILIZATION) ---
+  // --- 4. PAYMENT PROCESSING & PRINT TRIGGER ---
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     if (!numStake || numStake <= 0) return alert("Enter valid stake");
@@ -103,6 +124,8 @@ export default function CashierDashboard() {
 
     setIsProcessing(true);
     try {
+      // Snapshot the cart so we don't lose data during the React state cleanup
+      const savedCartForPrint = [...cart];
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
@@ -114,27 +137,29 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // 1. Update the ticket state for the printer
-      setCurrentTicket(paidTicket);
+      // ATTACH SAVED DATA: Ensures the print component has full data immediately
+      setCurrentTicket({
+        ...paidTicket,
+        selections: savedCartForPrint
+      });
       
-      // 2. IMMEDIATE UI RESET
-      // Clearing the cart stops the Betslip.js background timers BEFORE window.print() blocks the thread.
-      // This is the key to stopping the 22-second violation.
-      const savedCartForPrint = [...cart]; // Keep a local copy for the print component if needed
+      // UI RESET: Clear slip while processing is still true (keeps timers dead)
       setCart([]);
       setStake("");
       setIsProcessing(false); 
 
-      // 3. THE BREATHING ROOM
-      // Wait for React to finish re-rendering the "Empty" dashboard before freezing the browser.
-      setTimeout(() => {
-        window.print();
-        
-        // 4. POST-PRINT CLEANUP
-        initTerminal(); // Refresh float balance
-        // We delay hiding the printable component to ensure the printer has captured it
-        setTimeout(() => setCurrentTicket(null), 2000);
-      }, 800); 
+      // DOUBLE FRAME WAIT: Guarantees DOM is painted before window.print() freezes the thread
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.print();
+          
+          // REFRESH BALANCE: Post-print
+          initTerminal(); 
+          
+          // Final Cleanup
+          setTimeout(() => setCurrentTicket(null), 3000);
+        });
+      });
 
     } catch (err) {
       console.error("Payment Error:", err);
@@ -226,17 +251,14 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* INVISIBLE PRINT COMPONENT */}
-      <div className="hidden print:block">
-        {currentTicket && (
-          <PrintableTicket 
-            ticket={currentTicket} 
-            cart={cart.length > 0 ? cart : (currentTicket.selections || [])} 
-            profiles={allProfiles} 
-            user={userProfile} 
-          />
-        )}
-      </div>
+      {/* PRINTABLE COMPONENT: Controlled by internal CSS classes, no wrapper div needed */}
+      {currentTicket && (
+        <PrintableTicket 
+          ticket={currentTicket} 
+          profiles={allProfiles} 
+          user={userProfile} 
+        />
+      )}
     </CashierLayout>
   );
 }
