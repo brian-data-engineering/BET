@@ -38,7 +38,6 @@ export default function CashierDashboard() {
   }, [initTerminal]);
 
   // --- 2. GLOBAL PRINT EVENT HANDLERS ---
-  // Extra safety to ensure background timers in child components stay paused
   useEffect(() => {
     const beforePrint = () => setIsProcessing(true);
     const afterPrint = () => setIsProcessing(false);
@@ -71,13 +70,11 @@ export default function CashierDashboard() {
         return;
       }
 
-      // Safe parse for selections
       const rawSelections = ticket.selections 
         ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
         : [];
 
       if (ticket.ticket_serial) {
-        // TICKET ALREADY PAID: Prepare for reprint
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           requestAnimationFrame(() => {
@@ -87,7 +84,6 @@ export default function CashierDashboard() {
           });
         }
       } else {
-        // BOOKING CODE: Load into active slip
         const now = new Date().getTime();
         const validSelections = rawSelections.filter(item => {
           if (!item.startTime) return true;
@@ -124,8 +120,11 @@ export default function CashierDashboard() {
 
     setIsProcessing(true);
     try {
-      // Snapshot the cart so we don't lose data during the React state cleanup
+      // SNAPSHOT MATH: Calculate totals locally so they aren't 0 on the printout
       const savedCartForPrint = [...cart];
+      const totalOdds = savedCartForPrint.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1);
+      const potentialPayout = numStake * totalOdds;
+
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
@@ -137,26 +136,25 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // ATTACH SAVED DATA: Ensures the print component has full data immediately
+      // ATTACH DATA: Manually add the stake and calculated payout to the state used by PrintableTicket
       setCurrentTicket({
         ...paidTicket,
-        selections: savedCartForPrint
+        selections: savedCartForPrint,
+        stake: numStake,
+        total_odds: totalOdds,
+        potential_payout: potentialPayout
       });
       
-      // UI RESET: Clear slip while processing is still true (keeps timers dead)
+      // UI RESET
       setCart([]);
       setStake("");
       setIsProcessing(false); 
 
-      // DOUBLE FRAME WAIT: Guarantees DOM is painted before window.print() freezes the thread
+      // DOUBLE FRAME WAIT
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           window.print();
-          
-          // REFRESH BALANCE: Post-print
           initTerminal(); 
-          
-          // Final Cleanup
           setTimeout(() => setCurrentTicket(null), 3000);
         });
       });
@@ -251,7 +249,6 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* PRINTABLE COMPONENT: Controlled by internal CSS classes, no wrapper div needed */}
       {currentTicket && (
         <PrintableTicket 
           ticket={currentTicket} 
