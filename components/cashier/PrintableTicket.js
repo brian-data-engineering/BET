@@ -26,7 +26,7 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
       {/* HEADER: LOGO & TERMINAL BRANDING */}
       <div className="flex flex-col items-center mb-2">
         <img 
-          src="https://pushvault.shop/logo.png" 
+          src="https://i.ibb.co/67wb7Zm1/download.png" 
           alt="LUCRA" 
           className="h-12 w-auto object-contain"
           onError={(e) => (e.target.style.display = 'none')} 
