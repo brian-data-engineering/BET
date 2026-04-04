@@ -15,7 +15,7 @@ export default function Betslip({ items = [], setItems }) {
     }
   }, [items, bookingCode]);
 
-  // --- AUTO-REMOVE EXPIRED MATCHES (LUCRA SYNCED) ---
+  // --- AUTO-REMOVE EXPIRED MATCHES ---
   useEffect(() => {
     const checkInterval = setInterval(() => {
       const now = new Date().getTime();
@@ -24,15 +24,16 @@ export default function Betslip({ items = [], setItems }) {
         const filtered = prevItems.filter(item => {
           if (!item.startTime) return true;
 
-          // 1. Clean the string and create a Date object
+          // 1. Clean the string (handle potential scrap artifacts)
           const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
           const matchDate = new Date(cleanTime).getTime();
 
-          // 2. APPLY OFFSET: Shift match time back 3 hours to align with EAT vs UTC
-          const lockThreshold = matchDate - (3 * 60 * 60 * 1000); 
+          if (isNaN(matchDate)) return true; // Keep if date is weird
 
-          // 3. Compare with a 60-second buffer (Matches Home.js)
-          return (lockThreshold - now) > 60000; 
+          // 2. NO OFFSET: Treat DB time as the actual kickoff time
+          // Only remove if the match has already started (now > matchDate)
+          // or is within the 60-second "lock" window.
+          return (matchDate - now) > 60000; 
         });
 
         return filtered.length !== prevItems.length ? filtered : prevItems;
