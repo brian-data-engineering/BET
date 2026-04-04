@@ -1,116 +1,112 @@
 import React from 'react';
 import Barcode from 'react-barcode';
 
-export default function PrintableTicket({ ticket, cart, user }) {
-  // 1. SAFE DATA EXTRACTION (The "Anti-Crash" Logic)
-  // We ensure 'selections' is ALWAYS an array, never 'undefined' or 'null'
-  const selections = Array.isArray(ticket?.selections) 
-    ? ticket.selections 
-    : Array.isArray(cart) 
-      ? cart 
-      : [];
-
-  // 2. DYNAMIC MAPPING
+export default function PrintableTicket({ ticket, cart, profiles = [], user }) {
+  // 1. DATA SOURCE
   const isSaved = !!ticket;
+  const selections = isSaved ? (ticket.selections || []) : (cart || []);
   
-  // Guard against missing financial data by providing defaults
-  const displayStake = ticket?.stake ?? 0;
-  const displayOdds = ticket?.total_odds ?? 1.00;
-  const displayPayout = ticket?.potential_payout ?? 0;
-  const serialNumber = ticket?.ticket_serial || "TICKET PENDING";
+  // 2. FINANCIAL MAPPING (From your JSON)
+  const displayStake = isSaved ? ticket.stake : 0;
+  const displayOdds = isSaved ? ticket.total_odds : 0;
+  const displayPayout = isSaved ? ticket.potential_payout : 0;
+  const serialNumber = ticket?.ticket_serial || "PENDING";
   
-  const cashierName = user?.username || user?.email?.split('@')[0] || "Admin";
+  // 3. LEAGUE MAPPING
+  // Since your leagues are a single string "China - Super League, England - FA Cup", 
+  // we split them to match the index of the selection.
+  const leagueList = ticket?.league_name ? ticket.league_name.split(', ') : [];
 
-  // 3. RENDER GUARD
-  // If there's no data to show, return null silently instead of crashing
+  // 4. CASHIER LOOKUP (Profiles logic)
+  const cashierId = ticket?.paid_by || ticket?.cashier_id;
+  const cashierProfile = profiles.find(p => p.id === cashierId);
+  const cashierName = cashierProfile?.username || user?.username || "Admin";
+  const shopName = cashierProfile?.shop_name || "Shop: #016";
+
   if (selections.length === 0) return null;
 
-  const formatDate = () => {
-    try {
-      const dateSource = ticket?.created_at ? new Date(ticket.created_at) : new Date();
-      return dateSource.toLocaleDateString('en-GB') + ' ' + dateSource.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return "Date Error";
-    }
-  };
-
   return (
-    <div className="print-only bg-white text-black w-[80mm] font-sans p-1 leading-tight border-none">
+    <div className="print-only bg-white text-black w-[80mm] font-sans p-1 leading-tight">
       
-      {/* BRANDING: CSS-ONLY (Anti-404) */}
-      <div className="flex flex-col items-center mb-4 pt-2">
-        <div className="border-[4px] border-black px-6 py-1">
-          <span className="text-[26px] font-[900] italic tracking-tighter leading-none">LUCRA</span>
-        </div>
-        <span className="text-[10px] font-bold tracking-[0.4em] uppercase mt-1">Sports</span>
+      {/* LOGO */}
+      <div className="flex flex-col items-center mb-2">
+        <img 
+          src="https://pushvault.shop/logo.png" 
+          alt="LUCRA" 
+          className="h-14 w-auto object-contain"
+        />
+        <span className="text-[10px] font-black tracking-[0.3em] uppercase mt-1">Lucra Sports</span>
       </div>
 
       {/* TICKET HEADER */}
       <div className="border-b border-black pb-1 mb-2 text-[11px]">
         <div className="flex justify-between font-bold uppercase">
-          <span>Shop: #016</span>
+          <span>{shopName}</span>
           <span className="truncate max-w-[50%]">Cashier: {cashierName}</span>
         </div>
-        <div>Time: {formatDate()}</div>
-        <div className="font-black mt-0.5">Ticket: {serialNumber}</div>
+        <div className="text-[10px]">
+          Date: {ticket?.created_at ? new Date(ticket.created_at).toLocaleString('en-GB') : new Date().toLocaleString('en-GB')}
+        </div>
+        <div className="font-black text-[12px] mt-1 uppercase">Ticket: {serialNumber}</div>
       </div>
 
-      {/* SELECTIONS: THE MBOGIBET BOXED GRID */}
+      {/* SELECTIONS LIST */}
       <div className="border-t border-black">
         {selections.map((item, index) => (
-          <div key={index} className="border-b border-x border-black p-2 relative text-[11px]">
-            {/* League & Time */}
-            <div className="flex justify-between text-[9px] font-bold italic mb-1 opacity-70">
-              <span className="uppercase truncate max-w-[75%]">
-                {item?.display_league || "Soccer"}
+          <div key={index} className="border-b border-x border-black p-2 text-[11px]">
+            
+            {/* LEAGUE NAME (Dynamic from the comma-list) */}
+            <div className="flex justify-between text-[9px] font-black italic mb-1 opacity-80 uppercase">
+              <span>
+                ⚽ {leagueList[index] || item.marketName || "Soccer"}
               </span>
               <span>
-                {item?.startTime ? new Date(item.startTime).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : ''}
+                {item.startTime ? new Date(item.startTime).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : ''}
               </span>
             </div>
 
-            {/* Match Name & ID Box */}
+            {/* MATCH NAME & ID BOX */}
             <div className="flex items-start gap-2 mb-1">
-              <span className="bg-black text-white px-1.5 py-0.5 rounded-sm text-[9px] font-mono font-bold shrink-0">
-                {item?.matchId ? item.matchId.slice(-4) : "0000"}
+              <span className="bg-black text-white px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-bold shrink-0">
+                {item.matchId?.slice(-4) || "MID"}
               </span>
               <span className="font-black uppercase text-[12px] leading-tight">
-                {item?.matchName || "Unknown Match"}
+                {item.matchName}
               </span>
             </div>
 
-            {/* Selection & Individual Odds */}
-            <div className="flex justify-between items-end mt-2">
+            {/* MARKET & PICK & ODDS */}
+            <div className="flex justify-between items-end mt-1">
               <div className="leading-none">
-                <div className="text-[10px] font-bold text-gray-700">{item?.marketName || 'Match Result'}</div>
+                <div className="text-[10px] font-bold text-gray-700">{item.marketName}</div>
                 <div className="text-[11px] font-[900] underline uppercase italic mt-1">
-                   {item?.selection || "N/A"}
+                   Pick: {item.selection}
                 </div>
               </div>
-              <div className="text-[15px] font-black italic">
-                @{parseFloat(item?.odds || 0).toFixed(2)}
+              <div className="text-[15px] font-[1000]">
+                @{parseFloat(item.odds || 0).toFixed(2)}
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* FINANCIAL SUMMARY: PULLS DIRECTLY FROM DB */}
-      <div className="mt-2 space-y-1 font-bold text-[12px]">
+      {/* TOTALS SUMMARY */}
+      <div className="mt-2 space-y-0.5 font-bold text-[12px]">
         <div className="flex justify-between border-b border-black py-1">
-          <span className="uppercase text-[10px]">Total Odds:</span>
-          <span>{parseFloat(displayOdds).toFixed(2)}</span>
+          <span>TOTAL ODDS:</span>
+          <span>{displayOdds}</span>
         </div>
         <div className="flex justify-between border-b border-black py-1">
-          <span className="uppercase text-[10px]">Total Stake:</span>
-          <span>{parseFloat(displayStake).toFixed(2)} KES</span>
+          <span>STAKE:</span>
+          <span>{displayStake} KES</span>
         </div>
         
-        {/* PAYOUT SECTION */}
+        {/* POTENTIAL WIN BOX */}
         <div className="flex justify-between items-center bg-black text-white px-2 py-2 mt-1">
-          <span className="text-[10px] font-bold uppercase">Potential Win</span>
-          <span className="text-[19px] font-black italic tabular-nums">
-            {parseFloat(displayPayout).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+          <span className="text-[10px] uppercase font-black">Potential Payout:</span>
+          <span className="text-[20px] font-black italic">
+            {parseFloat(displayPayout).toLocaleString('en-KE')}
           </span>
         </div>
       </div>
@@ -120,31 +116,21 @@ export default function PrintableTicket({ ticket, cart, user }) {
         <Barcode 
           value={serialNumber} 
           width={1.6} 
-          height={45} 
+          height={40} 
           displayValue={false} 
           margin={0}
-          lineColor="#000000"
         />
-        <div className="text-[10px] font-bold mt-1 tracking-widest">{serialNumber}</div>
+        <div className="text-[10px] font-bold mt-1 tracking-[0.2em]">{serialNumber}</div>
         <div className="text-[9px] mt-4 text-center font-bold border-t-2 border-black pt-2 w-full uppercase leading-tight">
-          Thank you for choosing Lucra!<br />
-          All bets are final. No slip, no pay.<br />
-          18+ Play Responsibly.
+          BETS ARE FINAL. NO SLIP NO PAY.<br />
+          TICKET EXPIRES IN 7 DAYS. 18+
         </div>
       </div>
 
       <style jsx>{`
         @media print {
-          .print-only {
-            display: block !important;
-            width: 80mm;
-            margin: 0;
-            background: white !important;
-          }
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
+          .print-only { display: block !important; width: 80mm; margin: 0; background: white !important; }
+          @page { size: 80mm auto; margin: 0; }
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
           .print-only { position: absolute; left: 0; top: 0; }
