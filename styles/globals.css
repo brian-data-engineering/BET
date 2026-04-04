@@ -75,24 +75,28 @@ html, body {
 
 
 @media print {
-  /* Hide the main dashboard */
-  #__next, .admin-layout, nav, button {
+  /* 1. Kill the Dashboard */
+  #__next, header, nav, .sidebar, .admin-layout-nav {
     display: none !important;
   }
 
-  /* Force the ticket to the top left of the paper */
-  .lucra-print-area {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    display: block !important;
-    visibility: visible !important;
-    width: 100% !important;
+  /* 2. Reset the Paper */
+  html, body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
     height: auto !important;
-    background: white !important;
+    overflow: visible !important;
   }
 
-  body {
-    background: white !important;
+  /* 3. Force the Print Area */
+  .lucra-print-area {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
   }
 }
