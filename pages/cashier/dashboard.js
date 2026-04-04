@@ -16,6 +16,7 @@ export default function CashierDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // --- INITIALIZE TERMINAL & AUTH ---
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
@@ -36,6 +37,7 @@ export default function CashierDashboard() {
     initTerminal(); 
   }, [initTerminal]);
 
+  // --- TICKET LOADING LOGIC ---
   const handleLoadTicket = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
@@ -61,7 +63,8 @@ export default function CashierDashboard() {
       if (ticket.ticket_serial) {
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          setTimeout(() => { window.print(); }, 500);
+          // Small delay to allow confirm dialog to close properly
+          setTimeout(() => { window.print(); }, 300);
         }
       } else {
         const now = new Date().getTime();
@@ -89,6 +92,7 @@ export default function CashierDashboard() {
     }
   };
 
+  // --- PAYMENT PROCESSING (WITH UI STABILIZATION) ---
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     if (!numStake || numStake <= 0) return alert("Enter valid stake");
@@ -110,25 +114,27 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // --- THE FIX STARTS HERE ---
-      // 1. Prepare data for the Print component
+      // 1. Update the ticket state for the printer
       setCurrentTicket(paidTicket);
       
-      // 2. Wipe the heavy UI data IMMEDIATELY
-      // This stops the Betslip's interval timer and re-renders the right panel as "Empty"
+      // 2. IMMEDIATE UI RESET
+      // Clearing the cart stops the Betslip.js background timers BEFORE window.print() blocks the thread.
+      // This is the key to stopping the 22-second violation.
+      const savedCartForPrint = [...cart]; // Keep a local copy for the print component if needed
       setCart([]);
       setStake("");
+      setIsProcessing(false); 
 
-      // 3. Wait 600ms for React to finish the "Wipe" re-render before freezing with Print
+      // 3. THE BREATHING ROOM
+      // Wait for React to finish re-rendering the "Empty" dashboard before freezing the browser.
       setTimeout(() => {
         window.print();
         
-        // 4. Cleanup after the print dialog is closed
-        initTerminal(); 
-        setIsProcessing(false);
-        // Optional: Hide printable ticket from DOM after delay
-        setTimeout(() => setCurrentTicket(null), 3000);
-      }, 600);
+        // 4. POST-PRINT CLEANUP
+        initTerminal(); // Refresh float balance
+        // We delay hiding the printable component to ensure the printer has captured it
+        setTimeout(() => setCurrentTicket(null), 2000);
+      }, 800); 
 
     } catch (err) {
       console.error("Payment Error:", err);
@@ -161,7 +167,7 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleLoadTicket}
                 disabled={isSearching}
-                className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic"
+                className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic hover:brightness-110 transition-all"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
@@ -176,7 +182,7 @@ export default function CashierDashboard() {
               </div>
               <button 
                 onClick={initTerminal}
-                className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center hover:bg-white/5 group"
+                className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center hover:bg-white/5 group transition-colors"
               >
                 <RefreshCw size={24} className={`${isSearching ? "animate-spin" : ""} group-hover:rotate-180 transition-all duration-500`} />
               </button>
@@ -204,22 +210,32 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleProcessPayment}
                 disabled={isProcessing}
-                className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50 shadow-lg shadow-[#10b981]/10"
               >
-                {isProcessing ? <Loader2 className="animate-spin" /> : "CONFIRM & PRINT"}
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    <span>PROCESSING...</span>
+                  </>
+                ) : (
+                  "CONFIRM & PRINT"
+                )}
               </button>
             </div>
           )}
         </div>
       </div>
 
+      {/* INVISIBLE PRINT COMPONENT */}
       <div className="hidden print:block">
-        <PrintableTicket 
-          ticket={currentTicket} 
-          cart={cart} 
-          profiles={allProfiles} 
-          user={userProfile} 
-        />
+        {currentTicket && (
+          <PrintableTicket 
+            ticket={currentTicket} 
+            cart={cart.length > 0 ? cart : (currentTicket.selections || [])} 
+            profiles={allProfiles} 
+            user={userProfile} 
+          />
+        )}
       </div>
     </CashierLayout>
   );
