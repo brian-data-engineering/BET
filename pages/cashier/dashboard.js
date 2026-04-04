@@ -63,14 +63,12 @@ export default function CashierDashboard() {
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
-      // Logic for existing/paid tickets
       if (ticket.is_paid || ticket.ticket_serial) {
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           setTimeout(() => { window.print(); }, 500);
         }
       } else {
-        // Loading a fresh booking code
         setCurrentTicket(ticket); 
         setCart(selections);
         setStake(ticket.stake?.toString() || "100");
@@ -86,11 +84,9 @@ export default function CashierDashboard() {
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     
-    // VALIDATION GATE
     if (!numStake || numStake <= 0) return alert("Enter valid stake");
     if (numStake > cashierBalance) return alert("⚠️ INSUFFICIENT FLOAT");
     
-    // CRITICAL FIX: Ensure user ID exists before calling RPC
     if (!user?.id) {
       alert("❌ SESSION ERROR: Re-initializing terminal...");
       await initTerminal();
@@ -104,27 +100,23 @@ export default function CashierDashboard() {
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
-      // EXECUTE ATOMIC TRANSACTION via RPC
-      // This ensures stake is deducted and cashier_id is recorded simultaneously
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: targetCode.toString(),
-        p_cashier_id: user.id, // Explicitly passing the verified user.id
+        p_cashier_id: user.id,
         p_generated_serial: newSerial,
         p_stake: numStake
       });
 
       if (rpcError) throw rpcError;
 
-      // Update local state with the newly returned paid ticket data
       setCurrentTicket(paidTicket);
       
-      // Delay for state sync before printing
       setTimeout(async () => {
         window.print();
         setCart([]);
         setStake("");
         setCurrentTicket(null);
-        await initTerminal(); // Refresh float balance from DB
+        await initTerminal(); 
         setIsProcessing(false);
       }, 800);
 
@@ -185,9 +177,10 @@ export default function CashierDashboard() {
           <div className="flex-1 overflow-hidden">
             <Betslip 
               cart={cart}
+              setCart={setCart} // CRITICAL: Now passing the setter to enable auto-sync
               stake={stake}
               onStakeChange={setStake}
-              onRemove={(idx) => setCart(cart.filter((_, i) => i !== idx))}
+              onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} // Functional update
               onClear={() => { setCart([]); setStake(""); setCurrentTicket(null); }}
               isProcessing={isProcessing}
             />
@@ -214,7 +207,6 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* HIDDEN PRINT COMPONENT */}
       <div className="hidden print:block">
         <PrintableTicket 
           ticket={currentTicket} 
