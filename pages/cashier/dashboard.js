@@ -12,38 +12,28 @@ export default function CashierDashboard() {
   const [currentTicket, setCurrentTicket] = useState(null);
   const [userProfile, setUserProfile] = useState(null); 
   const [allProfiles, setAllProfiles] = useState([]); 
-  
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1. Initialize Terminal Data
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
-    
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
     if (profile) setUserProfile(profile);
-
     const { data: profiles } = await supabase.from('profiles').select('id, username, shop_name');
     if (profiles) setAllProfiles(profiles);
   }, []);
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // 2. Optimized Print Trigger
   const handlePrint = () => {
-    // Small delay ensures the PrintableTicket component has finished rendering the new serial
-    setTimeout(() => {
-      window.print();
-    }, 700);
+    setTimeout(() => { window.print(); }, 800);
   };
 
-  // 3. Load Ticket / Booking Code
   const handleLoadTicket = async () => {
     if (!searchQuery || isSearching) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
-
     try {
       const { data: ticket, error } = await supabase
         .from('betsnow')
@@ -52,166 +42,98 @@ export default function CashierDashboard() {
         .single();
 
       if (error || !ticket) {
-        alert("⚠️ INVALID CODE OR TICKET NOT FOUND");
+        alert("⚠️ INVALID CODE");
         setSearchQuery('');
         return;
       }
 
-      // Parse and Enrich Selections
       let rawSelections = ticket.selections 
         ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
         : [];
 
       const matchIds = rawSelections.map(s => s.matchId);
-      const { data: eventData } = await supabase
-        .from('api_events')
-        .select('id, display_league')
-        .in('id', matchIds);
+      const { data: eventData } = await supabase.from('api_events').select('id, display_league').in('id', matchIds);
 
-      const enrichedSelections = rawSelections.map(sel => {
-        const matchInfo = eventData?.find(e => String(e.id) === String(sel.matchId));
-        return { 
-          ...sel, 
-          leagueName: matchInfo?.display_league || "Soccer" 
-        };
-      });
+      const enrichedSelections = rawSelections.map(sel => ({
+        ...sel,
+        leagueName: eventData?.find(e => String(e.id) === String(sel.matchId))?.display_league || "Soccer"
+      }));
 
+      setCurrentTicket({ ...ticket, selections: enrichedSelections });
       if (ticket.ticket_serial) {
-        // REPRINT LOGIC
-        setCurrentTicket({ ...ticket, selections: enrichedSelections });
-        if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          handlePrint();
-        }
+        if (confirm("🎟️ REPRINT TICKET?")) handlePrint();
       } else {
-        // NEW BOOKING LOGIC
-        setCurrentTicket({ ...ticket, selections: enrichedSelections }); 
         setCart(enrichedSelections);
         setStake(ticket.stake?.toString() || "100");
       }
-
       setSearchQuery('');
-    } catch (err) {
-      console.error("Load Error:", err);
-    } finally {
-      setIsSearching(false);
-    }
+    } catch (err) { console.error(err); } finally { setIsSearching(false); }
   };
 
-  // 4. Process Payment (The "Place Ticket" Action)
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
-    if (!numStake || numStake <= 0) return alert("Enter stake");
-    if (numStake > (userProfile?.balance || 0)) return alert("⚠️ INSUFFICIENT FLOAT");
-    if (!currentTicket?.booking_code) return alert("No booking loaded.");
-
+    if (!numStake || numStake <= 0 || numStake > (userProfile?.balance || 0)) return alert("❌ CHECK STAKE/FLOAT");
     setIsProcessing(true);
-
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-      
-      const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
+      const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
         p_generated_serial: newSerial,
         p_stake: numStake
       });
-
       if (rpcError) throw rpcError;
 
-      // Update state for the hidden PrintableTicket component
-      const finalTicket = {
-        ...currentTicket,
-        ticket_serial: newSerial,
-        selections: cart,
-        stake: numStake,
-        created_at: new Date().toISOString()
-      };
-
-      setCurrentTicket(finalTicket);
+      setCurrentTicket({ ...currentTicket, ticket_serial: newSerial, selections: cart, stake: numStake });
       setCart([]);
       setStake("");
-      
       handlePrint();
-      initTerminal(); // Refresh balance
-
-      // Cleanup print data after a few seconds
-      setTimeout(() => setCurrentTicket(null), 5000);
-
-    } catch (err) {
-      alert("❌ ERROR: " + err.message);
-    } finally {
-      setIsProcessing(false);
-    }
+      initTerminal();
+      setTimeout(() => setCurrentTicket(null), 10000);
+    } catch (err) { alert("ERROR: " + err.message); } finally { setIsProcessing(false); }
   };
 
   return (
     <CashierLayout>
-      <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* LEFT COLUMN: SEARCH & STATS */}
+      <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
             <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2 italic">
-              <Search className="text-yellow-500" /> LOAD TERMINAL CODE
+              <Search className="text-yellow-500" /> LOAD CODE
             </h2>
             <div className="flex gap-2">
-              <input 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
-                placeholder="Enter Booking Code..."
-                className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-yellow-500 outline-none transition-all placeholder:text-zinc-700"
-              />
-              <button 
-                onClick={handleLoadTicket}
-                disabled={isSearching}
-                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-black px-8 rounded-xl transition-all flex items-center gap-2"
-              >
-                {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
-              </button>
+              <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} placeholder="Booking Code..." className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl outline-none" />
+              <button onClick={handleLoadTicket} disabled={isSearching} className="bg-yellow-500 text-black font-black px-8 rounded-xl">{isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}</button>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Available Float</p>
-              <p className="text-white text-3xl font-black italic">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
-            </div>
-            <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Shop Name</p>
-              <p className="text-yellow-500 text-xl font-black uppercase truncate">
-                {userProfile?.shop_name || "LUCRA TERMINAL"}
-              </p>
+              <p className="text-zinc-500 text-[10px] font-black uppercase">Float</p>
+              <p className="text-white text-3xl font-black italic">KSh {userProfile?.balance?.toLocaleString()}</p>
             </div>
           </div>
         </div>
-
-        {/* RIGHT COLUMN: THE BETSLIP */}
         <div className="lg:col-span-1">
-          <Betslip 
-            cart={cart}
-            setCart={setCart}
-            stake={stake}
-            onStakeChange={setStake} // Matches the prop name in Betslip.js
-            onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))}
-            onClear={() => { setCart([]); setCurrentTicket(null); }}
-            onProcess={handleProcessPayment}
-            isProcessing={isProcessing}
-            user={userProfile}
-          />
+          <Betslip cart={cart} setCart={setCart} stake={stake} onStakeChange={setStake} onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} onClear={() => {setCart([]); setCurrentTicket(null);}} onProcess={handleProcessPayment} isProcessing={isProcessing} user={userProfile} />
         </div>
       </div>
 
-      {/* HIDDEN PRINT ENGINE */}
+      {/* THE FIX: Invisible but NOT display:none */}
       {currentTicket && (
-        <div style={{ display: 'none' }}>
-          <PrintableTicket 
-            ticket={currentTicket} 
-            profiles={allProfiles} 
-            user={userProfile} 
-          />
+        <div className="print-engine-container">
+          <PrintableTicket ticket={currentTicket} profiles={allProfiles} user={userProfile} />
         </div>
       )}
+
+      <style jsx>{`
+        @media screen {
+          .print-engine-container { position: absolute; left: -9999px; top: -9999px; }
+        }
+        @media print {
+          .no-print { display: none !important; }
+          .print-engine-container { position: static; left: 0; top: 0; width: 100%; }
+        }
+      `}</style>
     </CashierLayout>
   );
 }
