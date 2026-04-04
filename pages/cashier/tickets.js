@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'; // Added useCallback for stability
+import { useState, useEffect, useCallback } from 'react'; 
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
 import { Search, CheckCircle2, Clock, Loader2, Receipt, Banknote } from 'lucide-react';
@@ -9,58 +9,79 @@ export default function TicketManager() {
   const [search, setSearch] = useState('');
   const [user, setUser] = useState(null);
 
-  // Define fetchTickets with useCallback to include it in dependency arrays safely
+  // 1. STABLE FETCH LOGIC
   const fetchTickets = useCallback(async (userId) => {
     if (!userId) return;
     
     setLoading(true);
-    const { data } = await supabase
-      .from('betsnow')
-      .select('*')
-      .eq('cashier_id', userId) // CRITICAL: Filter by the logged-in cashier's ID
-      .not('ticket_serial', 'is', null)
-      .neq('ticket_serial', '')
-      .order('created_at', { ascending: false })
-      .limit(30);
+    try {
+      const { data, error } = await supabase
+        .from('betsnow')
+        .select('*')
+        .eq('cashier_id', userId) // CRITICAL: Filter by the logged-in cashier
+        .not('ticket_serial', 'is', null)
+        .neq('ticket_serial', '')
+        .order('created_at', { ascending: false })
+        .limit(50); // Increased limit slightly for better history scroll
 
-    setTickets(data || []);
-    setLoading(false);
+      if (error) throw error;
+      setTickets(data || []);
+    } catch (err) {
+      console.error("Ledger Fetch Error:", err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  // 2. AUTH & INITIALIZATION
   useEffect(() => {
+    let mounted = true;
+
     const initializeTerminal = async () => {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (currentUser) {
+      if (currentUser && mounted) {
         setUser(currentUser);
-        // Pass the ID directly to ensure it fetches for the right user immediately
+        // We fetch directly with the ID here to avoid waiting for the next state render
         fetchTickets(currentUser.id);
+      } else if (mounted) {
+        setLoading(false);
       }
     };
 
     initializeTerminal();
+    return () => { mounted = false; }; // Cleanup
   }, [fetchTickets]);
 
+  // 3. PAYOUT EXECUTION
   const handlePayout = async (ticket) => {
-    if (!window.confirm(`PAYOUT KES ${parseFloat(ticket.potential_payout).toLocaleString()}?`)) return;
+    const payoutAmount = parseFloat(ticket.potential_payout);
+    if (!window.confirm(`PAYOUT KES ${payoutAmount.toLocaleString()}?`)) return;
     
     setLoading(true);
-    const { error } = await supabase.rpc('execute_lucra_payout', {
-      p_ticket_id: ticket.id,
-      p_cashier_id: user.id,
-      p_payout_amount: parseFloat(ticket.potential_payout)
-    });
+    try {
+      // Ensure we use the 'user.id' from state to verify the cashier
+      const { error } = await supabase.rpc('execute_lucra_payout', {
+        p_ticket_id: ticket.id,
+        p_cashier_id: user.id,
+        p_payout_amount: payoutAmount
+      });
 
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("PAYOUT SUCCESSFUL: FLOAT REIMBURSED");
-      fetchTickets(user.id); // Refresh ledger
+      if (error) throw error;
+
+      alert("✅ PAYOUT SUCCESSFUL: FLOAT REIMBURSED");
+      // Refresh only after success
+      await fetchTickets(user.id); 
+    } catch (err) {
+      alert(`❌ PAYOUT FAILED: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
+  // 4. SEARCH FILTERING
   const filteredTickets = tickets.filter(t => 
-    t.ticket_serial?.toLowerCase().includes(search.toLowerCase())
+    t.ticket_serial?.toLowerCase().includes(search.toLowerCase()) ||
+    t.booking_code?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -80,7 +101,7 @@ export default function TicketManager() {
           </div>
         </div>
 
-        {loading ? (
+        {loading && tickets.length === 0 ? (
           <div className="flex flex-col items-center mt-40 gap-4 opacity-20">
             <Loader2 className="animate-spin text-[#10b981]" size={40} />
             <p className="text-[10px] font-black uppercase tracking-[0.4em]">Updating Ledger...</p>
@@ -101,6 +122,8 @@ export default function TicketManager() {
                     <div className={`p-4 rounded-2xl transition-all ${
                       t.status === 'won' 
                         ? 'bg-[#10b981] text-black shadow-lg shadow-[#10b981]/40' 
+                        : t.status === 'lost' 
+                        ? 'bg-red-500/20 text-red-500'
                         : 'bg-white/5 text-white/20'
                     }`}>
                       {t.status === 'won' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
@@ -134,9 +157,10 @@ export default function TicketManager() {
                       {t.status === 'won' && !t.settled_at ? (
                         <button 
                           onClick={() => handlePayout(t)} 
-                          className="bg-[#10b981] text-black px-6 py-4 rounded-2xl font-black italic uppercase text-[10px] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#10b981]/30 flex items-center gap-2"
+                          disabled={loading}
+                          className="bg-[#10b981] text-black px-6 py-4 rounded-2xl font-black italic uppercase text-[10px] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#10b981]/30 flex items-center gap-2 disabled:opacity-50"
                         >
-                          <Banknote size={14} />
+                          {loading ? <Loader2 className="animate-spin" size={14} /> : <Banknote size={14} />}
                           Collect Win
                         </button>
                       ) : t.settled_at ? (
@@ -148,8 +172,12 @@ export default function TicketManager() {
                         </div>
                       ) : (
                         <div className="flex flex-col items-end opacity-20">
-                          <span className="text-white font-black italic text-[11px] uppercase tracking-tighter">Running</span>
-                          <span className="text-[8px] font-bold uppercase">Awaiting Result</span>
+                          <span className="text-white font-black italic text-[11px] uppercase tracking-tighter">
+                            {t.status === 'lost' ? 'Lost' : 'Running'}
+                          </span>
+                          <span className="text-[8px] font-bold uppercase">
+                            {t.status === 'lost' ? 'Ticket Closed' : 'Awaiting Result'}
+                          </span>
                         </div>
                       )}
                     </div>
