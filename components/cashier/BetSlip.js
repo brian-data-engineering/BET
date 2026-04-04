@@ -1,7 +1,16 @@
-import { Trash2, Ticket, Coins, Percent } from 'lucide-react';
+import { Trash2, Ticket, Coins, Percent, UserCheck } from 'lucide-react';
 import { useEffect } from 'react';
 
-export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove, onClear, isProcessing }) {
+export default function Betslip({ 
+  cart, 
+  setCart, 
+  stake, 
+  onStakeChange, 
+  onRemove, 
+  onClear, 
+  isProcessing,
+  user // Prop for identity tracking
+}) {
   
   // --- LUCRA AUTO-SYNC LOGIC (CASHIER SIDE) ---
   useEffect(() => {
@@ -9,23 +18,13 @@ export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove,
       const now = new Date().getTime();
       
       setCart(prevCart => {
-        // Filter out matches that have already started or are within the 60s lock window
         const filtered = prevCart.filter(item => {
           if (!item.startTime) return true;
-
-          // 1. Clean the string and create a Date object
           const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
           const matchDate = new Date(cleanTime).getTime();
-
-          // If the date is invalid, keep it to be safe
           if (isNaN(matchDate)) return true;
-
-          // 2. NO OFFSET: DB time is treated as EAT kickoff.
-          // Keep the item only if kickoff is more than 60 seconds away.
           return (matchDate - now) > 60000; 
         });
-
-        // Only update if the count changed (prevents flickering)
         return filtered.length !== prevCart.length ? filtered : prevCart;
       });
     }, 3000); 
@@ -33,12 +32,11 @@ export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove,
     return () => clearInterval(checkInterval);
   }, [setCart]);
 
-  // Calculate Total Odds (Product of all selections)
+  // Calculate Totals
   const totalOdds = cart.length > 0 
     ? cart.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1) 
     : 0;
 
-  // Calculate Potential Payout
   const numStake = parseFloat(stake) || 0;
   const potentialPayout = numStake * totalOdds;
 
@@ -51,7 +49,10 @@ export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove,
           <div className="bg-[#10b981]/10 p-2 rounded-lg">
             <Ticket size={16} className="text-[#10b981]" />
           </div>
-          <h3 className="text-white font-black italic uppercase tracking-tighter text-lg">Active Slip</h3>
+          <div>
+            <h3 className="text-white font-black italic uppercase tracking-tighter text-lg leading-none">Active Slip</h3>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Terminal 016</p>
+          </div>
         </div>
         
         {cart.length > 0 && (
@@ -76,7 +77,7 @@ export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove,
           cart.map((item, idx) => (
             <div 
               key={idx} 
-              className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 relative group transition-all hover:border-[#10b981]/30"
+              className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 relative group transition-all hover:border-[#10b981]/30 shadow-lg"
             >
               <button 
                 onClick={() => onRemove(idx)} 
@@ -95,7 +96,7 @@ export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove,
                     {item.selection}
                   </p>
                   <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                    {item.marketName || 'Market'}
+                    {item.marketName || 'Match Result'}
                   </p>
                 </div>
                 <div className="text-right">
@@ -112,6 +113,17 @@ export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove,
       {/* FINANCIAL SUMMARY */}
       <div className="bg-[#0b0f1a] rounded-[2rem] p-6 border border-white/5 space-y-5 shadow-inner">
         
+        {/* CASHIER IDENTITY SECTION */}
+        <div className="flex justify-between items-center pb-2 border-b border-white/5">
+          <div className="flex items-center gap-2 opacity-40">
+            <UserCheck size={12} className="text-[#10b981]" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-white">Cashier</span>
+          </div>
+          <span className="text-[10px] font-black text-[#10b981] uppercase tracking-tighter">
+            {user?.email?.split('@')[0] || 'Lucra_Admin'}
+          </span>
+        </div>
+
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 opacity-40">
             <Percent size={12} className="text-white" />
