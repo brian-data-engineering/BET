@@ -65,23 +65,27 @@ export default function CashierDashboard() {
         return;
       }
 
+      // 1. Parse selections immediately to ensure array format
       const rawSelections = ticket.selections 
         ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
         : [];
 
       if (ticket.ticket_serial) {
-        setCurrentTicket(ticket);
+        // REPRINT PAID TICKET
+        setCurrentTicket({ ...ticket, selections: rawSelections });
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => window.print());
           });
         }
       } else {
+        // LOAD UNPAID BOOKING
         const now = new Date().getTime();
         const validSelections = rawSelections.filter(item => {
           if (!item.startTime) return true;
           const matchDate = new Date(item.startTime).getTime();
-          return (matchDate - now) > 60000;
+          // Filter out matches that started more than 1 minute ago
+          return (matchDate - now) > -60000; 
         });
 
         if (validSelections.length === 0) {
@@ -89,7 +93,8 @@ export default function CashierDashboard() {
           return;
         }
 
-        setCurrentTicket(ticket); 
+        // Sync both the slip and the active cart
+        setCurrentTicket({ ...ticket, selections: validSelections }); 
         setCart(validSelections);
         setStake(ticket.stake?.toString() || "100");
       }
@@ -126,24 +131,26 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // Ensure state is updated with the NEW serial and calculated totals
+      // Ensure PrintableTicket receives the fully populated object
       setCurrentTicket({
         ...(paidTicket || currentTicket),
         ticket_serial: newSerial, 
-        selections: savedCartForPrint,
+        selections: savedCartForPrint, // CRITICAL: Use the cart array with startTime/matchName
         stake: numStake,
         total_odds: totalOdds,
-        potential_payout: potentialPayout
+        potential_payout: potentialPayout,
+        created_at: new Date().toISOString()
       });
       
       setCart([]);
       setStake("");
       setIsProcessing(false); 
 
+      // Print Sequence
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           window.print();
-          initTerminal(); 
+          initTerminal(); // Refresh balance
           setTimeout(() => setCurrentTicket(null), 3000);
         });
       });
@@ -158,12 +165,14 @@ export default function CashierDashboard() {
   return (
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden">
+        {/* Left Side: Search & Stats */}
         <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-xl">
             <div className="flex items-center gap-3 mb-8">
               <Zap className="text-[#10b981]" fill="#10b981" size={24} />
               <h2 className="text-2xl font-black italic uppercase tracking-tighter">Lucra Terminal</h2>
             </div>
+            
             <div className="relative">
               <input 
                 type="text"
@@ -181,6 +190,7 @@ export default function CashierDashboard() {
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
+
             <div className="grid grid-cols-2 gap-4 mt-8">
               <div className="bg-[#111926] p-6 rounded-2xl border border-white/5">
                 <p className="text-[10px] font-bold opacity-30 uppercase mb-1 tracking-widest">Active Float</p>
@@ -198,6 +208,7 @@ export default function CashierDashboard() {
           </div>
         </div>
 
+        {/* Right Side: Betslip */}
         <div className="w-[420px] flex flex-col bg-[#0b0f1a]">
           <div className="flex-1 overflow-hidden">
             <Betslip 
@@ -211,6 +222,7 @@ export default function CashierDashboard() {
               user={userProfile} 
             />
           </div>
+          
           {cart.length > 0 && (
             <div className="p-6 bg-[#0b0f1a] border-t border-white/5">
               <button 
@@ -224,8 +236,14 @@ export default function CashierDashboard() {
           )}
         </div>
       </div>
+
+      {/* Invisible Print Component */}
       {currentTicket && (
-        <PrintableTicket ticket={currentTicket} profiles={allProfiles} user={userProfile} />
+        <PrintableTicket 
+          ticket={currentTicket} 
+          profiles={allProfiles} 
+          user={userProfile} 
+        />
       )}
     </CashierLayout>
   );
