@@ -19,6 +19,7 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
   const displayStake = parseFloat(ticket?.stake || 0);
   const displayPayout = (parseFloat(ticket?.potential_payout) || (calculatedOdds * displayStake));
 
+  // 4. LEAGUE LIST PARSING
   const leagueList = ticket?.league_name ? ticket.league_name.split(', ') : [];
 
   if (!selections || selections.length === 0) return null;
@@ -52,35 +53,44 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
       </div>
 
       <div className="border-t border-black">
-        {selections.map((item, index) => (
-          <div key={`${item.matchId}-${index}`} className="border-b border-black py-2 text-[11px]">
-            <div className="flex justify-between text-[9px] font-black mb-1 uppercase italic">
-              <span>⚽ {leagueList[index] || item?.leagueName || "Soccer"}</span>
-              <span>
-                {item?.startTime ? new Date(item.startTime).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : ''}
-              </span>
-            </div>
-            <div className="flex items-start gap-2 mb-1">
-              <span className="bg-black text-white px-1.5 py-0.5 rounded-sm text-[9px] font-mono font-bold shrink-0">
-                {item?.matchId ? String(item.matchId).slice(-4) : "MID"}
-              </span>
-              <span className="font-black uppercase text-[12px] leading-tight">
-                {item?.matchName || "Match Name"}
-              </span>
-            </div>
-            <div className="flex justify-between items-end mt-1">
-              <div className="leading-none">
-                <div className="text-[10px] font-bold text-gray-800">{item?.marketName || 'Match Result'}</div>
-                <div className="text-[11px] font-black underline uppercase italic mt-1">
-                  Pick: {item?.selection || "N/A"}
+        {selections.map((item, index) => {
+          // TIME FIX: Split at 'T' and take the first 5 chars of the time part (HH:MM)
+          // This prevents the browser from converting UTC to Local Time.
+          const rawTimeDisplay = item?.startTime?.includes('T') 
+            ? item.startTime.split('T')[1].slice(0, 5) 
+            : "";
+
+          return (
+            <div key={`${item.matchId}-${index}`} className="border-b border-black py-2 text-[11px]">
+              <div className="flex justify-between text-[9px] font-black mb-1 uppercase italic">
+                {/* League: Uses league_name column from DB if available, else "Soccer" */}
+                <span>⚽ {leagueList[index] || item?.leagueName || "Soccer"}</span>
+                <span>{rawTimeDisplay}</span>
+              </div>
+              
+              <div className="flex items-start gap-2 mb-1">
+                <span className="bg-black text-white px-1.5 py-0.5 rounded-sm text-[9px] font-mono font-bold shrink-0">
+                  {item?.matchId ? String(item.matchId).slice(-4) : "MID"}
+                </span>
+                <span className="font-black uppercase text-[12px] leading-tight">
+                  {item?.matchName || "Match Name"}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-end mt-1">
+                <div className="leading-none">
+                  <div className="text-[10px] font-bold text-gray-800">{item?.marketName || '1X2'}</div>
+                  <div className="text-[11px] font-black underline uppercase italic mt-1">
+                    Pick: {item?.selection || "N/A"}
+                  </div>
+                </div>
+                <div className="text-[18px] font-[1000] tabular-nums">
+                  @{parseFloat(item?.odds || 0).toFixed(2)}
                 </div>
               </div>
-              <div className="text-[18px] font-[1000] tabular-nums">
-                @{parseFloat(item?.odds || 0).toFixed(2)}
-              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-2 space-y-1 font-bold text-[12px]">
