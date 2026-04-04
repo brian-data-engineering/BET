@@ -8,7 +8,7 @@ export default function ManageOperators() {
   const router = useRouter();
   const [operators, setOperators] = useState([]);
   const [adminId, setAdminId] = useState(null);
-  const [form, setForm] = useState({ email: '', password: '', username: '' });
+  const [form, setForm] = useState({ password: '', username: '' }); // Email removed from form
   const [loading, setLoading] = useState(false);
 
   const syncNetworkState = useCallback(async () => {
@@ -32,7 +32,6 @@ export default function ManageOperators() {
     };
     init();
 
-    // Listen for balance/operator changes
     const channel = supabase
       .channel('operator-mgmt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => syncNetworkState())
@@ -45,12 +44,16 @@ export default function ManageOperators() {
     e.preventDefault();
     setLoading(true);
     
+    // GHOST LOGIC: Auto-generate the internal administrative email
+    const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
+    
     const { error } = await supabase.auth.signUp({ 
-      email: form.email, 
+      email: ghostEmail, 
       password: form.password,
       options: {
+        shouldCreateSession: false, // Prevent the admin from being logged out
         data: { 
-          username: form.username,
+          username: form.username.trim(),
           role: 'operator',      
           parent_id: adminId 
         }
@@ -60,8 +63,9 @@ export default function ManageOperators() {
     if (error) {
       alert("Registration Failure: " + error.message);
     } else {
-      alert(`NODE INITIALIZED: Operator ${form.username} provisioned.`);
-      setForm({ email: '', password: '', username: '' });
+      alert(`NODE INITIALIZED: Operator ${form.username} provisioned with identity ${ghostEmail}`);
+      setForm({ password: '', username: '' });
+      syncNetworkState();
     }
     setLoading(false);
   };
@@ -109,29 +113,19 @@ export default function ManageOperators() {
               
               <form onSubmit={handleCreate} className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase ml-3 italic tracking-widest">Business ID</label>
+                  <label className="text-[9px] font-black text-slate-500 uppercase ml-3 italic tracking-widest">Operator Username</label>
                   <input 
                     value={form.username} 
-                    className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 focus:border-blue-500 outline-none text-sm font-bold uppercase text-white transition-all placeholder:text-white/5" 
-                    placeholder="OPERATOR_X" 
+                    className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 focus:border-blue-500 outline-none text-sm font-bold text-white transition-all placeholder:text-white/10 uppercase" 
+                    placeholder="e.g. nairobi_hub" 
                     onChange={e => setForm({...form, username: e.target.value})} 
                     required 
                   />
+                  <p className="text-[8px] text-slate-600 italic px-2">Access: {form.username ? form.username.toLowerCase() : '...' }@lucra.internal</p>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase ml-3 italic tracking-widest">Email Access</label>
-                  <input 
-                    value={form.email} 
-                    className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 focus:border-blue-500 outline-none text-sm font-bold text-white transition-all placeholder:text-white/5" 
-                    placeholder="email@node.com" 
-                    onChange={e => setForm({...form, email: e.target.value})} 
-                    required 
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase ml-3 italic tracking-widest">Master Key</label>
+                  <label className="text-[9px] font-black text-slate-500 uppercase ml-3 italic tracking-widest">Access Key (Password)</label>
                   <div className="relative">
                     <input 
                       value={form.password} 
