@@ -10,19 +10,16 @@ export default function CashierDashboard() {
   const [stake, setStake] = useState("");
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTicket, setCurrentTicket] = useState(null);
-  const [userProfile, setUserProfile] = useState(null); // Full profile for shop_name/username
-  const [allProfiles, setAllProfiles] = useState([]); // Needed for re-printing old tickets
+  const [userProfile, setUserProfile] = useState(null); 
+  const [allProfiles, setAllProfiles] = useState([]); 
   
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // --- INITIALIZE TERMINAL & AUTH ---
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    
     if (!authUser) return;
     
-    // 1. Fetch current cashier's detailed profile
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
@@ -31,7 +28,6 @@ export default function CashierDashboard() {
       
     if (profile) setUserProfile(profile);
 
-    // 2. Fetch all profiles (to map names when re-printing old tickets)
     const { data: profiles } = await supabase.from('profiles').select('id, username, shop_name');
     if (profiles) setAllProfiles(profiles);
   }, []);
@@ -40,7 +36,6 @@ export default function CashierDashboard() {
     initTerminal(); 
   }, [initTerminal]);
 
-  // --- TICKET LOADING LOGIC ---
   const handleLoadTicket = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
@@ -59,19 +54,16 @@ export default function CashierDashboard() {
         return;
       }
 
-      // Handle JSON selections safely
       const rawSelections = Array.isArray(ticket.selections) 
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
       if (ticket.ticket_serial) {
-        // TICKET IS ALREADY PAID
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           setTimeout(() => { window.print(); }, 500);
         }
       } else {
-        // TICKET IS A NEW BOOKING
         const now = new Date().getTime();
         const validSelections = rawSelections.filter(item => {
           if (!item.startTime) return true;
@@ -97,7 +89,6 @@ export default function CashierDashboard() {
     }
   };
 
-  // --- PAYMENT PROCESSING ---
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     if (!numStake || numStake <= 0) return alert("Enter valid stake");
@@ -119,18 +110,25 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // CRITICAL: Set the paidTicket to state so PrintableTicket gets the new Serial Number
+      // --- THE FIX STARTS HERE ---
+      // 1. Prepare data for the Print component
       setCurrentTicket(paidTicket);
       
-      setTimeout(async () => {
+      // 2. Wipe the heavy UI data IMMEDIATELY
+      // This stops the Betslip's interval timer and re-renders the right panel as "Empty"
+      setCart([]);
+      setStake("");
+
+      // 3. Wait 600ms for React to finish the "Wipe" re-render before freezing with Print
+      setTimeout(() => {
         window.print();
-        // Reset Dashboard
-        setCart([]);
-        setStake("");
-        setCurrentTicket(null);
-        await initTerminal(); // Refresh balance
+        
+        // 4. Cleanup after the print dialog is closed
+        initTerminal(); 
         setIsProcessing(false);
-      }, 1000);
+        // Optional: Hide printable ticket from DOM after delay
+        setTimeout(() => setCurrentTicket(null), 3000);
+      }, 600);
 
     } catch (err) {
       console.error("Payment Error:", err);
@@ -169,7 +167,6 @@ export default function CashierDashboard() {
               </button>
             </div>
 
-            {/* FLOAT DISPLAY */}
             <div className="grid grid-cols-2 gap-4 mt-8">
               <div className="bg-[#111926] p-6 rounded-2xl border border-white/5">
                 <p className="text-[10px] font-bold opacity-30 uppercase mb-1 tracking-widest">Active Float</p>
@@ -198,7 +195,7 @@ export default function CashierDashboard() {
               onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))}
               onClear={() => { setCart([]); setStake(""); setCurrentTicket(null); }}
               isProcessing={isProcessing}
-              user={userProfile} // Passing full profile to show Cashier Name & Shop
+              user={userProfile} 
             />
           </div>
           
@@ -216,7 +213,6 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* INVISIBLE PRINT COMPONENT */}
       <div className="hidden print:block">
         <PrintableTicket 
           ticket={currentTicket} 
