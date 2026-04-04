@@ -68,82 +68,57 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
       </div>
 
       <style jsx global>{`
-        .lucra-print-area { display: block; visibility: hidden; height: 0; overflow: hidden; }
+        /* 1. HIDE FROM SCREEN: Use display none instead of height 0 */
+        .lucra-print-area { 
+          display: none; 
+        }
         
         @media print {
-          @page { size: 80mm auto; margin: 0 !important; }
-          
-          html, body { 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            height: auto !important;
-            color: #000 !important;
-            background: #fff !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-
-          body * { visibility: hidden !important; }
-          
-          .print-engine-wrapper, .lucra-print-area, .lucra-print-area * { 
-            visibility: visible !important; 
-            display: block !important;
-            color: #000 !important; /* Forces all text to absolute black */
-            font-weight: 900 !important; /* Force ultra-bold everywhere */
-          }
-
-          .lucra-print-area {
-            position: absolute;
-            left: 0; top: 0;
-            width: 72mm;
-            height: auto !important;
-            overflow: hidden;
+          /* 2. REVEAL FOR PRINTER: Force it to exist */
+          .lucra-print-area { 
+            display: block !important; 
+            visibility: visible !important;
+            height: auto !important; 
+            width: 72mm !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
           }
 
           .ticket-container { 
             width: 72mm; 
-            font-family: 'Arial Black', Gadget, sans-serif; /* Heavier font than Courier */
+            font-family: 'Arial Black', Gadget, sans-serif;
             padding: 2mm 1mm; 
-            box-sizing: border-box;
-            line-height: 1.2;
-            text-rendering: optimizeLegibility;
+            color: #000 !important;
+            background: #fff !important;
           }
 
-          /* Strong Black Borders */
+          /* Strong Black Borders for Thermal Clarity */
           .terminal-tag { font-size: 12px; border-bottom: 3px solid #000; text-align: center; padding-bottom: 2px; }
           .info-line { display: flex; justify-content: space-between; font-size: 11px; border-bottom: 3px solid #000; padding: 3px 0; }
-          .serial-box { border: 3px solid #000; text-align: center; margin: 6px 0; padding: 5px; font-size: 15px; }
+          .serial-box { border: 3px solid #000; text-align: center; margin: 6px 0; padding: 5px; font-size: 15px; font-weight: 900; }
 
           .match-item { 
             border: 2px solid #000; 
-            margin-top: -2px; /* Thick grid collapse */
+            margin-top: -2px; 
             padding: 3px 5px; 
           }
           
-          .m-header { display: flex; justify-content: space-between; font-size: 10px; }
-          .m-teams { font-size: 13px; text-transform: uppercase; margin: 2px 0; display: flex !important; align-items: center; gap: 5px; }
+          .m-teams { font-size: 13px; text-transform: uppercase; font-weight: 900; }
           
           .match-id-box {
             background: #000 !important;
             color: #fff !important;
             padding: 0 4px;
-            border-radius: 2px;
-            display: inline-block !important;
+            -webkit-print-color-adjust: exact;
           }
 
-          .m-bet { display: flex; justify-content: space-between; font-size: 11px; }
-          .m-odds { font-size: 12px; }
-
-          .ticket-totals { border-top: 3px solid #000; margin-top: 5px; }
-          .t-row { display: flex; justify-content: space-between; font-size: 14px; padding: 3px 0; border-bottom: 2px solid #000; }
+          .t-row { font-weight: 900; border-bottom: 2px solid #000; }
           
           .payout-container { border: 4px solid #000; text-align: center; margin-top: 8px; padding: 6px; }
-          .p-label { font-size: 13px; text-decoration: underline; }
-          .p-value { font-size: 30px; line-height: 1; margin-top: 4px; }
+          .p-value { font-size: 30px; font-weight: 900; line-height: 1; }
 
-          .barcode-wrapper { margin: 10px 0; display: flex !important; justify-content: center; width: 100%; }
-          .date-text { font-size: 10px; margin-top: 5px; }
-          .luck-text { font-size: 12px; padding-bottom: 15px; letter-spacing: 1px; }
+          .barcode-wrapper { display: flex !important; justify-content: center; width: 100%; margin: 10px 0; }
         }
       `}</style>
     </div>
