@@ -3,7 +3,6 @@ import Barcode from 'react-barcode';
 
 export default function PrintableTicket({ ticket, cart = [], profiles = [], user }) {
   // 1. DATA UNIFICATION & SAFE PARSING
-  // We prioritize 'ticket.selections' for paid tickets, falling back to 'cart' for new bookings.
   const selections = ticket?.selections 
     ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
     : (cart || []);
@@ -14,10 +13,17 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
   const cashierName = cashierProfile?.username || user?.username || "Staff";
   const shopName = cashierProfile?.shop_name || user?.shop_name || "LUCRA SHOP";
 
-  // Process leagues (assuming comma-separated string from DB)
+  // 3. AUTO-CALCULATION FALLBACKS
+  // This ensures that even if the DB says 0.00, we calculate the real values for the paper
+  const calculatedOdds = selections.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1);
+  const displayOdds = (parseFloat(ticket?.total_odds) || calculatedOdds).toFixed(2);
+  
+  const displayStake = parseFloat(ticket?.stake || 0);
+  const displayPayout = (parseFloat(ticket?.potential_payout) || (calculatedOdds * displayStake));
+
+  // Process leagues
   const leagueList = ticket?.league_name ? ticket.league_name.split(', ') : [];
 
-  // Prevent rendering if there is no data to show
   if (!selections || selections.length === 0) return null;
 
   return (
@@ -89,20 +95,20 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         ))}
       </div>
 
-      {/* FINANCIAL TOTALS */}
+      {/* FINANCIAL TOTALS (FIXED: Added Fallbacks) */}
       <div className="mt-2 space-y-1 font-bold text-[12px]">
         <div className="flex justify-between border-b border-dotted border-black py-1">
           <span>TOTAL ODDS:</span>
-          <span className="tabular-nums">{parseFloat(ticket?.total_odds || 0).toFixed(2)}</span>
+          <span className="tabular-nums">{displayOdds}</span>
         </div>
         <div className="flex justify-between border-b border-dotted border-black py-1">
           <span>STAKE:</span>
-          <span className="tabular-nums">{parseFloat(ticket?.stake || 0).toLocaleString()} KES</span>
+          <span className="tabular-nums">{displayStake.toLocaleString()} KES</span>
         </div>
         <div className="flex justify-between items-center bg-black text-white px-2 py-2 mt-1">
           <span className="text-[10px] uppercase font-black">Potential Payout:</span>
           <span className="text-[20px] font-black italic tabular-nums">
-            {parseFloat(ticket?.potential_payout || 0).toLocaleString('en-KE')}
+            {displayPayout.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
       </div>
