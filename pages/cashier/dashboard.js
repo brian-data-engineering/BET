@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
 import Betslip from '../../components/cashier/BetSlip'; 
 import PrintableTicket from '../../components/cashier/PrintableTicket'; 
-import { Loader2, RefreshCw, Zap } from 'lucide-react';
+import { Loader2, Search, Printer, CreditCard } from 'lucide-react';
 
 export default function CashierDashboard() {
   const [cart, setCart] = useState([]);
@@ -15,7 +15,6 @@ export default function CashierDashboard() {
   
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false); // ✅ NEW
 
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -30,23 +29,12 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // ✅ SAFE PRINT FUNCTION (CORE FIX)
-  const safePrint = useCallback(() => {
-    if (isPrinting) return;
-
-    setIsPrinting(true);
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        window.print();
-
-        // unlock after printer stabilizes
-        setTimeout(() => {
-          setIsPrinting(false);
-        }, 3000);
-      });
-    });
-  }, [isPrinting]);
+  // Optimized Print Trigger
+  const handlePrint = () => {
+    setTimeout(() => {
+      window.print();
+    }, 500);
+  };
 
   const handleLoadTicket = async () => {
     if (!searchQuery || isSearching) return;
@@ -66,10 +54,12 @@ export default function CashierDashboard() {
         return;
       }
 
+      // 1. Parse Selections
       let rawSelections = ticket.selections 
         ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
         : [];
 
+      // 2. Fetch League Names (Enrichment)
       const matchIds = rawSelections.map(s => s.matchId);
       const { data: eventData } = await supabase
         .from('api_events')
@@ -85,26 +75,15 @@ export default function CashierDashboard() {
       });
 
       if (ticket.ticket_serial) {
+        // Handle Reprints
         setCurrentTicket({ ...ticket, selections: enrichedSelections });
-
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          setTimeout(() => safePrint(), 500); // ✅ FIXED
+          handlePrint();
         }
       } else {
-        const now = new Date().getTime();
-        const validSelections = enrichedSelections.filter(item => {
-          if (!item.startTime) return true;
-          const matchDate = new Date(item.startTime).getTime();
-          return (matchDate - now) > -60000; 
-        });
-
-        if (validSelections.length === 0) {
-          alert("⚠️ ALL MATCHES IN THIS SLIP HAVE EXPIRED/STARTED.");
-          return;
-        }
-
-        setCurrentTicket({ ...ticket, selections: validSelections }); 
-        setCart(validSelections);
+        // Handle New Bookings
+        setCurrentTicket({ ...ticket, selections: enrichedSelections }); 
+        setCart(enrichedSelections);
         setStake(ticket.stake?.toString() || "100");
       }
 
@@ -121,19 +100,16 @@ export default function CashierDashboard() {
     if (!numStake || numStake <= 0) return alert("Enter stake");
     if (numStake > (userProfile?.balance || 0)) return alert("⚠️ INSUFFICIENT FLOAT");
     
-    const targetCode = currentTicket?.booking_code;
-    if (!targetCode) return alert("No booking code.");
+    if (!currentTicket?.booking_code) return alert("No booking loaded.");
 
     setIsProcessing(true);
 
     try {
-      const savedCartForPrint = [...cart];
-      const totalOdds = savedCartForPrint.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1);
-      const potentialPayout = numStake * totalOdds;
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+      const currentCart = [...cart];
 
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
-        p_booking_code: targetCode.toString(),
+        p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
         p_generated_serial: newSerial,
         p_stake: numStake
@@ -141,39 +117,99 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      setCurrentTicket({
-        ...(paidTicket || currentTicket),
-        ticket_serial: newSerial, 
-        selections: savedCartForPrint, 
+      // Update local state for the PrintableTicket component
+      const finalTicket = {
+        ...currentTicket,
+        ticket_serial: newSerial,
+        selections: currentCart,
         stake: numStake,
-        total_odds: totalOdds,
-        potential_payout: potentialPayout,
         created_at: new Date().toISOString()
-      });
-      
+      };
+
+      setCurrentTicket(finalTicket);
       setCart([]);
       setStake("");
-      setIsProcessing(false);
+      
+      // Trigger Print and Refresh
+      handlePrint();
+      initTerminal();
 
-      // ✅ SAFE PRINT
-      setTimeout(() => {
-        safePrint();
-        initTerminal();
-        setTimeout(() => setCurrentTicket(null), 3000);
-      }, 500);
+      // Clear ticket after print window closes
+      setTimeout(() => setCurrentTicket(null), 5000);
 
     } catch (err) {
       alert("❌ ERROR: " + err.message);
+    } finally {
       setIsProcessing(false);
     }
   };
 
   return (
     <CashierLayout>
-      {/* UI unchanged */}
+      <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* LEFT & CENTER: SEARCH & ACTIONS */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
+            <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2">
+              <Search className="text-yellow-500" /> LOAD TICKET
+            </h2>
+            <div className="flex gap-2">
+              <input 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
+                placeholder="Enter Booking Code or Serial..."
+                className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-3 text-white font-mono text-lg focus:border-yellow-500 outline-none transition-all"
+              />
+              <button 
+                onClick={handleLoadTicket}
+                disabled={isSearching}
+                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-black px-6 rounded-xl transition-all flex items-center gap-2"
+              >
+                {isSearching ? <Loader2 className="animate-spin" /> : "SEARCH"}
+              </button>
+            </div>
+          </div>
 
+          {/* Quick Stats / Info can go here */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+              <p className="text-zinc-500 text-xs font-bold uppercase">Your Balance</p>
+              <p className="text-white text-2xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
+            </div>
+            <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+              <p className="text-zinc-500 text-xs font-bold uppercase">Terminal Status</p>
+              <p className="text-green-500 text-2xl font-black flex items-center gap-2">
+                ONLINE <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT: BETSLIP */}
+        <div className="lg:col-span-1">
+          <Betslip 
+            cart={cart}
+            setCart={setCart}
+            stake={stake}
+            setStake={setStake}
+            onProcess={handleProcessPayment}
+            isProcessing={isProcessing}
+            userBalance={userProfile?.balance || 0}
+          />
+        </div>
+      </div>
+
+      {/* HIDDEN PRINT COMPONENT - Rendered at bottom of page */}
       {currentTicket && (
-        <PrintableTicket ticket={currentTicket} profiles={allProfiles} user={userProfile} />
+        <div className="hidden">
+          <PrintableTicket 
+            ticket={currentTicket} 
+            profiles={allProfiles} 
+            user={userProfile} 
+          />
+        </div>
       )}
     </CashierLayout>
   );
