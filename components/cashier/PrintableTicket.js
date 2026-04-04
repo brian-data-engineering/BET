@@ -12,7 +12,7 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
       <div className="ticket-container">
         {/* HEADER */}
         <center className="header-logo">
-          <img src="https://i.ibb.co/67wb7Zm1/download.png" style={{height:'40px', marginBottom: '2px'}} alt="LUCRA" />
+          <img src="https://i.ibb.co/67wb7Zm1/download.png" style={{height:'38px', marginBottom: '2px'}} alt="LUCRA" />
           <div className="terminal-tag">LUCRA TERMINAL</div>
         </center>
         
@@ -59,7 +59,8 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
         <center className="barcode-footer">
           {ticket.ticket_serial && (
             <div className="barcode-wrapper">
-              <Barcode value={String(ticket.ticket_serial)} width={1.8} height={50} displayValue={false} margin={0} />
+              {/* Reduced width to 1.5 to ensure it doesn't bleed off the 72mm edge */}
+              <Barcode value={String(ticket.ticket_serial)} width={1.5} height={45} displayValue={false} margin={0} />
             </div>
           )}
           <p className="date-text">{new Date().toLocaleString()}</p>
@@ -71,8 +72,11 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
         .lucra-print-area { display: block; visibility: hidden; }
         
         @media print {
-          /* 1. Page & Layout Setup */
-          @page { size: 80mm auto; margin: 0; }
+          @page { 
+            size: 80mm auto; 
+            margin: 0; 
+          }
+          
           body * { visibility: hidden !important; }
           
           .print-engine-wrapper, 
@@ -84,64 +88,66 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
 
           .lucra-print-area {
             position: absolute;
-            left: 0; top: 0;
-            width: 80mm;
+            left: 50%; /* Center the print area on the paper */
+            top: 0;
+            transform: translateX(-50%);
+            width: 72mm; /* The safe printable width for 80mm paper */
             background: white;
             color: black;
             padding: 0; margin: 0;
           }
 
           .ticket-container { 
-            width: 80mm; 
+            width: 72mm; 
             font-family: 'Courier New', Courier, monospace; 
-            padding: 2mm; 
+            padding: 1mm; 
             box-sizing: border-box;
             line-height: 1.1;
           }
 
-          /* 2. Header & ID Box Logic */
           .terminal-tag { font-size: 11px; font-weight: 900; letter-spacing: 1px; border-bottom: 2px solid black; text-align: center; margin-bottom: 2px; }
-          .info-line { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; border-bottom: 2px solid black; padding: 2px 0; }
-          .serial-box { border: 2px solid black; text-align: center; font-weight: 900; margin: 5px 0; padding: 4px; font-size: 14px; }
+          .info-line { display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; border-bottom: 2px solid black; padding: 2px 0; }
+          .serial-box { border: 2px solid black; text-align: center; font-weight: 900; margin: 5px 0; padding: 4px; font-size: 13px; }
 
-          /* 3. The Grid Style for Matches */
           .match-item { 
             border: 1px solid black; 
-            margin-top: -1px; /* Collapses borders like a table */
-            padding: 3px; 
+            margin-top: -1px; 
+            padding: 2px 4px; 
           }
-          .m-header { display: flex; justify-content: space-between; font-size: 10px; }
+          .m-header { display: flex; justify-content: space-between; font-size: 9px; }
           .m-teams { 
-            font-size: 13px; font-weight: 900; text-transform: uppercase; margin: 2px 0;
-            display: flex !important; align-items: center; gap: 6px; 
+            font-size: 12px; font-weight: 900; text-transform: uppercase; margin: 1px 0;
+            display: flex !important; align-items: center; gap: 4px; 
           }
           
-          /* The Black Inverted ID Box */
           .match-id-box {
             background: black !important;
             color: white !important;
-            padding: 0 4px;
+            padding: 0 3px;
             font-weight: bold;
             border-radius: 2px;
             display: inline-block !important;
             -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
           }
 
-          .m-bet { display: flex; justify-content: space-between; font-size: 11px; }
-          .m-odds { font-size: 12px; }
+          .m-bet { display: flex; justify-content: space-between; font-size: 10px; }
+          .m-odds { font-size: 11px; }
 
-          /* 4. Totals & Payout */
           .ticket-totals { border-top: 2px solid black; margin-top: 4px; }
-          .t-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; padding: 2px 0; border-bottom: 1px solid black; }
-          .payout-container { border: 3px solid black; text-align: center; margin-top: 6px; padding: 5px; }
-          .p-label { font-size: 12px; font-weight: 900; }
-          .p-value { font-size: 26px; font-weight: 900; }
+          .t-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; padding: 1px 0; border-bottom: 1px solid black; }
+          
+          .payout-container { border: 3px solid black; text-align: center; margin-top: 5px; padding: 3px; }
+          .p-label { font-size: 11px; font-weight: 900; text-decoration: underline; }
+          .p-value { font-size: 24px; font-weight: 900; line-height: 1; }
 
-          /* 5. Footer & Barcode */
-          .barcode-wrapper { margin: 8px 0; text-align: center; }
-          .date-text { font-size: 10px; font-weight: bold; margin-top: 5px; }
-          .luck-text { font-size: 11px; font-weight: 900; margin-top: 2px; }
+          .barcode-wrapper { 
+            margin: 6px 0; 
+            display: flex !important; 
+            justify-content: center; 
+            width: 100%;
+          }
+          .date-text { font-size: 9px; font-weight: bold; margin-top: 4px; }
+          .luck-text { font-size: 10px; font-weight: 900; margin-top: 1px; }
         }
       `}</style>
     </div>
