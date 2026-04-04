@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // Added useCallback for stability
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
 import { Search, CheckCircle2, Clock, Loader2, Receipt, Banknote } from 'lucide-react';
@@ -9,16 +9,15 @@ export default function TicketManager() {
   const [search, setSearch] = useState('');
   const [user, setUser] = useState(null);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({data}) => setUser(data.user));
-    fetchTickets();
-  }, []);
-
-  const fetchTickets = async () => {
+  // Define fetchTickets with useCallback to include it in dependency arrays safely
+  const fetchTickets = useCallback(async (userId) => {
+    if (!userId) return;
+    
     setLoading(true);
     const { data } = await supabase
       .from('betsnow')
       .select('*')
+      .eq('cashier_id', userId) // CRITICAL: Filter by the logged-in cashier's ID
       .not('ticket_serial', 'is', null)
       .neq('ticket_serial', '')
       .order('created_at', { ascending: false })
@@ -26,7 +25,20 @@ export default function TicketManager() {
 
     setTickets(data || []);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    const initializeTerminal = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        setUser(currentUser);
+        // Pass the ID directly to ensure it fetches for the right user immediately
+        fetchTickets(currentUser.id);
+      }
+    };
+
+    initializeTerminal();
+  }, [fetchTickets]);
 
   const handlePayout = async (ticket) => {
     if (!window.confirm(`PAYOUT KES ${parseFloat(ticket.potential_payout).toLocaleString()}?`)) return;
@@ -42,7 +54,7 @@ export default function TicketManager() {
       alert(error.message);
     } else {
       alert("PAYOUT SUCCESSFUL: FLOAT REIMBURSED");
-      fetchTickets();
+      fetchTickets(user.id); // Refresh ledger
     }
     setLoading(false);
   };
@@ -114,12 +126,11 @@ export default function TicketManager() {
                       <p className="text-[9px] font-black opacity-20 uppercase tracking-widest mb-1">Potential Payout</p>
                       <p className={`text-2xl font-black italic tabular-nums ${t.status === 'won' ? 'text-[#10b981]' : 'text-white'}`}>
                         <span className="text-[10px] mr-1">KES</span>
-                        {parseFloat(t.potential_payout).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {parseFloat(t.potential_payout || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </p>
                     </div>
 
                     <div className="w-40 flex justify-end">
-                      {/* NEW SETTLEMENT LOGIC */}
                       {t.status === 'won' && !t.settled_at ? (
                         <button 
                           onClick={() => handlePayout(t)} 
@@ -137,8 +148,8 @@ export default function TicketManager() {
                         </div>
                       ) : (
                         <div className="flex flex-col items-end opacity-20">
-                          <span className="text-white font-black italic text-[11px] uppercase tracking-tighter">Printed</span>
-                          <span className="text-[8px] font-bold uppercase">Running...</span>
+                          <span className="text-white font-black italic text-[11px] uppercase tracking-tighter">Running</span>
+                          <span className="text-[8px] font-bold uppercase">Awaiting Result</span>
                         </div>
                       )}
                     </div>
