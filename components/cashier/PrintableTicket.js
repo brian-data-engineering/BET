@@ -10,8 +10,9 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
   return (
     <div className="lucra-print-area">
       <div className="ticket-container">
+        {/* HEADER */}
         <center className="header-logo">
-          <img src="https://i.ibb.co/67wb7Zm1/download.png" style={{height:'40px', marginBottom: '5px'}} alt="LUCRA" />
+          <img src="https://i.ibb.co/67wb7Zm1/download.png" style={{height:'40px', marginBottom: '2px'}} alt="LUCRA" />
           <div className="terminal-tag">LUCRA TERMINAL</div>
         </center>
         
@@ -24,16 +25,27 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
           {ticket.ticket_serial ? `SERIAL: ${ticket.ticket_serial}` : `BOOKING: ${ticket.booking_code}`}
         </div>
 
+        {/* SELECTIONS GRID */}
         <div className="selections-list">
           {selections.map((s, i) => (
             <div key={i} className="match-item">
-              <div className="m-header"><span>{s.leagueName}</span> <span>{s.startTime?.split('T')[1]?.slice(0,5)}</span></div>
-              <div className="m-teams">{s.matchName}</div>
-              <div className="m-bet">{s.marketName}: <b>{s.selection} @{parseFloat(s.odds).toFixed(2)}</b></div>
+              <div className="m-header">
+                <span>Soccer, {s.leagueName}</span> 
+                <span>{s.startTime?.split('T')[0]} {s.startTime?.split('T')[1]?.slice(0,5)}</span>
+              </div>
+              <div className="m-teams">
+                <span className="match-id-box">{s.matchId?.toString().slice(-4)}</span> 
+                {s.matchName}
+              </div>
+              <div className="m-bet">
+                <span>{s.marketName}: <b>{s.selection}</b></span>
+                <b className="m-odds">{parseFloat(s.odds).toFixed(2)}</b>
+              </div>
             </div>
           ))}
         </div>
 
+        {/* TOTALS SECTION */}
         <div className="ticket-totals">
           <div className="t-row"><span>TOTAL ODDS:</span> <span>{parseFloat(ticket.total_odds || 1).toFixed(2)}</span></div>
           <div className="t-row"><span>STAKE:</span> <span>{parseFloat(ticket.stake || 0).toLocaleString()} KSh</span></div>
@@ -43,10 +55,11 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
           </div>
         </div>
 
+        {/* FOOTER */}
         <center className="barcode-footer">
           {ticket.ticket_serial && (
-            <div style={{margin: '10px 0'}}>
-              <Barcode value={String(ticket.ticket_serial)} width={1.5} height={50} displayValue={false} margin={0} />
+            <div className="barcode-wrapper">
+              <Barcode value={String(ticket.ticket_serial)} width={1.8} height={50} displayValue={false} margin={0} />
             </div>
           )}
           <p className="date-text">{new Date().toLocaleString()}</p>
@@ -58,10 +71,10 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
         .lucra-print-area { display: block; visibility: hidden; }
         
         @media print {
-          /* 1. Hide the browser UI and Dashboard */
+          /* 1. Page & Layout Setup */
+          @page { size: 80mm auto; margin: 0; }
           body * { visibility: hidden !important; }
           
-          /* 2. Enable the ticket specifically */
           .print-engine-wrapper, 
           .lucra-print-area, 
           .lucra-print-area * { 
@@ -72,34 +85,63 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
           .lucra-print-area {
             position: absolute;
             left: 0; top: 0;
-            width: 72mm;
+            width: 80mm;
             background: white;
             color: black;
             padding: 0; margin: 0;
           }
 
           .ticket-container { 
-            width: 72mm; 
+            width: 80mm; 
             font-family: 'Courier New', Courier, monospace; 
-            padding: 3mm; 
+            padding: 2mm; 
             box-sizing: border-box;
+            line-height: 1.1;
           }
 
-          .terminal-tag { font-size: 11px; font-weight: 900; letter-spacing: 1px; border-bottom: 1px solid black; padding-bottom: 2px; }
-          .info-line { display: flex; justify-content: space-between; font-size: 10px; margin-top: 2px; }
-          .serial-box { border: 2px solid black; text-align: center; font-weight: 900; margin: 8px 0; padding: 5px; font-size: 14px; }
-          .match-item { border-bottom: 1px dotted black; padding: 4px 0; }
-          .m-header { display: flex; justify-content: space-between; font-size: 9px; }
-          .m-teams { font-size: 11px; font-weight: 900; text-transform: uppercase; margin: 2px 0; }
-          .m-bet { font-size: 11px; }
-          .t-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin-top: 2px; }
-          .payout-container { border: 3px solid black; text-align: center; margin-top: 8px; padding: 6px; }
-          .p-label { font-size: 10px; font-weight: 900; }
-          .p-value { font-size: 24px; font-weight: 900; }
-          .date-text { font-size: 9px; margin-top: 10px; }
-          .luck-text { font-size: 10px; font-weight: bold; margin-top: 2px; }
+          /* 2. Header & ID Box Logic */
+          .terminal-tag { font-size: 11px; font-weight: 900; letter-spacing: 1px; border-bottom: 2px solid black; text-align: center; margin-bottom: 2px; }
+          .info-line { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; border-bottom: 2px solid black; padding: 2px 0; }
+          .serial-box { border: 2px solid black; text-align: center; font-weight: 900; margin: 5px 0; padding: 4px; font-size: 14px; }
 
-          @page { size: 80mm auto; margin: 0; }
+          /* 3. The Grid Style for Matches */
+          .match-item { 
+            border: 1px solid black; 
+            margin-top: -1px; /* Collapses borders like a table */
+            padding: 3px; 
+          }
+          .m-header { display: flex; justify-content: space-between; font-size: 10px; }
+          .m-teams { 
+            font-size: 13px; font-weight: 900; text-transform: uppercase; margin: 2px 0;
+            display: flex !important; align-items: center; gap: 6px; 
+          }
+          
+          /* The Black Inverted ID Box */
+          .match-id-box {
+            background: black !important;
+            color: white !important;
+            padding: 0 4px;
+            font-weight: bold;
+            border-radius: 2px;
+            display: inline-block !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          .m-bet { display: flex; justify-content: space-between; font-size: 11px; }
+          .m-odds { font-size: 12px; }
+
+          /* 4. Totals & Payout */
+          .ticket-totals { border-top: 2px solid black; margin-top: 4px; }
+          .t-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; padding: 2px 0; border-bottom: 1px solid black; }
+          .payout-container { border: 3px solid black; text-align: center; margin-top: 6px; padding: 5px; }
+          .p-label { font-size: 12px; font-weight: 900; }
+          .p-value { font-size: 26px; font-weight: 900; }
+
+          /* 5. Footer & Barcode */
+          .barcode-wrapper { margin: 8px 0; text-align: center; }
+          .date-text { font-size: 10px; font-weight: bold; margin-top: 5px; }
+          .luck-text { font-size: 11px; font-weight: 900; margin-top: 2px; }
         }
       `}</style>
     </div>
