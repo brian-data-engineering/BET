@@ -1,7 +1,34 @@
 import { Trash2, Ticket, Coins, Percent } from 'lucide-react';
+import { useEffect } from 'react'; // Added useEffect
 
 export default function Betslip({ cart, stake, onStakeChange, onRemove, onClear, isProcessing }) {
   
+  // --- LUCRA AUTO-SYNC LOGIC ---
+  // This ensures that even if a cashier has a slip open, 
+  // games that start are removed in real-time.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      
+      cart.forEach((item, index) => {
+        if (!item.startTime) return;
+
+        // Clean time format and apply the Lucra 3-Hour Offset
+        const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
+        const matchDate = new Date(cleanTime).getTime();
+        const lockThreshold = matchDate - (3 * 60 * 60 * 1000); 
+
+        // If game is within 60s of kickoff, remove it from the cashier's slip
+        if ((lockThreshold - now) <= 60000) {
+          onRemove(index);
+          console.log(`Auto-removed ${item.matchName} - Match started/starting.`);
+        }
+      });
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(timer);
+  }, [cart, onRemove]);
+
   // Calculate Total Odds (Product of all selections)
   const totalOdds = cart.length > 0 
     ? cart.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1) 
