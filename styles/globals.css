@@ -74,3 +74,29 @@ html, body {
 }
 
 
+/* --- Thermal Print Safety Net --- */
+@media print {
+  /* Hide the entire app UI */
+  body > * {
+    display: none !important;
+  }
+
+  /* Only allow the print area to exist */
+  .lucra-print-area, .lucra-print-area * {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Reset body for white paper */
+  html, body {
+    background: white !important;
+    color: black !important;
+    height: auto !important;
+    margin: 0 !important;
+  }
+
+  @page {
+    margin: 0;
+    size: auto;
+  }
+}
