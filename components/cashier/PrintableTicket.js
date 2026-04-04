@@ -59,8 +59,7 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
         <center className="barcode-footer">
           {ticket.ticket_serial && (
             <div className="barcode-wrapper">
-              {/* Reduced width to 1.5 to ensure it doesn't bleed off the 72mm edge */}
-              <Barcode value={String(ticket.ticket_serial)} width={1.5} height={45} displayValue={false} margin={0} />
+              <Barcode value={String(ticket.ticket_serial)} width={1.4} height={40} displayValue={false} margin={0} />
             </div>
           )}
           <p className="date-text">{new Date().toLocaleString()}</p>
@@ -69,16 +68,26 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
       </div>
 
       <style jsx global>{`
-        .lucra-print-area { display: block; visibility: hidden; }
+        /* Hide from screen, keep for print engine */
+        .lucra-print-area { display: block; visibility: hidden; height: 0; overflow: hidden; }
         
         @media print {
+          /* 1. Kill all browser-injected white space */
           @page { 
             size: 80mm auto; 
-            margin: 0; 
+            margin: 0 !important; 
           }
           
+          html, body { 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            height: auto !important;
+            background: #fff;
+          }
+
           body * { visibility: hidden !important; }
           
+          /* 2. Precise Container Reset */
           .print-engine-wrapper, 
           .lucra-print-area, 
           .lucra-print-area * { 
@@ -88,24 +97,26 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
 
           .lucra-print-area {
             position: absolute;
-            left: 50%; /* Center the print area on the paper */
+            left: 0;
             top: 0;
-            transform: translateX(-50%);
-            width: 72mm; /* The safe printable width for 80mm paper */
-            background: white;
-            color: black;
-            padding: 0; margin: 0;
+            width: 72mm; /* Physical print head limit */
+            height: auto !important;
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
           }
 
           .ticket-container { 
             width: 72mm; 
             font-family: 'Courier New', Courier, monospace; 
-            padding: 1mm; 
+            padding: 2mm 1mm; /* Top/Bottom 2mm, Side 1mm */
             box-sizing: border-box;
             line-height: 1.1;
+            background: white;
           }
 
-          .terminal-tag { font-size: 11px; font-weight: 900; letter-spacing: 1px; border-bottom: 2px solid black; text-align: center; margin-bottom: 2px; }
+          /* 3. Visual Elements */
+          .terminal-tag { font-size: 11px; font-weight: 900; border-bottom: 2px solid black; text-align: center; margin-bottom: 2px; }
           .info-line { display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; border-bottom: 2px solid black; padding: 2px 0; }
           .serial-box { border: 2px solid black; text-align: center; font-weight: 900; margin: 5px 0; padding: 4px; font-size: 13px; }
 
@@ -113,6 +124,7 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
             border: 1px solid black; 
             margin-top: -1px; 
             padding: 2px 4px; 
+            page-break-inside: avoid;
           }
           .m-header { display: flex; justify-content: space-between; font-size: 9px; }
           .m-teams { 
@@ -128,26 +140,32 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
             border-radius: 2px;
             display: inline-block !important;
             -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
 
           .m-bet { display: flex; justify-content: space-between; font-size: 10px; }
           .m-odds { font-size: 11px; }
 
           .ticket-totals { border-top: 2px solid black; margin-top: 4px; }
-          .t-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; padding: 1px 0; border-bottom: 1px solid black; }
+          .t-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; padding: 2px 0; border-bottom: 1px solid black; }
           
-          .payout-container { border: 3px solid black; text-align: center; margin-top: 5px; padding: 3px; }
+          .payout-container { border: 3px solid black; text-align: center; margin-top: 5px; padding: 4px; }
           .p-label { font-size: 11px; font-weight: 900; text-decoration: underline; }
-          .p-value { font-size: 24px; font-weight: 900; line-height: 1; }
+          .p-value { font-size: 24px; font-weight: 900; line-height: 1; margin-top: 2px; }
 
           .barcode-wrapper { 
-            margin: 6px 0; 
+            margin: 8px 0 4px 0; 
             display: flex !important; 
             justify-content: center; 
             width: 100%;
           }
-          .date-text { font-size: 9px; font-weight: bold; margin-top: 4px; }
-          .luck-text { font-size: 10px; font-weight: 900; margin-top: 1px; }
+          .date-text { font-size: 9px; font-weight: bold; }
+          .luck-text { 
+            font-size: 10px; 
+            font-weight: 900; 
+            margin-top: 2px; 
+            padding-bottom: 10px; /* Space for the physical cutter */
+          }
         }
       `}</style>
     </div>
