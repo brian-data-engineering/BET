@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
-import { Lock, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Lock, ShieldCheck, AlertCircle, User } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState(''); // Unified username state
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -17,9 +17,12 @@ export default function AdminLogin() {
     setErrorMsg(null);
 
     try {
+      // GHOST LOGIC: Bridge admin username to internal domain
+      const internalEmail = `${username.toLowerCase().trim()}@lucra.internal`;
+
       // 1. Authenticate with Supabase
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ 
-        email, 
+        email: internalEmail, 
         password 
       });
 
@@ -38,11 +41,10 @@ export default function AdminLogin() {
       }
 
       // 3. ALLOWED ROLES CHECK
-      // Ensure anyone with an admin-side role can enter
-      const authorizedRoles = ['super_admin', 'admin', 'operator', 'cashier'];
+      // Super admins and admins have access here
+      const authorizedRoles = ['super_admin', 'admin'];
       
       if (authorizedRoles.includes(profile.role)) {
-        // Redirect to dashboard - the AdminLayout will now pick up the session
         router.push('/admin/dashboard');
       } else {
         await supabase.auth.signOut();
@@ -50,7 +52,7 @@ export default function AdminLogin() {
       }
 
     } catch (err) {
-      setErrorMsg(err.message);
+      setErrorMsg("ENGINE ERROR: " + err.message);
       setLoading(false);
     }
   };
@@ -82,14 +84,16 @@ export default function AdminLogin() {
             <div className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] text-slate-500 font-black uppercase ml-1 italic">Admin Identity</label>
-                <input 
-                  type="email" 
-                  autoComplete="email"
-                  placeholder="admin@lucra.bet" 
-                  className="w-full bg-[#0b0f1a] border border-white/10 p-4 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-medium text-white" 
-                  onChange={e => setEmail(e.target.value)} 
-                  required
-                />
+                <div className="relative">
+                  <input 
+                    type="text" // Changed from email
+                    placeholder="e.g. superadmin" 
+                    className="w-full bg-[#0b0f1a] border border-white/10 p-4 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-medium text-white placeholder:text-white/5" 
+                    onChange={e => setUsername(e.target.value)} 
+                    required
+                  />
+                  <User className="absolute right-4 top-1/2 -translate-y-1/2 text-white/10" size={16} />
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -98,7 +102,7 @@ export default function AdminLogin() {
                   type="password" 
                   autoComplete="current-password"
                   placeholder="••••••••" 
-                  className="w-full bg-[#0b0f1a] border border-white/10 p-4 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-medium text-white" 
+                  className="w-full bg-[#0b0f1a] border border-white/10 p-4 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-medium text-white placeholder:text-white/5" 
                   onChange={e => setPassword(e.target.value)} 
                   required
                 />
