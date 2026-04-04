@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import OperatorLayout from '../../components/operator/OperatorLayout';
-import { Monitor, Loader2, Send, Database, UserPlus, X } from 'lucide-react';
+import { Monitor, Loader2, Send, Database, UserPlus, X, ShieldCheck } from 'lucide-react';
 
 export default function ManageStaff() {
   const [staff, setStaff] = useState([]);
@@ -9,21 +9,19 @@ export default function ManageStaff() {
   const [fetching, setFetching] = useState(true);
   const [processingId, setProcessingId] = useState(null);
 
-  // --- FORM STATE ---
+  // --- FORM STATE (Email removed from form) ---
   const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState({ email: '', password: '', username: '' });
+  const [form, setForm] = useState({ username: '', password: '' });
   const [creating, setCreating] = useState(false);
 
   const fetchData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch the current operator's profile first
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     if (profile) {
       setOperatorProfile(profile);
       
-      // Now fetch their specific cashiers
       const { data: cashiers } = await supabase.from('profiles')
         .select('*')
         .eq('parent_id', user.id)
@@ -37,14 +35,12 @@ export default function ManageStaff() {
 
   useEffect(() => { 
     fetchData();
-    
     const channel = supabase
       .channel('staff-mgmt-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
         fetchData();
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
 
@@ -52,14 +48,16 @@ export default function ManageStaff() {
     e.preventDefault();
     setCreating(true);
     
-    // We use the standard signUp but with the "No Session" flag
+    // GHOST LOGIC: Auto-generate the internal email address
+    const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
+
     const { error } = await supabase.auth.signUp({
-      email: form.email,
+      email: ghostEmail,
       password: form.password,
       options: {
         shouldCreateSession: false, 
         data: { 
-          username: form.username,
+          username: form.username.trim(),
           role: 'cashier',      
           parent_id: operatorProfile.id 
         }
@@ -67,12 +65,12 @@ export default function ManageStaff() {
     });
 
     if (error) {
-      alert(`Error: ${error.message}`);
+      alert(`NETWORK ERROR: ${error.message}`);
     } else {
-      alert(`SUCCESS: Cashier ${form.username} created.`);
-      setForm({ email: '', password: '', username: '' });
+      alert(`NODE INITIALIZED: Cashier ${form.username} is now active.`);
+      setForm({ username: '', password: '' });
       setShowAddForm(false);
-      fetchData(); // Manual refresh just in case
+      fetchData();
     }
     setCreating(false);
   };
@@ -115,7 +113,7 @@ export default function ManageStaff() {
           <div className="flex items-center gap-6">
             <button 
               onClick={() => setShowAddForm(!showAddForm)}
-              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-blue-600 text-white'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border`}
+              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border`}
             >
               {showAddForm ? <X size={16} /> : <UserPlus size={16} />}
               {showAddForm ? 'Cancel' : 'Register Cashier'}
@@ -130,23 +128,37 @@ export default function ManageStaff() {
           </div>
         </div>
 
-        {/* ADD CASHIER FORM */}
+        {/* UPDATED ADD CASHIER FORM */}
         {showAddForm && (
           <form onSubmit={handleCreateCashier} className="bg-[#111926] p-8 rounded-[2.5rem] border border-blue-500/20 flex flex-wrap gap-4 items-end animate-in fade-in zoom-in duration-200">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Cashier Username</label>
-              <input required className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-blue-500" value={form.username} onChange={e => setForm({...form, username: e.target.value})} />
+            <div className="flex-[2] min-w-[240px]">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Operator Identity (Username)</label>
+              <div className="relative">
+                <input 
+                  required 
+                  placeholder="e.g. nairobi_west_01"
+                  className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" 
+                  value={form.username} 
+                  onChange={e => setForm({...form, username: e.target.value})} 
+                />
+              </div>
             </div>
+            
             <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Email Address</label>
-              <input required type="email" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-blue-500" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Access Key (Password)</label>
+              <input 
+                required 
+                type="password" 
+                placeholder="••••••••"
+                className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" 
+                value={form.password} 
+                onChange={e => setForm({...form, password: e.target.value})} 
+              />
             </div>
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Password</label>
-              <input required type="password" underline className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm outline-none focus:border-blue-500" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
-            </div>
-            <button disabled={creating} className="bg-[#10b981] text-black h-[54px] px-10 rounded-2xl font-black uppercase italic text-xs hover:brightness-110 active:scale-95 transition-all">
-              {creating ? 'Creating...' : 'Activate Node'}
+
+            <button disabled={creating} className="bg-[#10b981] text-black h-[54px] px-10 rounded-2xl font-black uppercase italic text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2">
+              {creating ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
+              {creating ? 'Initalizing...' : 'Activate Node'}
             </button>
           </form>
         )}
@@ -170,7 +182,10 @@ export default function ManageStaff() {
                     <td className="p-10">
                       <div className="flex items-center gap-4">
                         <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500"><Monitor size={20} /></div>
-                        <span className="font-black uppercase italic text-xl tracking-tight">{s.username}</span>
+                        <div>
+                          <span className="font-black uppercase italic text-xl tracking-tight block">{s.username}</span>
+                          <span className="text-[9px] text-slate-600 font-bold uppercase tracking-tighter">ID: {s.id.slice(0, 8)}...</span>
+                        </div>
                       </div>
                     </td>
                     <td className="p-10 text-center font-black italic text-[#10b981] text-2xl">
