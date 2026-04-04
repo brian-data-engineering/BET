@@ -16,11 +16,18 @@ export default function CashierDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Initialize Terminal and fetch User Session
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return;
+    
+    if (!authUser) {
+      console.error("No active session found");
+      return;
+    }
+    
     setUser(authUser);
     
+    // Fetch fresh balance for this specific cashier
     const { data: profile } = await supabase
       .from('profiles')
       .select('balance')
@@ -30,7 +37,9 @@ export default function CashierDashboard() {
     if (profile) setCashierBalance(parseFloat(profile.balance || 0));
   }, []);
 
-  useEffect(() => { initTerminal(); }, [initTerminal]);
+  useEffect(() => { 
+    initTerminal(); 
+  }, [initTerminal]);
 
   const handleLoadTicket = async () => {
     if (!searchQuery) return;
@@ -54,12 +63,14 @@ export default function CashierDashboard() {
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
+      // Logic for existing/paid tickets
       if (ticket.is_paid || ticket.ticket_serial) {
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           setTimeout(() => { window.print(); }, 500);
         }
       } else {
+        // Loading a fresh booking code
         setCurrentTicket(ticket); 
         setCart(selections);
         setStake(ticket.stake?.toString() || "100");
@@ -74,9 +85,17 @@ export default function CashierDashboard() {
 
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
-    if (!numStake || numStake <= 0) return alert("Enter stake");
+    
+    // VALIDATION GATE
+    if (!numStake || numStake <= 0) return alert("Enter valid stake");
     if (numStake > cashierBalance) return alert("⚠️ INSUFFICIENT FLOAT");
-    if (!user) return alert("Session expired.");
+    
+    // CRITICAL FIX: Ensure user ID exists before calling RPC
+    if (!user?.id) {
+      alert("❌ SESSION ERROR: Re-initializing terminal...");
+      await initTerminal();
+      return;
+    }
 
     const targetCode = currentTicket?.booking_code || searchQuery;
     if (!targetCode) return alert("No booking code found.");
@@ -85,28 +104,32 @@ export default function CashierDashboard() {
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
-      // CALLING THE ATOMIC RPC
+      // EXECUTE ATOMIC TRANSACTION via RPC
+      // This ensures stake is deducted and cashier_id is recorded simultaneously
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: targetCode.toString(),
-        p_cashier_id: user.id,
+        p_cashier_id: user.id, // Explicitly passing the verified user.id
         p_generated_serial: newSerial,
         p_stake: numStake
       });
 
       if (rpcError) throw rpcError;
 
+      // Update local state with the newly returned paid ticket data
       setCurrentTicket(paidTicket);
       
-      setTimeout(() => {
+      // Delay for state sync before printing
+      setTimeout(async () => {
         window.print();
         setCart([]);
         setStake("");
-        initTerminal(); // Refresh local balance from DB
+        setCurrentTicket(null);
+        await initTerminal(); // Refresh float balance from DB
         setIsProcessing(false);
       }, 800);
 
     } catch (err) {
-      alert("❌ FAILED: " + (err.message || "Unknown Error"));
+      alert("❌ DATABASE REJECTED: " + (err.message || "Check network connection"));
       setIsProcessing(false);
     }
   };
@@ -114,7 +137,7 @@ export default function CashierDashboard() {
   return (
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden">
-        {/* LEFT: SCANNER */}
+        {/* LEFT: SCANNER & TERMINAL INFO */}
         <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-xl">
             <div className="flex items-center gap-3 mb-8">
@@ -134,7 +157,7 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleLoadTicket}
                 disabled={isSearching}
-                className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic"
+                className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic hover:brightness-110 active:scale-95 transition-all"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
@@ -142,20 +165,22 @@ export default function CashierDashboard() {
 
             <div className="grid grid-cols-2 gap-4 mt-8">
               <div className="bg-[#111926] p-6 rounded-2xl border border-white/5">
-                <p className="text-[10px] font-bold opacity-30 uppercase mb-1">Float Balance</p>
-                <p className="text-xl font-black italic">KES {cashierBalance.toLocaleString()}</p>
+                <p className="text-[10px] font-bold opacity-30 uppercase mb-1 tracking-widest">Active Float</p>
+                <p className="text-xl font-black italic text-[#10b981]">
+                  KES {cashierBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
               </div>
               <button 
                 onClick={initTerminal}
-                className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center hover:bg-white/5 transition-colors"
+                className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center hover:bg-white/5 transition-colors group"
               >
-                <RefreshCw size={24} className={isSearching ? "animate-spin" : ""} />
+                <RefreshCw size={24} className={`${isSearching ? "animate-spin" : ""} group-hover:rotate-180 transition-transform duration-500`} />
               </button>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: SLIP */}
+        {/* RIGHT: BETSLIP & ACTION */}
         <div className="w-[400px] flex flex-col bg-[#0b0f1a]">
           <div className="flex-1 overflow-hidden">
             <Betslip 
@@ -173,15 +198,23 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleProcessPayment}
                 disabled={isProcessing}
-                className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 shadow-lg transition-all"
+                className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 shadow-lg shadow-[#10b981]/20 transition-all disabled:opacity-50"
               >
-                {isProcessing ? <Loader2 className="animate-spin" /> : "CONFIRM & PRINT"}
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    <span>SYNCHRONIZING...</span>
+                  </>
+                ) : (
+                  "CONFIRM & PRINT"
+                )}
               </button>
             </div>
           )}
         </div>
       </div>
 
+      {/* HIDDEN PRINT COMPONENT */}
       <div className="hidden print:block">
         <PrintableTicket 
           ticket={currentTicket} 
