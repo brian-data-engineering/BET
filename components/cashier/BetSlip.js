@@ -1,33 +1,37 @@
 import { Trash2, Ticket, Coins, Percent } from 'lucide-react';
-import { useEffect } from 'react'; // Added useEffect
+import { useEffect } from 'react';
 
-export default function Betslip({ cart, stake, onStakeChange, onRemove, onClear, isProcessing }) {
+export default function Betslip({ cart, setCart, stake, onStakeChange, onRemove, onClear, isProcessing }) {
   
-  // --- LUCRA AUTO-SYNC LOGIC ---
-  // This ensures that even if a cashier has a slip open, 
-  // games that start are removed in real-time.
+  // --- LUCRA AUTO-SYNC LOGIC (CASHIER SIDE) ---
+  // This cleans the cart state in real-time if a match expires while the cashier is looking at it.
   useEffect(() => {
-    const timer = setInterval(() => {
+    const checkInterval = setInterval(() => {
       const now = new Date().getTime();
       
-      cart.forEach((item, index) => {
-        if (!item.startTime) return;
+      setCart(prevCart => {
+        const filtered = prevCart.filter(item => {
+          if (!item.startTime) return true;
 
-        // Clean time format and apply the Lucra 3-Hour Offset
-        const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
-        const matchDate = new Date(cleanTime).getTime();
-        const lockThreshold = matchDate - (3 * 60 * 60 * 1000); 
+          // 1. Clean the string and create a Date object
+          const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
+          const matchDate = new Date(cleanTime).getTime();
 
-        // If game is within 60s of kickoff, remove it from the cashier's slip
-        if ((lockThreshold - now) <= 60000) {
-          onRemove(index);
-          console.log(`Auto-removed ${item.matchName} - Match started/starting.`);
-        }
+          // 2. APPLY OFFSET: Shift match time back 3 hours to align with EAT vs UTC
+          const lockThreshold = matchDate - (3 * 60 * 60 * 1000); 
+
+          // 3. Compare with a 60-second buffer
+          // We return true (keep) only if we are still more than 60s away from kickoff
+          return (lockThreshold - now) > 60000; 
+        });
+
+        // Only trigger a re-render if something was actually removed
+        return filtered.length !== prevCart.length ? filtered : prevCart;
       });
-    }, 5000); // Check every 5 seconds
+    }, 3000); // Check every 3 seconds for a snappier Cashier experience
 
-    return () => clearInterval(timer);
-  }, [cart, onRemove]);
+    return () => clearInterval(checkInterval);
+  }, [setCart]);
 
   // Calculate Total Odds (Product of all selections)
   const totalOdds = cart.length > 0 
@@ -108,7 +112,6 @@ export default function Betslip({ cart, stake, onStakeChange, onRemove, onClear,
       {/* FINANCIAL SUMMARY */}
       <div className="bg-[#0b0f1a] rounded-[2rem] p-6 border border-white/5 space-y-5 shadow-inner">
         
-        {/* TOTAL ODDS DISPLAY */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 opacity-40">
             <Percent size={12} className="text-white" />
@@ -119,7 +122,6 @@ export default function Betslip({ cart, stake, onStakeChange, onRemove, onClear,
           </span>
         </div>
 
-        {/* STAKE INPUT */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 opacity-40">
             <Coins size={12} className="text-white" />
@@ -138,7 +140,6 @@ export default function Betslip({ cart, stake, onStakeChange, onRemove, onClear,
           </div>
         </div>
 
-        {/* POTENTIAL PAYOUT */}
         <div className="pt-5 border-t border-white/5">
           <div className="flex justify-between items-end">
             <div>
