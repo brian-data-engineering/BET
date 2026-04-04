@@ -1,4 +1,4 @@
-import { Trash2, Ticket, Coins, Percent, UserCheck } from 'lucide-react';
+import { Trash2, Ticket, Coins, Percent, UserCheck, Store } from 'lucide-react';
 import { useEffect } from 'react';
 
 export default function Betslip({ 
@@ -9,7 +9,7 @@ export default function Betslip({
   onRemove, 
   onClear, 
   isProcessing,
-  user // Expecting { username: "...", email: "..." }
+  user // Expecting { username: "...", email: "...", shop_name: "..." }
 }) {
   
   // --- LUCRA AUTO-SYNC LOGIC (CASHIER SIDE) ---
@@ -21,7 +21,6 @@ export default function Betslip({
         const filtered = prevCart.filter(item => {
           if (!item.startTime) return true;
 
-          // Production Fix: Parse UTC directly and compare to local 'now'
           // Standardizing '2026-04-04T14:00:00+00:00' to Date object
           const matchDate = new Date(item.startTime).getTime();
 
@@ -38,7 +37,7 @@ export default function Betslip({
     return () => clearInterval(checkInterval);
   }, [setCart]);
 
-  // Totals Calculation
+  // Totals Calculation (Dynamic Odds)
   const totalOdds = cart.length > 0 
     ? cart.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1) 
     : 0;
@@ -57,7 +56,10 @@ export default function Betslip({
           </div>
           <div>
             <h3 className="text-white font-black italic uppercase tracking-tighter text-lg leading-none">Active Slip</h3>
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Terminal #016</p>
+            <div className="flex items-center gap-1 mt-1">
+               <Store size={8} className="text-slate-500" />
+               <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{user?.shop_name || 'Terminal #016'}</p>
+            </div>
           </div>
         </div>
         
@@ -92,27 +94,27 @@ export default function Betslip({
                 ×
               </button>
               
-              {/* Match Name & MatchID Badge */}
+              {/* Match Name & MatchID Badge (Mapped to your scrapped matchId) */}
               <div className="flex items-center gap-2 mb-2">
-                <span className="bg-black text-[#10b981] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-[#10b981]/20">
-                  {item.matchId?.slice(-4) || '5930'}
+                <span className="bg-black text-[#10b981] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-[#10b981]/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                  {item.matchId?.toString().slice(-4) || 'MID'}
                 </span>
-                <p className="text-[10px] font-bold text-slate-500 uppercase truncate pr-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase truncate pr-4">
                   {item.matchName}
                 </p>
               </div>
               
               <div className="flex justify-between items-end">
                 <div className="space-y-1">
-                  <p className="text-[#10b981] font-black italic text-base uppercase tracking-tight">
+                  <p className="text-white font-black italic text-base uppercase tracking-tight">
                     {item.selection}
                   </p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                    {item.marketName || 'Match Result'}
+                  <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-widest">
+                    {item.marketName || '1X2'}
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="font-mono font-black text-white text-sm bg-white/5 px-2 py-1 rounded-md">
+                  <span className="font-mono font-black text-white text-sm bg-white/5 px-2 py-1 rounded-md border border-white/5">
                     {parseFloat(item.odds).toFixed(2)}
                   </span>
                 </div>
@@ -125,14 +127,14 @@ export default function Betslip({
       {/* FINANCIAL SUMMARY */}
       <div className="bg-[#0b0f1a] rounded-[2rem] p-6 border border-white/5 space-y-5 shadow-inner">
         
-        {/* CASHIER IDENTITY */}
+        {/* CASHIER IDENTITY (Dynamic from user profile) */}
         <div className="flex justify-between items-center pb-2 border-b border-white/5">
           <div className="flex items-center gap-2 opacity-40">
             <UserCheck size={12} className="text-[#10b981]" />
             <span className="text-[9px] font-black uppercase tracking-widest text-white">Cashier</span>
           </div>
           <span className="text-[10px] font-black text-[#10b981] uppercase tracking-tighter">
-            {user?.username || user?.email?.split('@')[0] || 'Lucra_Admin'}
+            {user?.username || 'Lucra_Admin'}
           </span>
         </div>
 
@@ -161,24 +163,24 @@ export default function Betslip({
               onChange={(e) => onStakeChange(e.target.value)}
               disabled={isProcessing}
               placeholder="0.00"
-              className="w-full bg-white/5 border-2 border-white/5 rounded-2xl pl-12 pr-4 py-4 text-2xl font-black text-[#10b981] outline-none focus:border-[#10b981] transition-all placeholder:text-white/5"
+              className="w-full bg-white/5 border-2 border-white/5 rounded-2xl pl-12 pr-4 py-4 text-2xl font-black text-[#10b981] outline-none focus:border-[#10b981] transition-all placeholder:text-white/10"
             />
           </div>
         </div>
 
-        {/* Payout */}
+        {/* Payout Calculation */}
         <div className="pt-5 border-t border-white/5">
           <div className="flex justify-between items-end">
             <div>
                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Potential Payout</span>
-               <span className="text-[8px] font-bold text-[#10b981] uppercase">Incl. 20% Tax (Est)</span>
+               <span className="text-[8px] font-bold text-[#10b981] uppercase">Pre-tax Estimate</span>
             </div>
             <div className="text-right">
                <span className="text-3xl font-black italic text-white tabular-nums leading-none">
                 {new Intl.NumberFormat('en-KE', { 
                   style: 'currency', 
                   currency: 'KES',
-                  minimumFractionDigits: 2 
+                  minimumFractionDigits: 0 
                 }).format(potentialPayout)}
               </span>
             </div>
