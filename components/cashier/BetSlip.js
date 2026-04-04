@@ -1,4 +1,4 @@
-import { Trash2, Ticket, Percent, UserCheck, Store } from 'lucide-react';
+import { Trash2, Ticket, Percent, UserCheck, Store, Zap } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 
 export default function Betslip({ 
@@ -8,31 +8,24 @@ export default function Betslip({
   onStakeChange, 
   onRemove, 
   onClear, 
+  onProcess, // Added this back
   isProcessing,
   user 
 }) {
   
-  // 1. AUTO-EXPIRY LOGIC (Optimized for performance)
+  // 1. AUTO-EXPIRY LOGIC
   useEffect(() => {
-    // Kill interval if we're paying or slip is empty to save CPU
     if (isProcessing || !cart || cart.length === 0) return;
 
     const checkInterval = setInterval(() => {
       const now = Date.now();
-      
       setCart(prevCart => {
         if (!prevCart || prevCart.length === 0) return prevCart;
-        
         const filtered = prevCart.filter(item => {
           if (!item?.startTime) return true;
           const matchDate = new Date(item.startTime).getTime();
-          if (isNaN(matchDate)) return true;
-          
-          // Drop matches starting in less than 60 seconds
           return (matchDate - now) > 60000; 
         });
-
-        // Only trigger React state update if items were actually removed
         return filtered.length !== prevCart.length ? filtered : prevCart;
       });
     }, 3000); 
@@ -56,15 +49,15 @@ export default function Betslip({
       {/* HEADER SECTION */}
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-2">
-          <div className="bg-[#10b981]/10 p-2 rounded-lg">
-            <Ticket size={16} className="text-[#10b981]" />
+          <div className="bg-yellow-500/10 p-2 rounded-lg">
+            <Ticket size={16} className="text-yellow-500" />
           </div>
           <div>
             <h3 className="text-white font-black italic uppercase tracking-tighter text-lg leading-none">Active Slip</h3>
             <div className="flex items-center gap-1 mt-1">
                <Store size={8} className="text-slate-500" />
                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">
-                 {user?.shop_name || 'Terminal #016'}
+                 {user?.shop_name || 'LUCRA TERMINAL'}
                </p>
             </div>
           </div>
@@ -74,7 +67,6 @@ export default function Betslip({
             onClick={onClear} 
             disabled={isProcessing} 
             className="text-white/20 hover:text-red-500 transition-all hover:scale-110 disabled:opacity-0"
-            title="Clear All"
           >
             <Trash2 size={20} />
           </button>
@@ -82,7 +74,7 @@ export default function Betslip({
       </div>
 
       {/* SELECTIONS LIST */}
-      <div className="flex-1 overflow-y-auto space-y-3 mb-6 custom-scrollbar pr-2">
+      <div className="flex-1 overflow-y-auto space-y-3 mb-6 pr-2">
         {cart.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-10 grayscale">
             <Ticket size={64} strokeWidth={1} />
@@ -92,18 +84,18 @@ export default function Betslip({
           cart.map((item, idx) => (
             <div 
               key={`${item.matchId}-${idx}`} 
-              className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 relative group transition-all hover:border-[#10b981]/30"
+              className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 relative group transition-all hover:border-yellow-500/30"
             >
               <button 
                 onClick={() => onRemove(idx)} 
                 disabled={isProcessing}
-                className="absolute top-3 right-3 text-white/10 group-hover:text-red-500 font-bold text-xl disabled:hidden transition-colors"
+                className="absolute top-3 right-3 text-white/10 group-hover:text-red-500 font-bold text-xl transition-colors"
               >
                 ×
               </button>
               
               <div className="flex items-center gap-2 mb-2">
-                <span className="bg-black text-[#10b981] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-[#10b981]/20">
+                <span className="bg-black text-yellow-500 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-yellow-500/20">
                   {item?.matchId ? String(item.matchId).slice(-4) : 'MID'}
                 </span>
                 <p className="text-[10px] font-bold text-slate-400 uppercase truncate pr-6">
@@ -116,7 +108,7 @@ export default function Betslip({
                   <p className="text-white font-black italic text-base uppercase tracking-tight">
                     {item?.selection || "N/A"}
                   </p>
-                  <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-widest">
+                  <p className="text-[9px] text-yellow-500 font-bold uppercase tracking-widest">
                     {item?.marketName || 'Match Result'}
                   </p>
                 </div>
@@ -133,16 +125,6 @@ export default function Betslip({
 
       {/* FOOTER TOTALS */}
       <div className="bg-[#0b0f1a] rounded-[2rem] p-6 border border-white/5 space-y-5 shadow-inner">
-        <div className="flex justify-between items-center pb-2 border-b border-white/5">
-          <div className="flex items-center gap-2 opacity-40">
-            <UserCheck size={12} className="text-[#10b981]" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-white">Cashier</span>
-          </div>
-          <span className="text-[10px] font-black text-[#10b981] uppercase">
-            {user?.username || 'Admin'}
-          </span>
-        </div>
-        
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 opacity-40">
             <Percent size={12} className="text-white" />
@@ -156,33 +138,39 @@ export default function Betslip({
         {/* STAKE INPUT */}
         <div className="space-y-2">
           <div className="relative">
-             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-600">KES</span>
+             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-600">KSh</span>
              <input 
                type="number" 
-               step="any"
-               placeholder="0"
+               placeholder="Enter Stake"
                value={stake} 
                onChange={(e) => onStakeChange(e.target.value)} 
                disabled={isProcessing} 
-               className="w-full bg-white/5 border-2 border-white/5 rounded-2xl pl-12 pr-4 py-4 text-2xl font-black text-[#10b981] outline-none focus:border-[#10b981] transition-all disabled:opacity-50 placeholder:text-white/5" 
+               className="w-full bg-white/5 border-2 border-white/5 rounded-2xl pl-12 pr-4 py-4 text-2xl font-black text-yellow-500 outline-none focus:border-yellow-500 transition-all disabled:opacity-50" 
              />
           </div>
         </div>
 
         {/* POTENTIAL PAYOUT */}
-        <div className="pt-5 border-t border-white/5">
-          <div className="flex justify-between items-end text-right">
-            <div>
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Potential Payout</span>
-            </div>
-            <span className="text-3xl font-black italic text-white leading-none tabular-nums">
-              {new Intl.NumberFormat('en-KE', { 
-                style: 'currency', 
-                currency: 'KES', 
-                minimumFractionDigits: 0 
-              }).format(potentialPayout)}
+        <div className="pt-4 border-t border-white/5">
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Potential Payout</span>
+            <span className="text-2xl font-black italic text-white tabular-nums">
+              {potentialPayout.toLocaleString(undefined, { minimumFractionDigits: 0 })}
             </span>
           </div>
+
+          {/* ACTION BUTTON (This was missing!) */}
+          <button
+            onClick={onProcess}
+            disabled={isProcessing || cart.length === 0 || !stake}
+            className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-yellow-500/10"
+          >
+            {isProcessing ? (
+              <Zap className="animate-spin" size={20} />
+            ) : (
+              <>PLACE TICKET <Zap size={20} fill="currentColor" /></>
+            )}
+          </button>
         </div>
       </div>
     </div>
