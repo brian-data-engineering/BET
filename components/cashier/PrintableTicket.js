@@ -2,34 +2,29 @@ import React from 'react';
 import Barcode from 'react-barcode';
 
 export default function PrintableTicket({ ticket, cart = [], profiles = [], user }) {
-  // 1. DATA UNIFICATION & SAFE PARSING
+  // 1. DATA UNIFICATION
   const selections = ticket?.selections 
     ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
     : (cart || []);
 
-  // 2. LOOKUPS & BRANDING
+  // 2. BRANDING LOOKUPS
   const cashierId = ticket?.paid_by || ticket?.cashier_id;
   const cashierProfile = profiles?.find(p => p.id === cashierId);
   const cashierName = cashierProfile?.username || user?.username || "Staff";
   const shopName = cashierProfile?.shop_name || user?.shop_name || "LUCRA SHOP";
 
-  // 3. AUTO-CALCULATION FALLBACKS
-  // This ensures that even if the DB says 0.00, we calculate the real values for the paper
+  // 3. FALLBACK CALCULATION LOGIC
   const calculatedOdds = selections.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1);
   const displayOdds = (parseFloat(ticket?.total_odds) || calculatedOdds).toFixed(2);
-  
   const displayStake = parseFloat(ticket?.stake || 0);
   const displayPayout = (parseFloat(ticket?.potential_payout) || (calculatedOdds * displayStake));
 
-  // Process leagues
   const leagueList = ticket?.league_name ? ticket.league_name.split(', ') : [];
 
   if (!selections || selections.length === 0) return null;
 
   return (
     <div className="print-only bg-white text-black w-[80mm] font-sans p-1 leading-tight border-none">
-      
-      {/* HEADER: LOGO & TERMINAL BRANDING */}
       <div className="flex flex-col items-center mb-2">
         <img 
           src="https://i.ibb.co/67wb7Zm1/download.png" 
@@ -40,7 +35,6 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         <span className="text-[12px] font-black tracking-[0.2em] uppercase mt-1">Lucra Terminal</span>
       </div>
 
-      {/* TICKET METADATA */}
       <div className="border-b-2 border-black pb-1 mb-2 text-[11px]">
         <div className="flex justify-between font-bold uppercase">
           <span>{shopName}</span>
@@ -57,19 +51,15 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         </div>
       </div>
 
-      {/* SELECTIONS LIST */}
       <div className="border-t border-black">
         {selections.map((item, index) => (
           <div key={`${item.matchId}-${index}`} className="border-b border-black py-2 text-[11px]">
-            {/* League & Time */}
             <div className="flex justify-between text-[9px] font-black mb-1 uppercase italic">
               <span>⚽ {leagueList[index] || item?.leagueName || "Soccer"}</span>
               <span>
                 {item?.startTime ? new Date(item.startTime).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : ''}
               </span>
             </div>
-            
-            {/* Match Name & Market ID */}
             <div className="flex items-start gap-2 mb-1">
               <span className="bg-black text-white px-1.5 py-0.5 rounded-sm text-[9px] font-mono font-bold shrink-0">
                 {item?.matchId ? String(item.matchId).slice(-4) : "MID"}
@@ -78,8 +68,6 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
                 {item?.matchName || "Match Name"}
               </span>
             </div>
-
-            {/* Selection & Odds */}
             <div className="flex justify-between items-end mt-1">
               <div className="leading-none">
                 <div className="text-[10px] font-bold text-gray-800">{item?.marketName || 'Match Result'}</div>
@@ -95,7 +83,6 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         ))}
       </div>
 
-      {/* FINANCIAL TOTALS (FIXED: Added Fallbacks) */}
       <div className="mt-2 space-y-1 font-bold text-[12px]">
         <div className="flex justify-between border-b border-dotted border-black py-1">
           <span>TOTAL ODDS:</span>
@@ -113,7 +100,6 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         </div>
       </div>
 
-      {/* VALIDATION: BARCODE & FOOTER */}
       <div className="mt-4 flex flex-col items-center pb-4">
         {ticket?.ticket_serial && (
           <div className="flex flex-col items-center">
@@ -133,11 +119,8 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         </div>
       </div>
 
-      {/* SCOPED PRINT STYLES */}
       <style jsx>{`
-        @media screen {
-          .print-only { display: none; }
-        }
+        @media screen { .print-only { display: none; } }
         @media print {
           .print-only { 
             display: block !important; 
@@ -148,10 +131,7 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
           }
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
-          @page { 
-            size: 80mm auto; 
-            margin: 0; 
-          }
+          @page { size: 80mm auto; margin: 0; }
         }
       `}</style>
     </div>
