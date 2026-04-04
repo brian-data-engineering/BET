@@ -20,6 +20,7 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
 
   return (
     <div className="print-only bg-white text-black w-[72mm] font-sans p-0 leading-tight">
+      
       {/* HEADER SECTION */}
       <div className="flex flex-col items-center pt-2 mb-1">
         <img 
@@ -93,10 +94,9 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
           </div>
         </div>
 
-        {/* FORCE BACKGROUND PRINTING HERE */}
         <div 
           className="flex justify-between items-center bg-black text-white px-2 py-1.5 mt-1 rounded-sm"
-          style={{ backgroundColor: 'black', color: 'white', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+          style={{ backgroundColor: 'black', color: 'white' }}
         >
           <span className="text-[9px] uppercase font-black leading-none">Potential<br/>Payout</span>
           <span className="text-[18px] font-black italic tabular-nums">
@@ -106,10 +106,11 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
       </div>
 
       {/* BARCODE AREA */}
-      <div className="mt-3 flex flex-col items-center pb-6">
+      <div className="mt-3 flex flex-col items-center pb-2">
         {ticket?.ticket_serial && (
           <>
             <Barcode 
+              key={ticket.ticket_serial}
               value={String(ticket.ticket_serial)} 
               width={1.2} 
               height={35} 
@@ -124,22 +125,34 @@ export default function PrintableTicket({ ticket, cart = [], profiles = [], user
         </div>
       </div>
 
+      {/* ✅ FIXED PRINT CSS ONLY */}
       <style jsx>{`
-        @media screen { .print-only { display: none; } }
+        @media screen { 
+          .print-only { display: none; } 
+        }
+
         @media print {
+          body {
+            margin: 0;
+          }
+
+          body > *:not(.print-only) {
+            display: none !important;
+          }
+
           .print-only { 
             display: block !important; 
             width: 72mm;
-            background: white !important;
             margin: 0;
             padding: 0;
-            color: black !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            background: white;
+            color: black;
           }
-          body * { visibility: hidden; }
-          .print-only, .print-only * { visibility: visible; }
-          @page { size: 80mm 297mm; margin: 0; }
+
+          @page { 
+            size: 72mm auto; 
+            margin: 0; 
+          }
         }
       `}</style>
     </div>
