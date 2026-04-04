@@ -9,7 +9,7 @@ export default function Betslip({
   onRemove, 
   onClear, 
   isProcessing,
-  user // Prop for identity tracking
+  user // Expecting { username: "...", email: "..." }
 }) {
   
   // --- LUCRA AUTO-SYNC LOGIC (CASHIER SIDE) ---
@@ -20,11 +20,17 @@ export default function Betslip({
       setCart(prevCart => {
         const filtered = prevCart.filter(item => {
           if (!item.startTime) return true;
-          const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
-          const matchDate = new Date(cleanTime).getTime();
+
+          // Production Fix: Parse UTC directly and compare to local 'now'
+          // Standardizing '2026-04-04T14:00:00+00:00' to Date object
+          const matchDate = new Date(item.startTime).getTime();
+
           if (isNaN(matchDate)) return true;
+
+          // Keep match only if kickoff is more than 60s away
           return (matchDate - now) > 60000; 
         });
+
         return filtered.length !== prevCart.length ? filtered : prevCart;
       });
     }, 3000); 
@@ -32,7 +38,7 @@ export default function Betslip({
     return () => clearInterval(checkInterval);
   }, [setCart]);
 
-  // Calculate Totals
+  // Totals Calculation
   const totalOdds = cart.length > 0 
     ? cart.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1) 
     : 0;
@@ -51,7 +57,7 @@ export default function Betslip({
           </div>
           <div>
             <h3 className="text-white font-black italic uppercase tracking-tighter text-lg leading-none">Active Slip</h3>
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Terminal 016</p>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Terminal #016</p>
           </div>
         </div>
         
@@ -71,7 +77,7 @@ export default function Betslip({
         {cart.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-10 grayscale">
             <Ticket size={64} strokeWidth={1} />
-            <p className="text-[10px] font-black uppercase mt-4 tracking-[0.3em]">No Selections</p>
+            <p className="text-[10px] font-black uppercase mt-4 tracking-[0.3em]">Empty Slip</p>
           </div>
         ) : (
           cart.map((item, idx) => (
@@ -86,9 +92,15 @@ export default function Betslip({
                 ×
               </button>
               
-              <p className="text-[10px] font-bold text-slate-500 uppercase truncate pr-6 mb-1">
-                {item.matchName || 'Unknown Match'}
-              </p>
+              {/* Match Name & MatchID Badge */}
+              <div className="flex items-center gap-2 mb-2">
+                <span className="bg-black text-[#10b981] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-[#10b981]/20">
+                  {item.matchId?.slice(-4) || '5930'}
+                </span>
+                <p className="text-[10px] font-bold text-slate-500 uppercase truncate pr-4">
+                  {item.matchName}
+                </p>
+              </div>
               
               <div className="flex justify-between items-end">
                 <div className="space-y-1">
@@ -113,17 +125,18 @@ export default function Betslip({
       {/* FINANCIAL SUMMARY */}
       <div className="bg-[#0b0f1a] rounded-[2rem] p-6 border border-white/5 space-y-5 shadow-inner">
         
-        {/* CASHIER IDENTITY SECTION */}
+        {/* CASHIER IDENTITY */}
         <div className="flex justify-between items-center pb-2 border-b border-white/5">
           <div className="flex items-center gap-2 opacity-40">
             <UserCheck size={12} className="text-[#10b981]" />
             <span className="text-[9px] font-black uppercase tracking-widest text-white">Cashier</span>
           </div>
           <span className="text-[10px] font-black text-[#10b981] uppercase tracking-tighter">
-            {user?.email?.split('@')[0] || 'Lucra_Admin'}
+            {user?.username || user?.email?.split('@')[0] || 'Lucra_Admin'}
           </span>
         </div>
 
+        {/* Total Odds */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 opacity-40">
             <Percent size={12} className="text-white" />
@@ -134,6 +147,7 @@ export default function Betslip({
           </span>
         </div>
 
+        {/* Stake Input */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 opacity-40">
             <Coins size={12} className="text-white" />
@@ -152,6 +166,7 @@ export default function Betslip({
           </div>
         </div>
 
+        {/* Payout */}
         <div className="pt-5 border-t border-white/5">
           <div className="flex justify-between items-end">
             <div>
