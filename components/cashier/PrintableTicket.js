@@ -67,60 +67,39 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
         </center>
       </div>
 
-      <style jsx global>{`
-        /* 1. HIDE FROM SCREEN: Use display none instead of height 0 */
-        .lucra-print-area { 
-          display: none; 
-        }
-        
-        @media print {
-          /* 2. REVEAL FOR PRINTER: Force it to exist */
-          .lucra-print-area { 
-            display: block !important; 
-            visibility: visible !important;
-            height: auto !important; 
-            width: 72mm !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-          }
+     <style jsx global>{`
+  /* On the screen, the ticket is totally removed so it doesn't break the UI */
+  .lucra-print-area { 
+    display: none; 
+  }
+  
+  @media print {
+    /* When printing, the ticket is the ONLY thing that exists */
+    .lucra-print-area { 
+      display: block !important; 
+      width: 72mm !important;
+      height: auto !important;
+    }
 
-          .ticket-container { 
-            width: 72mm; 
-            font-family: 'Arial Black', Gadget, sans-serif;
-            padding: 2mm 1mm; 
-            color: #000 !important;
-            background: #fff !important;
-          }
+    .ticket-container { 
+      width: 72mm; 
+      padding: 2mm;
+      background: white !important;
+      color: black !important;
+    }
 
-          /* Strong Black Borders for Thermal Clarity */
-          .terminal-tag { font-size: 12px; border-bottom: 3px solid #000; text-align: center; padding-bottom: 2px; }
-          .info-line { display: flex; justify-content: space-between; font-size: 11px; border-bottom: 3px solid #000; padding: 3px 0; }
-          .serial-box { border: 3px solid #000; text-align: center; margin: 6px 0; padding: 5px; font-size: 15px; font-weight: 900; }
+    /* Force the barcode and match boxes to show up black */
+    .match-id-box {
+      background: black !important;
+      color: white !important;
+      -webkit-print-color-adjust: exact;
+    }
 
-          .match-item { 
-            border: 2px solid #000; 
-            margin-top: -2px; 
-            padding: 3px 5px; 
-          }
-          
-          .m-teams { font-size: 13px; text-transform: uppercase; font-weight: 900; }
-          
-          .match-id-box {
-            background: #000 !important;
-            color: #fff !important;
-            padding: 0 4px;
-            -webkit-print-color-adjust: exact;
-          }
-
-          .t-row { font-weight: 900; border-bottom: 2px solid #000; }
-          
-          .payout-container { border: 4px solid #000; text-align: center; margin-top: 8px; padding: 6px; }
-          .p-value { font-size: 30px; font-weight: 900; line-height: 1; }
-
-          .barcode-wrapper { display: flex !important; justify-content: center; width: 100%; margin: 10px 0; }
-        }
-      `}</style>
+    .payout-container {
+      border: 4px solid black !important;
+    }
+  }
+`}</style>
     </div>
   );
 }
