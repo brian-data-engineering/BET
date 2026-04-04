@@ -1,4 +1,4 @@
-import { Trash2, Ticket, Coins, Percent, UserCheck, Store } from 'lucide-react';
+import { Trash2, Ticket, Percent, UserCheck, Store } from 'lucide-react';
 import { useEffect } from 'react';
 
 export default function Betslip({ 
@@ -12,24 +12,38 @@ export default function Betslip({
   user 
 }) {
   
+  // OPTIMIZED: Expiry check logic
   useEffect(() => {
+    // 1. EXIT EARLY: If we are processing a payment or the cart is empty, 
+    // do not run the interval. This saves CPU and prevents crash-on-print.
+    if (isProcessing || !cart || cart.length === 0) return;
+
     const checkInterval = setInterval(() => {
       const now = new Date().getTime();
+      
       setCart(prevCart => {
-        if (!prevCart) return [];
+        if (!prevCart || prevCart.length === 0) return prevCart;
+        
         const filtered = prevCart.filter(item => {
           if (!item?.startTime) return true;
           const matchDate = new Date(item.startTime).getTime();
           if (isNaN(matchDate)) return true;
+          
+          // Only keep matches that haven't started (buffer of 60s)
           return (matchDate - now) > 60000; 
         });
+
+        // 2. REFERENCE CHECK: Only update state if something actually changed.
+        // This prevents unnecessary re-renders of the entire dashboard.
         return filtered.length !== prevCart.length ? filtered : prevCart;
       });
     }, 3000); 
-    return () => clearInterval(checkInterval);
-  }, [setCart]);
 
-  const totalOdds = cart?.length > 0 
+    return () => clearInterval(checkInterval);
+  }, [cart.length, isProcessing, setCart]);
+
+  // Safely calculate total odds
+  const totalOdds = cart && cart.length > 0 
     ? cart.reduce((acc, item) => acc * parseFloat(item?.odds || 1), 1) 
     : 0;
 
@@ -52,7 +66,13 @@ export default function Betslip({
           </div>
         </div>
         {cart?.length > 0 && (
-          <button onClick={onClear} disabled={isProcessing} className="text-white/20 hover:text-red-500 transition-all hover:scale-110"><Trash2 size={20} /></button>
+          <button 
+            onClick={onClear} 
+            disabled={isProcessing} 
+            className="text-white/20 hover:text-red-500 transition-all hover:scale-110 disabled:opacity-0"
+          >
+            <Trash2 size={20} />
+          </button>
         )}
       </div>
 
@@ -64,8 +84,14 @@ export default function Betslip({
           </div>
         ) : (
           cart.map((item, idx) => (
-            <div key={idx} className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 relative group transition-all hover:border-[#10b981]/30">
-              <button onClick={() => onRemove(idx)} className="absolute top-3 right-3 text-white/10 group-hover:text-red-500 font-bold text-xl">×</button>
+            <div key={`${item.matchId}-${idx}`} className="bg-[#1c2636] rounded-2xl p-4 border border-white/5 relative group transition-all hover:border-[#10b981]/30">
+              <button 
+                onClick={() => onRemove(idx)} 
+                disabled={isProcessing}
+                className="absolute top-3 right-3 text-white/10 group-hover:text-red-500 font-bold text-xl disabled:hidden"
+              >
+                ×
+              </button>
               <div className="flex items-center gap-2 mb-2">
                 <span className="bg-black text-[#10b981] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-[#10b981]/20">
                   {item?.matchId ? String(item.matchId).slice(-4) : 'MID'}
@@ -78,7 +104,9 @@ export default function Betslip({
                   <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-widest">{item?.marketName || '1X2'}</p>
                 </div>
                 <div className="text-right">
-                  <span className="font-mono font-black text-white text-sm bg-white/5 px-2 py-1 rounded-md">{parseFloat(item?.odds || 0).toFixed(2)}</span>
+                  <span className="font-mono font-black text-white text-sm bg-white/5 px-2 py-1 rounded-md">
+                    {parseFloat(item?.odds || 0).toFixed(2)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -94,6 +122,7 @@ export default function Betslip({
           </div>
           <span className="text-[10px] font-black text-[#10b981] uppercase">{user?.username || 'Admin'}</span>
         </div>
+        
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 opacity-40">
             <Percent size={12} className="text-white" />
@@ -101,17 +130,31 @@ export default function Betslip({
           </div>
           <span className="text-xl font-black italic text-white tabular-nums">{totalOdds.toFixed(2)}</span>
         </div>
+
         <div className="space-y-2">
           <div className="relative">
              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-600">KES</span>
-             <input type="number" value={stake} onChange={(e) => onStakeChange(e.target.value)} disabled={isProcessing} className="w-full bg-white/5 border-2 border-white/5 rounded-2xl pl-12 pr-4 py-4 text-2xl font-black text-[#10b981] outline-none focus:border-[#10b981]" />
+             <input 
+               type="number" 
+               value={stake} 
+               onChange={(e) => onStakeChange(e.target.value)} 
+               disabled={isProcessing} 
+               className="w-full bg-white/5 border-2 border-white/5 rounded-2xl pl-12 pr-4 py-4 text-2xl font-black text-[#10b981] outline-none focus:border-[#10b981] transition-all disabled:opacity-50" 
+             />
           </div>
         </div>
+
         <div className="pt-5 border-t border-white/5">
           <div className="flex justify-between items-end text-right">
-            <div><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Potential Payout</span></div>
+            <div>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Potential Payout</span>
+            </div>
             <span className="text-3xl font-black italic text-white leading-none">
-              {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0 }).format(potentialPayout)}
+              {new Intl.NumberFormat('en-KE', { 
+                style: 'currency', 
+                currency: 'KES', 
+                minimumFractionDigits: 0 
+              }).format(potentialPayout)}
             </span>
           </div>
         </div>
