@@ -16,7 +16,7 @@ export default function CashierDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Initialize Terminal and fetch User Session
+  // --- INITIALIZE TERMINAL & AUTH ---
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     
@@ -27,7 +27,7 @@ export default function CashierDashboard() {
     
     setUser(authUser);
     
-    // Fetch fresh balance for this specific cashier
+    // Fetch fresh balance for this specific cashier profile
     const { data: profile } = await supabase
       .from('profiles')
       .select('balance')
@@ -41,6 +41,7 @@ export default function CashierDashboard() {
     initTerminal(); 
   }, [initTerminal]);
 
+  // --- TICKET LOADING LOGIC ---
   const handleLoadTicket = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
@@ -59,7 +60,8 @@ export default function CashierDashboard() {
         return;
       }
 
-      const selections = Array.isArray(ticket.selections) 
+      // Ensure selections is an array (handles JSON strings from DB)
+      const rawSelections = Array.isArray(ticket.selections) 
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
@@ -69,18 +71,35 @@ export default function CashierDashboard() {
           setTimeout(() => { window.print(); }, 500);
         }
       } else {
+        // --- SYNC CHECK ON LOAD ---
+        const now = new Date().getTime();
+        const validSelections = rawSelections.filter(item => {
+          if (!item.startTime) return true;
+          const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
+          const matchDate = new Date(cleanTime).getTime();
+          // Remove if it started already or is in the 60s lock window
+          return (matchDate - now) > 60000;
+        });
+
+        if (validSelections.length === 0) {
+          alert("⚠️ ALL MATCHES IN THIS SLIP HAVE EXPIRED/STARTED.");
+          return;
+        }
+
         setCurrentTicket(ticket); 
-        setCart(selections);
+        setCart(validSelections);
         setStake(ticket.stake?.toString() || "100");
       }
       setSearchQuery('');
     } catch (err) {
       console.error("Load Error:", err);
+      alert("❌ ERROR LOADING TICKET");
     } finally {
       setIsSearching(false);
     }
   };
 
+  // --- PAYMENT PROCESSING ---
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     
@@ -93,13 +112,14 @@ export default function CashierDashboard() {
       return;
     }
 
-    const targetCode = currentTicket?.booking_code || searchQuery;
-    if (!targetCode) return alert("No booking code found.");
+    const targetCode = currentTicket?.booking_code;
+    if (!targetCode) return alert("No valid booking code to process.");
 
     setIsProcessing(true);
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
+      // Executes Postgres function to handle balance and ticket status atomically
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: targetCode.toString(),
         p_cashier_id: user.id,
@@ -111,16 +131,18 @@ export default function CashierDashboard() {
 
       setCurrentTicket(paidTicket);
       
+      // Allow state to settle, then print and wipe
       setTimeout(async () => {
         window.print();
         setCart([]);
         setStake("");
         setCurrentTicket(null);
-        await initTerminal(); 
+        await initTerminal(); // Update float balance immediately after print
         setIsProcessing(false);
       }, 800);
 
     } catch (err) {
+      console.error("Payment Error:", err);
       alert("❌ DATABASE REJECTED: " + (err.message || "Check network connection"));
       setIsProcessing(false);
     }
@@ -129,6 +151,7 @@ export default function CashierDashboard() {
   return (
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden">
+        
         {/* LEFT: SCANNER & TERMINAL INFO */}
         <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-xl">
@@ -177,10 +200,10 @@ export default function CashierDashboard() {
           <div className="flex-1 overflow-hidden">
             <Betslip 
               cart={cart}
-              setCart={setCart} // CRITICAL: Now passing the setter to enable auto-sync
+              setCart={setCart} 
               stake={stake}
               onStakeChange={setStake}
-              onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} // Functional update
+              onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))}
               onClear={() => { setCart([]); setStake(""); setCurrentTicket(null); }}
               isProcessing={isProcessing}
             />
@@ -207,6 +230,7 @@ export default function CashierDashboard() {
         </div>
       </div>
 
+      {/* INVISIBLE PRINT COMPONENT */}
       <div className="hidden print:block">
         <PrintableTicket 
           ticket={currentTicket} 
