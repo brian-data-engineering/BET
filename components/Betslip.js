@@ -8,26 +8,33 @@ export default function Betslip({ items = [], setItems }) {
   const [stake, setStake] = useState(100);
   const MAX_GAMES = 20;
 
-  // --- NEW: AUTO-CLEAR BOOKING CODE ON NEW INTERACTION ---
-  // If the user has a code showing but starts clicking new markets/games, 
-  // we clear the "Success" screen so they can see their new slip.
+  // --- AUTO-CLEAR BOOKING CODE ON NEW INTERACTION ---
   useEffect(() => {
     if (bookingCode && items.length > 0) {
       setBookingCode(null);
     }
   }, [items, bookingCode]);
 
-  // --- AUTO-REMOVE EXPIRED MATCHES ---
+  // --- AUTO-REMOVE EXPIRED MATCHES (LUCRA SYNCED) ---
   useEffect(() => {
     const checkInterval = setInterval(() => {
       const now = new Date().getTime();
+      
       setItems(prevItems => {
         const filtered = prevItems.filter(item => {
           if (!item.startTime) return true;
+
+          // 1. Clean the string and create a Date object
           const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
-          const matchTime = new Date(cleanTime).getTime();
-          return (matchTime - now) > 60000; // 1 minute buffer
+          const matchDate = new Date(cleanTime).getTime();
+
+          // 2. APPLY OFFSET: Shift match time back 3 hours to align with EAT vs UTC
+          const lockThreshold = matchDate - (3 * 60 * 60 * 1000); 
+
+          // 3. Compare with a 60-second buffer (Matches Home.js)
+          return (lockThreshold - now) > 60000; 
         });
+
         return filtered.length !== prevItems.length ? filtered : prevItems;
       });
     }, 5000);
@@ -67,8 +74,8 @@ export default function Betslip({ items = [], setItems }) {
           if (eventsData && eventsData.length > 0) {
             const countries = [...new Set(eventsData.map(e => e.country).filter(Boolean))];
             const leagues = [...new Set(eventsData.map(e => e.display_league || e.league_name).filter(Boolean))];
-            countryValue = countries.length > 0 ? countries.join(', , ') : "Unknown";
-            leagueValue = leagues.length > 0 ? leagues.join(', , ') : "Unknown League";
+            countryValue = countries.length > 0 ? countries.join(', ') : "Unknown";
+            leagueValue = leagues.length > 0 ? leagues.join(', ') : "Unknown League";
           }
         } catch (err) {
           console.warn("Could not fetch multi-match mapping.");
@@ -90,8 +97,6 @@ export default function Betslip({ items = [], setItems }) {
 
       if (error) throw error;
       
-      // Clear the items locally so the UI knows we are done with this specific set
-      // This triggers the useEffect above to keep the code visible until the NEXT click
       setBookingCode(finalCode);
       setItems([]); 
 
