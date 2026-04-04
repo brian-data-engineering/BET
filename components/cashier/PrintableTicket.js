@@ -12,7 +12,11 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
       <div className="ticket-container">
         {/* HEADER */}
         <div className="center-text">
-           <img src="https://i.ibb.co/67wb7Zm1/download.png" style={{height:'38px', marginBottom: '4px'}} alt="LUCRA" />
+           <img 
+             src="https://i.ibb.co/67wb7Zm1/download.png" 
+             style={{height:'38px', marginBottom: '4px', filter: 'grayscale(100%) contrast(200%)'}} 
+             alt="LUCRA" 
+           />
            <div className="terminal-tag">LUCRA TERMINAL</div>
         </div>
         
@@ -55,7 +59,14 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
         <div className="center-text barcode-footer">
           {ticket.ticket_serial && (
             <div className="barcode-wrapper">
-              <Barcode value={String(ticket.ticket_serial)} width={1.2} height={40} displayValue={false} margin={0} lineColor="#000000" />
+              <Barcode 
+                value={String(ticket.ticket_serial)} 
+                width={1.2} 
+                height={40} 
+                displayValue={false} 
+                margin={0} 
+                lineColor="#000000" 
+              />
             </div>
           )}
           <p className="date-text">{new Date().toLocaleString()}</p>
@@ -64,53 +75,57 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
       </div>
 
       <style jsx global>{`
-        /* Hide on screen */
-        .lucra-print-area { display: none; }
+        /* 1. HIDE FROM DASHBOARD */
+        .lucra-print-area { 
+          display: none !important; 
+        }
         
         @media print {
+          /* 2. REVEAL FOR PRINTER */
           .lucra-print-area { 
             display: block !important; 
             width: 72mm !important;
             background: #ffffff !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
           }
 
           .ticket-container { 
             width: 72mm; 
             padding: 2mm;
-            font-family: Arial, sans-serif;
             background: #ffffff !important;
           }
 
-          /* FORCE BLACK TEXT ON EVERYTHING */
-          .ticket-container * {
+          /* 3. HARD-CODE BLACK TEXT (Overrides Layout) */
+          .ticket-container, .ticket-container * {
             color: #000000 !important;
-            background-color: transparent !important;
             border-color: #000000 !important;
-            font-family: Arial, sans-serif !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+            background-color: transparent !important;
+            font-family: 'Arial', sans-serif !important;
+            visibility: visible !important;
           }
 
-          .center-text { text-align: center; width: 100%; }
+          .center-text { text-align: center; }
           .terminal-tag { font-size: 14px; font-weight: bold; border-bottom: 2px solid #000; margin-bottom: 4px; }
-          .info-line { display: flex; justify-content: space-between; font-size: 10px; padding: 4px 0; }
+          .info-line { display: flex; justify-content: space-between; font-size: 10px; padding: 4px 0; border-bottom: 1px solid #000; }
           .serial-box { border: 2px solid #000; text-align: center; margin: 5px 0; padding: 5px; font-size: 14px; font-weight: bold; }
           
           .match-item { border-bottom: 1px dashed #000; padding: 4px 0; }
           .m-header { display: flex; justify-content: space-between; font-size: 9px; }
-          .m-teams { font-size: 12px; margin: 2px 0; }
+          .m-teams { font-size: 12px; margin: 2px 0; text-transform: uppercase; }
           .m-bet { display: flex; justify-content: space-between; font-size: 11px; }
 
-          .ticket-totals { margin-top: 10px; border-top: 2px solid #000; }
+          .ticket-totals { margin-top: 8px; border-top: 2px solid #000; }
           .t-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
           
-          .payout-container { border: 3px solid #000; text-align: center; margin-top: 10px; padding: 5px; }
-          .p-label { font-size: 12px; font-weight: bold; }
+          .payout-container { border: 3px solid #000; text-align: center; margin-top: 8px; padding: 5px; }
+          .p-label { font-size: 11px; font-weight: bold; text-decoration: underline; }
           .p-value { font-size: 24px; font-weight: 900; }
 
-          .barcode-wrapper { display: flex; justify-content: center; margin: 10px 0; }
-          .date-text { font-size: 9px; margin: 0; }
-          .luck-text { font-size: 12px; font-weight: bold; }
+          .barcode-wrapper { display: flex !important; justify-content: center; margin: 8px 0; }
+          .date-text { font-size: 9px; }
+          .luck-text { font-size: 12px; font-weight: bold; margin-bottom: 20px; }
         }
       `}</style>
     </div>
