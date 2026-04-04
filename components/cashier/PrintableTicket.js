@@ -68,35 +68,52 @@ export default function PrintableTicket({ ticket, profiles = [], user }) {
       </div>
 
      <style jsx global>{`
-  /* On the screen, the ticket is totally removed so it doesn't break the UI */
+  /* THE GHOST TECHNIQUE */
   .lucra-print-area { 
-    display: none; 
+    position: absolute;
+    left: -9999px; /* Moves it way off screen so users don't see it */
+    top: 0;
+    width: 72mm;
+    background: white;
+    color: black;
   }
   
   @media print {
-    /* When printing, the ticket is the ONLY thing that exists */
+    /* BRING IT BACK FOR THE PRINTER */
     .lucra-print-area { 
-      display: block !important; 
+      position: static !important;
+      left: 0 !important;
+      display: block !important;
+      visibility: visible !important;
       width: 72mm !important;
       height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
     }
 
     .ticket-container { 
       width: 72mm; 
-      padding: 2mm;
+      padding: 5mm;
       background: white !important;
       color: black !important;
     }
 
-    /* Force the barcode and match boxes to show up black */
+    /* Force black text for thermal */
+    * {
+      color: black !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
     .match-id-box {
       background: black !important;
       color: white !important;
-      -webkit-print-color-adjust: exact;
+      padding: 0 4px;
+      display: inline-block !important;
     }
 
-    .payout-container {
-      border: 4px solid black !important;
+    .barcode-wrapper svg {
+      width: 100% !important;
     }
   }
 `}</style>
