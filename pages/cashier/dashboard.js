@@ -9,9 +9,9 @@ export default function CashierDashboard() {
   const [cart, setCart] = useState([]);
   const [stake, setStake] = useState("");
   const [searchQuery, setSearchQuery] = useState('');
-  const [cashierBalance, setCashierBalance] = useState(0);
   const [currentTicket, setCurrentTicket] = useState(null);
-  const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null); // Full profile for shop_name/username
+  const [allProfiles, setAllProfiles] = useState([]); // Needed for re-printing old tickets
   
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -20,21 +20,20 @@ export default function CashierDashboard() {
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     
-    if (!authUser) {
-      console.error("No active session found");
-      return;
-    }
+    if (!authUser) return;
     
-    setUser(authUser);
-    
-    // Fetch fresh balance for this specific cashier profile
+    // 1. Fetch current cashier's detailed profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('balance')
+      .select('*')
       .eq('id', authUser.id)
       .single();
       
-    if (profile) setCashierBalance(parseFloat(profile.balance || 0));
+    if (profile) setUserProfile(profile);
+
+    // 2. Fetch all profiles (to map names when re-printing old tickets)
+    const { data: profiles } = await supabase.from('profiles').select('id, username, shop_name');
+    if (profiles) setAllProfiles(profiles);
   }, []);
 
   useEffect(() => { 
@@ -60,24 +59,23 @@ export default function CashierDashboard() {
         return;
       }
 
-      // Ensure selections is an array (handles JSON strings from DB)
+      // Handle JSON selections safely
       const rawSelections = Array.isArray(ticket.selections) 
         ? ticket.selections 
         : JSON.parse(ticket.selections || '[]');
 
-      if (ticket.is_paid || ticket.ticket_serial) {
+      if (ticket.ticket_serial) {
+        // TICKET IS ALREADY PAID
         setCurrentTicket(ticket);
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
           setTimeout(() => { window.print(); }, 500);
         }
       } else {
-        // --- SYNC CHECK ON LOAD ---
+        // TICKET IS A NEW BOOKING
         const now = new Date().getTime();
         const validSelections = rawSelections.filter(item => {
           if (!item.startTime) return true;
-          const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
-          const matchDate = new Date(cleanTime).getTime();
-          // Remove if it started already or is in the 60s lock window
+          const matchDate = new Date(item.startTime).getTime();
           return (matchDate - now) > 60000;
         });
 
@@ -102,48 +100,41 @@ export default function CashierDashboard() {
   // --- PAYMENT PROCESSING ---
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
-    
     if (!numStake || numStake <= 0) return alert("Enter valid stake");
-    if (numStake > cashierBalance) return alert("⚠️ INSUFFICIENT FLOAT");
+    if (numStake > (userProfile?.balance || 0)) return alert("⚠️ INSUFFICIENT FLOAT");
     
-    if (!user?.id) {
-      alert("❌ SESSION ERROR: Re-initializing terminal...");
-      await initTerminal();
-      return;
-    }
-
     const targetCode = currentTicket?.booking_code;
-    if (!targetCode) return alert("No valid booking code to process.");
+    if (!targetCode) return alert("No valid booking code found.");
 
     setIsProcessing(true);
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
-      // Executes Postgres function to handle balance and ticket status atomically
       const { data: paidTicket, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: targetCode.toString(),
-        p_cashier_id: user.id,
+        p_cashier_id: userProfile.id,
         p_generated_serial: newSerial,
         p_stake: numStake
       });
 
       if (rpcError) throw rpcError;
 
+      // CRITICAL: Set the paidTicket to state so PrintableTicket gets the new Serial Number
       setCurrentTicket(paidTicket);
       
-      // Allow state to settle, then print and wipe
       setTimeout(async () => {
         window.print();
+        // Reset Dashboard
         setCart([]);
         setStake("");
         setCurrentTicket(null);
-        await initTerminal(); // Update float balance immediately after print
+        await initTerminal(); // Refresh balance
         setIsProcessing(false);
-      }, 800);
+      }, 1000);
 
     } catch (err) {
       console.error("Payment Error:", err);
-      alert("❌ DATABASE REJECTED: " + (err.message || "Check network connection"));
+      alert("❌ DATABASE REJECTED: " + (err.message || "Check connection"));
       setIsProcessing(false);
     }
   };
@@ -152,7 +143,7 @@ export default function CashierDashboard() {
     <CashierLayout>
       <div className="flex h-[calc(100vh-64px)] bg-[#080b13] text-white overflow-hidden">
         
-        {/* LEFT: SCANNER & TERMINAL INFO */}
+        {/* LEFT: SCANNER */}
         <div className="flex-1 p-10 flex flex-col items-center justify-center border-r border-white/5">
           <div className="w-full max-w-xl">
             <div className="flex items-center gap-3 mb-8">
@@ -163,7 +154,7 @@ export default function CashierDashboard() {
             <div className="relative">
               <input 
                 type="text"
-                placeholder="SCAN CODE (e.g. 1129)..."
+                placeholder="SCAN CODE..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()}
@@ -172,31 +163,32 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleLoadTicket}
                 disabled={isSearching}
-                className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic hover:brightness-110 active:scale-95 transition-all"
+                className="absolute right-2 top-2 bottom-2 bg-[#10b981] text-black px-6 rounded-xl font-black italic"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
 
+            {/* FLOAT DISPLAY */}
             <div className="grid grid-cols-2 gap-4 mt-8">
               <div className="bg-[#111926] p-6 rounded-2xl border border-white/5">
                 <p className="text-[10px] font-bold opacity-30 uppercase mb-1 tracking-widest">Active Float</p>
                 <p className="text-xl font-black italic text-[#10b981]">
-                  KES {cashierBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  KES {(userProfile?.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <button 
                 onClick={initTerminal}
-                className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center hover:bg-white/5 transition-colors group"
+                className="bg-[#111926] p-6 rounded-2xl border border-white/5 flex items-center justify-center hover:bg-white/5 group"
               >
-                <RefreshCw size={24} className={`${isSearching ? "animate-spin" : ""} group-hover:rotate-180 transition-transform duration-500`} />
+                <RefreshCw size={24} className={`${isSearching ? "animate-spin" : ""} group-hover:rotate-180 transition-all duration-500`} />
               </button>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: BETSLIP & ACTION */}
-        <div className="w-[400px] flex flex-col bg-[#0b0f1a]">
+        {/* RIGHT: BETSLIP */}
+        <div className="w-[420px] flex flex-col bg-[#0b0f1a]">
           <div className="flex-1 overflow-hidden">
             <Betslip 
               cart={cart}
@@ -206,6 +198,7 @@ export default function CashierDashboard() {
               onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))}
               onClear={() => { setCart([]); setStake(""); setCurrentTicket(null); }}
               isProcessing={isProcessing}
+              user={userProfile} // Passing full profile to show Cashier Name & Shop
             />
           </div>
           
@@ -214,16 +207,9 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleProcessPayment}
                 disabled={isProcessing}
-                className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 shadow-lg shadow-[#10b981]/20 transition-all disabled:opacity-50"
+                className="w-full bg-[#10b981] hover:brightness-110 text-black py-5 rounded-xl font-black text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
               >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="animate-spin" />
-                    <span>SYNCHRONIZING...</span>
-                  </>
-                ) : (
-                  "CONFIRM & PRINT"
-                )}
+                {isProcessing ? <Loader2 className="animate-spin" /> : "CONFIRM & PRINT"}
               </button>
             </div>
           )}
@@ -235,8 +221,8 @@ export default function CashierDashboard() {
         <PrintableTicket 
           ticket={currentTicket} 
           cart={cart} 
-          stake={parseFloat(stake)} 
-          user={user} 
+          profiles={allProfiles} 
+          user={userProfile} 
         />
       </div>
     </CashierLayout>
