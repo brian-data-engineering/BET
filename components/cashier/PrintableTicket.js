@@ -2,158 +2,122 @@ import React from 'react';
 import Barcode from 'react-barcode';
 
 export default function PrintableTicket({ ticket, cart = [], profiles = [], user }) {
+  // 1. Data Safety Checks
   const selections = ticket?.selections 
     ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
     : (cart || []);
 
+  if (!selections || selections.length === 0) return null;
+
   const cashierId = ticket?.paid_by || ticket?.cashier_id;
   const cashierProfile = profiles?.find(p => p.id === cashierId);
   const cashierName = cashierProfile?.username || user?.username || "Staff";
-  const shopName = cashierProfile?.shop_name || user?.shop_name || "LUCRA TERMINAL";
+  const shopName = cashierProfile?.shop_name || user?.shop_name || "LUCRA";
 
-  const calculatedOdds = selections.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1);
-  const displayOdds = (parseFloat(ticket?.total_odds) || calculatedOdds).toFixed(2);
+  const displayOdds = parseFloat(ticket?.total_odds || 1).toFixed(2);
   const displayStake = parseFloat(ticket?.stake || 0);
-  const displayPayout = (parseFloat(ticket?.potential_payout) || (calculatedOdds * displayStake));
-
-  if (!selections || selections.length === 0) return null;
+  const displayPayout = parseFloat(ticket?.potential_payout || 0);
 
   return (
-    <div className="lucra-print-container bg-white text-black w-[72mm] font-sans p-0 leading-tight">
-      
-      {/* HEADER SECTION */}
-      <div className="flex flex-col items-center pt-2 mb-1">
-        <img 
-          src="https://i.ibb.co/67wb7Zm1/download.png" 
-          alt="LUCRA" 
-          className="h-10 w-auto object-contain"
-          onError={(e) => (e.target.style.display = 'none')} 
-        />
-        <span className="text-[10px] font-black tracking-widest uppercase">Lucra Terminal</span>
-      </div>
+    <div className="lucra-print-area">
+      <div className="ticket-container">
+        {/* HEADER */}
+        <div className="header">
+          <img src="https://i.ibb.co/67wb7Zm1/download.png" alt="LUCRA" className="logo" />
+          <div className="terminal-name">LUCRA TERMINAL</div>
+        </div>
 
-      <div className="px-1 mb-2">
-        <div className="flex justify-between text-[9px] font-bold uppercase border-b border-black pb-0.5">
+        {/* SHOP INFO */}
+        <div className="info-row">
           <span>{shopName}</span>
           <span>{cashierName}</span>
         </div>
-        <div className="text-[9px] py-0.5">
-          Time: {ticket?.created_at ? new Date(ticket.created_at).toLocaleString('en-GB') : new Date().toLocaleString('en-GB')}
+
+        <div className="serial-box">
+          {ticket?.ticket_serial ? `SERIAL: ${ticket.ticket_serial}` : `BOOKING: ${ticket?.booking_code}`}
         </div>
-        <div className="text-[13px] font-black border-y-2 border-black py-1 uppercase italic text-center">
-          {ticket?.ticket_serial ? `SERIAL: ${ticket.ticket_serial}` : `BOOKING: ${ticket?.booking_code || "NEW"}`}
-        </div>
-      </div>
 
-      {/* MATCH SELECTIONS - GRID BOXES */}
-      <div className="px-1 space-y-1">
-        {selections.map((item, index) => {
-          const rawTimeDisplay = item?.startTime?.includes('T') 
-            ? item.startTime.split('T')[1].substring(0, 5) 
-            : "";
-
-          return (
-            <div key={`${item.matchId}-${index}`} className="border-2 border-black p-1 rounded-sm">
-              <div className="flex justify-between text-[8px] font-bold uppercase opacity-80 mb-0.5">
-                <span>{item?.leagueName || "Soccer"}</span>
-                <span>{rawTimeDisplay}</span>
+        {/* SELECTIONS */}
+        <div className="selections">
+          {selections.map((item, i) => (
+            <div key={i} className="match-card">
+              <div className="match-header">
+                <span>{item.leagueName || "Soccer"}</span>
+                <span>{item.startTime?.split('T')[1]?.substring(0, 5) || ""}</span>
               </div>
-              
-              <div className="flex items-start gap-1">
-                <span className="font-mono font-bold text-[9px] border border-black px-0.5">
-                  {item?.matchId ? String(item.matchId).slice(-4) : "0000"}
-                </span>
-                <span className="font-black uppercase text-[11px] leading-[1.1]">
-                  {item?.matchName}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center mt-1 pt-1 border-t border-black/20">
-                <div className="text-[10px] font-bold italic">
-                  {item?.marketName} : <span className="underline">{item?.selection}</span>
-                </div>
-                <div className="text-[14px] font-black">
-                  @{parseFloat(item?.odds || 0).toFixed(2)}
-                </div>
+              <div className="match-name">{item.matchName}</div>
+              <div className="market-row">
+                <span>{item.marketName}: <strong>{item.selection}</strong></span>
+                <span>@{parseFloat(item.odds).toFixed(2)}</span>
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* FOOTER TOTALS */}
-      <div className="px-1 mt-2">
-        <div className="border-t-2 border-black pt-1 space-y-0.5 font-bold text-[11px]">
-          <div className="flex justify-between uppercase">
-            <span>Total Odds:</span>
-            <span>{displayOdds}</span>
-          </div>
-          <div className="flex justify-between uppercase">
-            <span>Total Stake:</span>
-            <span>{displayStake.toLocaleString()} KSh</span>
+        {/* TOTALS */}
+        <div className="totals">
+          <div className="row"><span>ODDS:</span> <span>{displayOdds}</span></div>
+          <div className="row"><span>STAKE:</span> <span>{displayStake.toLocaleString()} KSh</span></div>
+          <div className="payout-box">
+            <div className="payout-label">POTENTIAL PAYOUT</div>
+            <div className="payout-amount">{displayPayout.toLocaleString()}</div>
           </div>
         </div>
 
-        {/* PAYOUT BOX - High Visibility Border */}
-        <div className="border-[3px] border-black p-1 mt-1 text-center">
-          <span className="text-[9px] uppercase font-black">Potential Payout</span>
-          <div className="text-[20px] font-black italic">
-            {displayPayout.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-          </div>
-        </div>
-      </div>
-
-      {/* BARCODE AREA */}
-      <div className="mt-3 flex flex-col items-center pb-4">
-        {ticket?.ticket_serial && (
-          <>
-            <Barcode 
-              value={String(ticket.ticket_serial)} 
-              width={1.3} 
-              height={40} 
-              displayValue={false} 
-              margin={0} 
-            />
-            <div className="text-[10px] font-black mt-1 tracking-widest">{ticket.ticket_serial}</div>
-          </>
-        )}
-        <div className="text-[8px] uppercase mt-2 font-black italic border-t border-black w-full text-center pt-1">
-          *** GOOD LUCK - LUCRA TERMINAL ***
+        {/* BARCODE */}
+        <div className="barcode-section">
+          {ticket?.ticket_serial && (
+            <Barcode value={String(ticket.ticket_serial)} width={1.2} height={40} displayValue={false} margin={0} />
+          )}
+          <div className="footer-text">*** THANK YOU - GOOD LUCK ***</div>
         </div>
       </div>
 
       <style jsx global>{`
-        /* Standard View: Hide the ticket */
-        .lucra-print-container {
-          display: none;
-        }
+        /* SCREEN VIEW: Completely hide this from the dashboard */
+        .lucra-print-area { display: none; }
 
         @media print {
-          /* Hide EVERYTHING else in the app */
-          body * {
-            visibility: hidden;
+          /* Hide the entire website dashboard */
+          body * { visibility: hidden !important; }
+          
+          /* Show only the ticket area */
+          .lucra-print-area, .lucra-print-area * { 
+            visibility: visible !important; 
+            display: block !important; 
           }
 
-          /* Show ONLY the ticket and its contents */
-          .lucra-print-container, .lucra-print-container * {
-            visibility: visible;
-            display: block !important;
-          }
-
-          .lucra-print-container {
+          .lucra-print-area {
             position: absolute;
             left: 0;
             top: 0;
-            width: 72mm !important;
-            display: block !important;
-            background: white !important;
-            color: black !important;
-          }
-
-          @page {
-            size: 80mm auto;
+            width: 72mm;
+            background: white;
+            color: black;
+            font-family: sans-serif;
+            padding: 0;
             margin: 0;
           }
+
+          .ticket-container { width: 72mm; padding: 2mm; }
+          .header { text-align: center; margin-bottom: 4px; }
+          .logo { height: 30px; width: auto; margin: 0 auto; }
+          .terminal-name { font-size: 10px; font-weight: 900; letter-spacing: 2px; }
+          .info-row { display: flex; justify-content: space-between; font-size: 9px; border-bottom: 1px solid black; }
+          .serial-box { border: 2px solid black; text-align: center; font-weight: 900; margin: 4px 0; padding: 2px; font-size: 12px; }
+          .match-card { border: 1px solid black; margin-bottom: 2px; padding: 2px; }
+          .match-header { display: flex; justify-content: space-between; font-size: 8px; font-weight: bold; }
+          .match-name { font-size: 10px; font-weight: 900; text-transform: uppercase; }
+          .market-row { display: flex; justify-content: space-between; font-size: 10px; border-top: 1px dotted #ccc; }
+          .totals { margin-top: 4px; border-top: 2px solid black; }
+          .row { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; }
+          .payout-box { border: 3px solid black; text-align: center; margin-top: 4px; padding: 2px; }
+          .payout-label { font-size: 9px; font-weight: 900; }
+          .payout-amount { font-size: 20px; font-weight: 900; }
+          .barcode-section { text-align: center; margin-top: 10px; }
+          .footer-text { font-size: 8px; font-weight: bold; font-style: italic; margin-top: 5px; }
+
+          @page { size: 80mm auto; margin: 0; }
         }
       `}</style>
     </div>
