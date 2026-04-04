@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
-import { Ticket, Lock, AlertCircle, ShieldCheck, Cpu } from 'lucide-react';
+import { Ticket, Lock, AlertCircle, ShieldCheck, User } from 'lucide-react';
 
 export default function CashierLogin() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState(''); // Changed from email
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -15,30 +15,29 @@ export default function CashierLogin() {
     setLoading(true);
     setErrorMsg(null);
 
-    // Initial Authentication
+    // LOGIC: Convert simple username to the internal "Ghost Email"
+    const internalEmail = `${username.toLowerCase().trim()}@lucra.internal`;
+
     const { data, error: authError } = await supabase.auth.signInWithPassword({ 
-      email: email.toLowerCase().trim(), // Ensure clean email formatting
+      email: internalEmail, 
       password 
     });
 
     if (authError) {
-      setErrorMsg(authError.message);
+      // Custom error for terminal vibe
+      setErrorMsg("INVALID IDENTITY: Credentials rejected by Lucra Protocol.");
       setLoading(false);
       return;
     }
 
     /** * ROLE VERIFICATION
-     * We check user_metadata because that is where the 'role' is stored 
-     * during the Admin/Operator provisioning process.
      */
     const role = data?.user?.user_metadata?.role;
-
     const authorizedRoles = ['cashier', 'super_admin', 'operator'];
 
     if (authorizedRoles.includes(role)) {
       router.push('/cashier/dashboard');
     } else {
-      // Clean up the session if the role is unauthorized
       await supabase.auth.signOut();
       setErrorMsg("PROTOCOL ERROR: Access Denied. Lacks Terminal Authorization.");
       setLoading(false);
@@ -59,7 +58,7 @@ export default function CashierLogin() {
             <div className="w-16 h-16 bg-[#10b981] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-[#10b981]/20">
               <Ticket className="text-black" size={32} />
             </div>
-            <h1 className="text-3xl font-black uppercase italic tracking-tighter">Lucra Terminal</h1>
+            <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">Lucra Terminal</h1>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.4em] mt-2 italic">Authentication Protocol</p>
           </div>
 
@@ -72,18 +71,19 @@ export default function CashierLogin() {
           )}
 
           <form onSubmit={handleLogin} className="space-y-6">
-            {/* Email Input */}
+            {/* Username Input (Ghost Logic) */}
             <div className="space-y-2">
-              <label className="text-[9px] font-black text-slate-500 uppercase ml-4 italic tracking-widest">Operator Identity</label>
+              <label className="text-[9px] font-black text-slate-500 uppercase ml-4 italic tracking-widest">Operator Username</label>
               <div className="relative">
                 <input 
-                  type="email" 
-                  placeholder="id@lucra.network" 
-                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold" 
-                  onChange={e => setEmail(e.target.value)} 
+                  type="text" // Changed from email
+                  placeholder="e.g. brayo" 
+                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold placeholder:text-slate-800" 
+                  value={username}
+                  onChange={e => setUsername(e.target.value)} 
                   required
                 />
-                <Cpu className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
+                <User className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-800" size={18} />
               </div>
             </div>
 
@@ -95,7 +95,8 @@ export default function CashierLogin() {
                   type="password" 
                   autoComplete="current-password"
                   placeholder="••••••••" 
-                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold" 
+                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-[#10b981] transition-all text-sm font-bold placeholder:text-slate-800" 
+                  value={password}
                   onChange={e => setPassword(e.target.value)} 
                   required
                 />
