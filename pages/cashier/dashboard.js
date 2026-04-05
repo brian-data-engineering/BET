@@ -25,15 +25,19 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // AUTO-PRINT LOGIC (With Focus and 2s Delay)
+  // AUTO-PRINT LOGIC (Diagnostic Version)
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
-        console.log("🖨️ Triggering Print...");
-        window.focus(); // Grab focus to ensure the correct window prints
+        console.log("🖨️ [DIAGNOSTIC] Triggering Print...");
+        window.focus(); 
         window.print();
-        shouldPrintRef.current = false; 
-      }, 2000); 
+        
+        // Give the printer 2 seconds to "capture" before we reset the ref
+        setTimeout(() => {
+            shouldPrintRef.current = false;
+        }, 2000);
+      }, 3000); // 3s delay to ensure Barcode canvas is fully drawn
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -162,18 +166,25 @@ export default function CashierDashboard() {
 
       {/* --- ULTIMATE PRINT PORTAL (OUTSIDE THE LAYOUT) --- */}
       {currentTicket && shouldPrintRef.current && (
-        <div className="ultimate-print-portal">
+        <div className="ultimate-print-portal" style={{ background: 'white' }}>
+          <h1 style={{ 
+            color: 'red', 
+            fontSize: '20px', 
+            fontWeight: 'bold', 
+            textAlign: 'center',
+            padding: '20px',
+            border: '5px solid red',
+            display: 'block' 
+          }}>
+            IF YOU SEE THIS RED BOX, THE PORTAL IS WORKING
+          </h1>
           <PrintableTicket ticket={currentTicket} />
         </div>
       )}
 
       <style jsx global>{`
-        /* SCREEN VIEW */
         @media screen {
-          .ultimate-print-portal { 
-            display: none !important; 
-          }
-          /* Standard print area inside the preview should be unlocked */
+          .ultimate-print-portal { display: none !important; }
           #visible-preview .lucra-print-area { 
             display: block !important; 
             visibility: visible !important;
@@ -181,15 +192,12 @@ export default function CashierDashboard() {
           }
         }
 
-        /* PRINT VIEW - The fix for the blank dialog */
         @media print {
-          /* 1. Hide the entire React App / Dashboard */
           body > *:not(.ultimate-print-portal) {
             display: none !important;
             visibility: hidden !important;
           }
 
-          /* 2. Reset the Body & HTML to be purely for the ticket */
           html, body {
             background: white !important;
             margin: 0 !important;
@@ -198,7 +206,6 @@ export default function CashierDashboard() {
             overflow: visible !important;
           }
 
-          /* 3. Force the Portal to be the ONLY thing existing */
           .ultimate-print-portal {
             display: block !important;
             visibility: visible !important;
@@ -209,14 +216,15 @@ export default function CashierDashboard() {
             z-index: 9999999 !important;
           }
 
-          /* 4. Force all internal elements to show up */
           .ultimate-print-portal *, 
           .ultimate-print-portal .lucra-print-area {
             visibility: visible !important;
             display: block !important;
             color: black !important;
-            background: transparent !important;
           }
+          
+          /* Force the Diagnostic Red Box to show */
+          h1 { visibility: visible !important; color: red !important; }
         }
       `}</style>
     </>
