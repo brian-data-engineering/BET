@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import { TrendingUp, TrendingDown, Wallet, RefreshCcw, ShieldCheck, Loader2, BarChart3 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, RefreshCcw, ShieldCheck, Loader2, BarChart3, ArrowRightCircle } from 'lucide-react';
 
 export default function CashierReport() {
-  const [stats, setStats] = useState({ sales: 0, payouts: 0, count: 0, profit: 0 });
+  const [stats, setStats] = useState({ 
+    opening: 0, 
+    sales: 0, 
+    payouts: 0, 
+    profit: 0, 
+    closing: 0, 
+    count: 0 
+  });
   const [loading, setLoading] = useState(true);
 
   const fetchTodayStats = useCallback(async () => {
@@ -13,7 +20,7 @@ export default function CashierReport() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // CALLING YOUR SQL RPC FUNCTION DIRECTLY
+      // CALLING THE UPDATED 6-COLUMN RPC
       const { data, error } = await supabase.rpc('get_daily_cashier_report', { 
         p_cashier_id: user.id 
       });
@@ -22,10 +29,12 @@ export default function CashierReport() {
 
       if (data && data[0]) {
         setStats({
-          count: parseInt(data[0].total_tickets),
-          sales: parseFloat(data[0].total_sales),
-          payouts: parseFloat(data[0].total_payouts),
-          profit: parseFloat(data[0].net_profit)
+          opening: parseFloat(data[0].opening_balance || 0),
+          count: parseInt(data[0].total_tickets || 0),
+          sales: parseFloat(data[0].total_sales || 0),
+          payouts: parseFloat(data[0].total_payouts || 0),
+          profit: parseFloat(data[0].net_profit || 0),
+          closing: parseFloat(data[0].closing_expected || 0)
         });
       }
     } catch (err) {
@@ -46,66 +55,65 @@ export default function CashierReport() {
           <div>
             <div className="flex items-center gap-2 text-[#10b981] mb-2">
               <ShieldCheck size={16} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Midnight to Midnight Audit</span>
+              <span className="text-[10px] font-black uppercase tracking-widest italic">Nairobi (EAT) Shift Audit</span>
             </div>
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter">Shift Audit</h1>
-            <p className="text-zinc-500 text-[10px] font-bold uppercase mt-2">Live Database Statistics</p>
+            <h1 className="text-5xl font-black italic uppercase tracking-tighter">Terminal Report</h1>
           </div>
           
           <button 
             onClick={fetchTodayStats} 
             disabled={loading}
-            className="p-5 bg-[#111926] rounded-3xl border border-white/5 hover:border-[#10b981]/30 transition-all"
+            className="p-5 bg-[#111926] rounded-3xl border border-white/5 hover:border-[#10b981]/30 transition-all shadow-xl"
           >
             {loading ? <Loader2 size={22} className="animate-spin text-[#10b981]" /> : <RefreshCcw size={22} className="text-[#10b981]" />}
           </button>
         </div>
 
-        {/* Top Level Cards */}
+        {/* Financial Flow Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           <StatCard 
+            icon={<ArrowRightCircle size={24} className="text-zinc-400" />} 
+            label="Opening Float" 
+            value={stats.opening} 
+            trend="Midnight Balance" 
+          />
+          <StatCard 
             icon={<TrendingUp size={24} className="text-[#10b981]" />} 
-            label="Total Sales (Stakes)" 
+            label="Today's Sales" 
             value={stats.sales} 
-            trend="Today's Collection" 
+            trend="Cash Collected" 
           />
           <StatCard 
             icon={<TrendingDown size={24} className="text-red-500" />} 
-            label="Total Payouts (Wins)" 
+            label="Today's Payouts" 
             value={stats.payouts} 
-            trend="Settled Tickets" 
-          />
-          <StatCard 
-            icon={<Wallet size={24} className="text-blue-500" />} 
-            label="Expected Profit/Loss" 
-            value={stats.profit} 
-            isHighlight 
-            color={stats.profit >= 0 ? "text-[#10b981]" : "text-red-500"} 
-            trend="Net Result"
+            trend="Wins Paid" 
           />
         </div>
 
-        {/* Detailed Breakdown Area */}
+        {/* Detailed Financial Summary */}
         <div className="bg-[#111926] border border-white/5 rounded-[3.5rem] p-12 shadow-2xl relative overflow-hidden">
-            {/* Decorative Background Icon */}
             <BarChart3 className="absolute -right-10 -bottom-10 w-64 h-64 opacity-[0.02] text-white" />
             
-            <div className="relative z-10 space-y-8">
-               <ReportLine label="Tickets Issued Today" value={stats.count.toLocaleString()} />
-               <ReportLine label="Total Cash In (Stakes)" value={`KES ${stats.sales.toLocaleString()}`} />
-               <ReportLine label="Total Cash Out (Payouts)" value={`KES ${stats.payouts.toLocaleString()}`} />
+            <div className="relative z-10 space-y-6">
+               <ReportLine label="Shift Start Balance" value={`KSh ${stats.opening.toLocaleString()}`} />
+               <ReportLine label="Total Tickets Issued" value={stats.count} />
+               <ReportLine label="Daily Net Activity" value={`KSh ${stats.profit.toLocaleString()}`} isPositive={stats.profit >= 0} />
                
-               <div className="pt-10 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
+               <div className="pt-10 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6">
                  <div>
-                   <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em]">Final Net Balance</p>
-                   <span className={`text-5xl font-black italic tracking-tighter ${stats.profit >= 0 ? 'text-[#10b981]' : 'text-red-500'}`}>
-                     KES {stats.profit.toLocaleString()}
-                   </span>
+                   <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em] mb-1">Total Expected Cash-on-Hand</p>
+                   <div className="flex items-center gap-4">
+                    <Wallet className="text-[#10b981]" size={32} />
+                    <span className="text-5xl font-black italic tracking-tighter text-white">
+                      KSh {stats.closing.toLocaleString()}
+                    </span>
+                   </div>
                  </div>
                  
-                 <div className="text-center md:text-right">
-                    <p className="text-[8px] font-bold text-zinc-600 uppercase">Audit Timestamp</p>
-                    <p className="text-xs font-mono text-zinc-400">{new Date().toLocaleString()}</p>
+                 <div className="text-center md:text-right bg-black/20 p-4 rounded-2xl border border-white/5">
+                    <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Last Audit Sync</p>
+                    <p className="text-xs font-mono text-[#10b981]">{new Date().toLocaleTimeString()}</p>
                  </div>
                </div>
             </div>
@@ -116,26 +124,30 @@ export default function CashierReport() {
 }
 
 // Helpers
-function StatCard({ icon, label, value, color, isHighlight, trend }) {
+function StatCard({ icon, label, value, trend }) {
   return (
-    <div className={`bg-[#111926] p-8 rounded-[2.5rem] border ${isHighlight ? 'border-[#10b981]/20 shadow-[0_0_40px_-15px_rgba(16,185,129,0.1)]' : 'border-white/5'}`}>
+    <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 hover:border-white/10 transition-all">
       <div className="flex justify-between mb-6">
         <div className="p-3 bg-[#0b0f1a] rounded-2xl">{icon}</div>
         <span className="text-[8px] font-black opacity-40 uppercase tracking-widest">{trend}</span>
       </div>
       <p className="text-[9px] font-black opacity-50 uppercase mb-1 tracking-wider">{label}</p>
-      <h3 className={`text-3xl font-black italic tabular-nums ${color || 'text-white'}`}>
-        KES {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+      <h3 className="text-3xl font-black italic tabular-nums text-white">
+        {value.toLocaleString()}
       </h3>
     </div>
   );
 }
 
-function ReportLine({ label, value }) {
+function ReportLine({ label, value, isPositive = null }) {
+  let colorClass = "text-white";
+  if (isPositive === true) colorClass = "text-[#10b981]";
+  if (isPositive === false) colorClass = "text-red-500";
+
   return (
     <div className="flex justify-between items-center border-b border-white/5 pb-4">
       <span className="text-xs font-black opacity-40 uppercase tracking-widest">{label}</span>
-      <span className="text-xl font-black italic tracking-tight">{value}</span>
+      <span className={`text-xl font-black italic tracking-tight ${colorClass}`}>{value}</span>
     </div>
   );
 }
