@@ -1,159 +1,101 @@
-import React from 'react';
 import Barcode from 'react-barcode';
 
-export default function PrintableTicket({ ticket, profiles = [], user }) {
+export default function PrintableTicket({ ticket }) {
   if (!ticket) return null;
-  
-  // Ensure selections are handled correctly regardless of DB storage type
-  const selections = ticket.selections 
-    ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections) 
-    : [];
 
-  // Match the cashier identity across the platform
-  const cashier = profiles.find(p => p.id === (ticket.cashier_id || user?.id));
+  // Since we fetch from the 'print' table, selections is already a clean array
+  const selections = Array.isArray(ticket.selections) 
+    ? ticket.selections 
+    : [];
 
   return (
     <div className="lucra-print-area">
-      <div className="ticket-container">
-        {/* HEADER */}
-        <center className="header-logo">
+      <div className="ticket-container bg-white text-black p-4 font-sans text-[12px] leading-tight">
+        
+        {/* DYNAMIC HEADER */}
+        <center className="header-section mb-4">
           <img 
-            src="https://i.ibb.co/67wb7Zm1/download.png" 
-            style={{height:'38px', marginBottom: '4px', filter: 'grayscale(100%) contrast(200%)'}} 
-            alt="LUCRA" 
+            src={ticket.logo_url} 
+            alt="SHOP LOGO"
+            className="h-10 mb-2 grayscale contrast-200"
           />
-          <div className="terminal-tag text-black font-black uppercase tracking-tighter">LUCRA TERMINAL</div>
+          <h1 className="text-sm font-black uppercase tracking-tighter">
+            {ticket.shop_name}
+          </h1>
+          <p className="text-[9px] uppercase font-bold opacity-70">Official Betting Receipt</p>
         </center>
-        
-        <div className="info-line">
-          <span>{cashier?.shop_name || user?.shop_name || "LUCRA"}</span> 
-          <span>{cashier?.username || user?.username || "Staff"}</span>
-        </div>
-        
-        <div className="serial-box">
-          {ticket.ticket_serial ? `SERIAL: ${ticket.ticket_serial}` : `BOOKING: ${ticket.booking_code}`}
+
+        {/* TICKET META */}
+        <div className="border-y-2 border-black border-dashed py-2 mb-3 flex justify-between text-[10px] font-bold">
+          <span>SERIAL: {ticket.ticket_serial}</span>
+          <span>CODE: {ticket.booking_code}</span>
         </div>
 
-        {/* SELECTIONS GRID */}
-        <div className="selections-list">
-          {selections.map((s, i) => (
-            <div key={i} className="match-item">
-              <div className="m-header">
-                {/* Fallback to 'Soccer' if leagueName is missing from snapshot */}
-                <span>{s.sportName || "Soccer"}, {s.leagueName || "General"}</span> 
-                <span>
-                  {s.startTime ? new Date(s.startTime).toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit'}) : ''} {s.startTime?.split('T')[1]?.slice(0,5)}
-                </span>
+        {/* SELECTIONS LOOP */}
+        <div className="space-y-3 mb-4">
+          {selections.map((sel, i) => (
+            <div key={i} className="selection-row">
+              <div className="flex justify-between font-black uppercase text-[11px]">
+                <span>{sel.matchName}</span>
+                <span>@{parseFloat(sel.odds || 0).toFixed(2)}</span>
               </div>
-              <div className="m-teams font-black uppercase italic">
-                <span className="match-id-box">{s.matchId?.toString().slice(-4)}</span> 
-                {s.matchName}
-              </div>
-              <div className="m-bet">
-                <span>{s.marketName}: <b>{s.selection}</b></span>
-                <b className="m-odds">@{parseFloat(s.odds || 1).toFixed(2)}</b>
+              <div className="flex justify-between text-[10px] italic">
+                <span>{sel.marketName || 'Match Result'}: <b>{sel.selection}</b></span>
+                <span className="opacity-60">{sel.leagueName || 'Soccer'}</span>
               </div>
             </div>
           ))}
         </div>
 
-        {/* TOTALS SECTION */}
-        <div className="ticket-totals">
-          <div className="t-row"><span>TOTAL ODDS:</span> <span>{parseFloat(ticket.total_odds || 1).toFixed(2)}</span></div>
-          <div className="t-row"><span>STAKE:</span> <span>{parseFloat(ticket.stake || 0).toLocaleString()} KSh</span></div>
-          <div className="payout-container">
-            <div className="p-label uppercase font-black">POTENTIAL PAYOUT</div>
-            <div className="p-value font-black">{parseFloat(ticket.potential_payout || 0).toLocaleString()}</div>
+        {/* FINANCIALS */}
+        <div className="border-t-2 border-black pt-2 space-y-1">
+          <div className="flex justify-between font-bold text-[10px]">
+            <span>TOTAL ODDS:</span>
+            <span>{parseFloat(ticket.total_odds || 1).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between font-black text-xs">
+            <span>STAKE:</span>
+            <span>{parseFloat(ticket.stake || 0).toLocaleString()} KSh</span>
+          </div>
+          
+          <div className="bg-black text-white p-2 mt-2 text-center rounded-sm">
+            <p className="text-[9px] font-bold uppercase tracking-widest mb-1">Potential Payout</p>
+            <p className="text-lg font-black italic">
+              {parseFloat(ticket.potential_payout || 0).toLocaleString()} KSh
+            </p>
           </div>
         </div>
 
-        {/* FOOTER */}
-        <center className="barcode-footer">
-          {ticket.ticket_serial && (
-            <div className="barcode-wrapper" style={{ display: 'flex', justifyContent: 'center' }}>
-              <Barcode 
-                value={String(ticket.ticket_serial)} 
-                width={1.6} 
-                height={40} 
-                displayValue={false} 
-                margin={0} 
-                lineColor="#000000" 
-              />
-            </div>
-          )}
-          {/* Use ticket created_at for history reprints, or current date for new ones */}
-          <p className="date-text">{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : new Date().toLocaleString()}</p>
-          <p className="luck-text font-black tracking-widest">*** GOOD LUCK ***</p>
+        {/* BARCODE & FOOTER */}
+        <center className="mt-6 space-y-2">
+          <div className="flex justify-center bg-white p-1">
+            <Barcode 
+              value={String(ticket.ticket_serial)} 
+              width={1.2} 
+              height={45} 
+              displayValue={false}
+              margin={0}
+            />
+          </div>
+          <p className="text-[9px] font-mono font-bold tracking-tighter">
+            PRINTED: {new Date(ticket.created_at || Date.now()).toLocaleString()}
+          </p>
+          <div className="border-t border-black/10 pt-2">
+            <p className="text-[8px] uppercase font-bold italic">Thank you for playing at {ticket.shop_name}!</p>
+            <p className="text-[7px] opacity-50 mt-1">Lucra Terminal v2.0 • Secure Ledger Verified</p>
+          </div>
         </center>
+
       </div>
 
-      <style jsx global>{`
-        /* Hidden on screen by default */
-        .lucra-print-area { display: none; }
-        
+      <style jsx>{`
+        .ticket-container {
+          width: 72mm; /* Standard Thermal Paper Width */
+          margin: 0 auto;
+        }
         @media print {
-          @page { size: 80mm auto; margin: 0 !important; }
-          
-          html, body { 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            background: #fff !important;
-            -webkit-print-color-adjust: exact;
-          }
-
-          /* Hide everything except the print engine */
-          body * { visibility: hidden !important; }
-          
-          .lucra-print-area, .lucra-print-area * { 
-            visibility: visible !important; 
-            display: block !important;
-            color: #000 !important;
-            font-family: 'Arial Black', sans-serif !important;
-          }
-
-          .lucra-print-area {
-            position: absolute;
-            left: 0; 
-            top: 0;
-            width: 72mm; /* Standard width for 80mm paper to prevent clipping */
-            padding-bottom: 20mm; /* Extra room for the auto-cutter */
-          }
-
-          .ticket-container { padding: 4mm; }
-
-          .terminal-tag { border-bottom: 3px solid #000; font-size: 14px; padding-bottom: 2px; margin-bottom: 4px; }
-          .info-line { display: flex; justify-content: space-between; font-size: 12px; border-bottom: 3px solid #000; padding: 4px 0; }
-          .serial-box { border: 3px solid #000; text-align: center; margin: 8px 0; padding: 6px; font-size: 18px; font-weight: 900; }
-
-          .match-item { 
-            border: 2px solid #000; 
-            margin-top: -2px; 
-            padding: 4px; 
-          }
-          
-          .m-header { display: flex; justify-content: space-between; font-size: 10px; }
-          .m-teams { font-size: 13px; line-height: 1.1; margin: 3px 0; }
-          
-          .match-id-box {
-            background: #000 !important;
-            color: #fff !important;
-            padding: 0 4px;
-            margin-right: 5px;
-            font-size: 11px;
-            display: inline-block !important;
-          }
-
-          .m-bet { display: flex; justify-content: space-between; font-size: 12px; }
-          .ticket-totals { border-top: 3px solid #000; margin-top: 6px; }
-          .t-row { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; border-bottom: 2px solid #000; }
-          
-          .payout-container { border: 5px solid #000; text-align: center; margin-top: 10px; padding: 8px; }
-          .p-label { font-size: 14px; text-decoration: underline; }
-          .p-value { font-size: 32px; font-weight: 900; }
-
-          .barcode-wrapper { margin: 15px 0 5px 0; }
-          .date-text { font-size: 10px; font-weight: normal; }
-          .luck-text { font-size: 14px; padding-bottom: 10px; }
+          body { background: white; }
+          .ticket-container { width: 100%; padding: 0; }
         }
       `}</style>
     </div>
