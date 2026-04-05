@@ -28,12 +28,10 @@ export default function CashierDashboard() {
   // AUTO-PRINT LOGIC
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
-      console.log("💎 [SYSTEM] Official Ticket Detected. Printing in 1s...");
       const timer = setTimeout(() => {
-        window.focus();
         window.print();
         shouldPrintRef.current = false; 
-      }, 1000);
+      }, 1500); // Increased to 1.5s to ensure content is fully loaded
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
