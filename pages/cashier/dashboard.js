@@ -11,41 +11,30 @@ export default function CashierDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTicket, setCurrentTicket] = useState(null);
   const [userProfile, setUserProfile] = useState(null); 
-  const [allProfiles, setAllProfiles] = useState([]); 
   const [isSearching, setIsSearching] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Ref to track if we need to trigger a print after the state updates
   const shouldPrintRef = useRef(false);
 
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
-    
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
     if (profile) setUserProfile(profile);
-    
-    const { data: profiles } = await supabase.from('profiles').select('id, username, shop_name');
-    if (profiles) setAllProfiles(profiles);
   }, []);
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // EFFECT: This watches for when currentTicket is set and triggers the printer
+  // EFFECT: Watches for the official DB record to arrive before printing
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
       const timer = setTimeout(() => {
         window.print();
-        shouldPrintRef.current = false; // Reset the trigger
-      }, 1000); // 1 second ensures the Barcode and Logo are fully "painted"
+        shouldPrintRef.current = false; 
+      }, 1000); 
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
-
-  const triggerManualPrint = (ticket) => {
-    setCurrentTicket(ticket);
-    shouldPrintRef.current = true;
-  };
 
   const handleLoadTicket = async () => {
     if (!searchQuery || isSearching) return;
@@ -61,35 +50,26 @@ export default function CashierDashboard() {
 
       if (error || !ticket) {
         alert("⚠️ INVALID CODE OR TICKET NOT FOUND");
-        setSearchQuery('');
         return;
       }
 
-      let rawSelections = ticket.selections 
-        ? (typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections)
-        : [];
-
-      const matchIds = rawSelections.map(s => s.matchId);
-      const { data: eventData } = await supabase.from('api_events').select('id, display_league').in('id', matchIds);
-
-      const enrichedSelections = rawSelections.map(sel => ({
-        ...sel,
-        leagueName: eventData?.find(e => String(e.id) === String(sel.matchId))?.display_league || "Soccer"
-      }));
-
-      const fullTicket = { ...ticket, selections: enrichedSelections };
-
+      // Format selections for the cart UI
+      const rawSelections = typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections;
+      
       if (ticket.ticket_serial) {
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          triggerManualPrint(fullTicket);
+          // If already paid, fetch from the official 'print' table instead of 'betsnow'
+          const { data: printedDoc } = await supabase.from('print').select('*').eq('ticket_serial', ticket.ticket_serial).single();
+          setCurrentTicket(printedDoc);
+          shouldPrintRef.current = true;
         }
       } else {
-        setCart(enrichedSelections);
+        setCart(rawSelections || []);
         setStake(ticket.stake?.toString() || "100");
-        setCurrentTicket(fullTicket); // Set it but don't print yet
+        setCurrentTicket(ticket); 
       }
       setSearchQuery('');
-    } catch (err) { console.error("Load Error:", err); } finally { setIsSearching(false); }
+    } catch (err) { console.error(err); } finally { setIsSearching(false); }
   };
 
   const handleProcessPayment = async () => {
@@ -101,6 +81,7 @@ export default function CashierDashboard() {
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
       
+      // 1. EXECUTE: RPC Deducts float and creates 'print' entry
       const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
@@ -110,29 +91,28 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // Calculate totals for the print
-      const totalOdds = cart.reduce((acc, item) => acc * parseFloat(item.odds || 1), 1);
+      // 2. THE LUCRA SYNC: Wait for database to commit
+      await new Promise(res => setTimeout(res, 1200));
 
-      const finalTicket = {
-        ...currentTicket,
-        ticket_serial: newSerial,
-        selections: cart,
-        stake: numStake,
-        total_odds: totalOdds,
-        potential_payout: numStake * totalOdds
-      };
+      // 3. FETCH: Get the Official Record (includes logo_url, shop_name from DB defaults)
+      const { data: officialTicket, error: fetchError } = await supabase
+        .from('print')
+        .select('*')
+        .eq('ticket_serial', newSerial)
+        .single();
 
-      // TRIPLE ACTION: Set Data -> Trigger Print -> Reset UI
+      if (fetchError || !officialTicket) throw new Error("Sync failed. Record not found.");
+
+      // 4. PRINT: Hand verified DB data to the printer
       shouldPrintRef.current = true;
-      setCurrentTicket(finalTicket);
+      setCurrentTicket(officialTicket);
+      
+      // 5. RESET UI
       setCart([]);
       setStake("");
-      initTerminal(); // Refresh balance
-      
-      // Cleanup printable data after 30 seconds
-      setTimeout(() => setCurrentTicket(null), 30000);
+      initTerminal(); 
 
-    } catch (err) { alert("❌ ERROR: " + err.message); } finally { setIsProcessing(false); }
+    } catch (err) { alert("❌ TERMINAL ERROR: " + err.message); } finally { setIsProcessing(false); }
   };
 
   return (
@@ -154,7 +134,7 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleLoadTicket} 
                 disabled={isSearching} 
-                className="bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 text-black font-black px-8 rounded-xl transition-all"
+                className="bg-[#10b981] hover:bg-[#059669] text-black font-black px-8 rounded-xl"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
@@ -191,14 +171,12 @@ export default function CashierDashboard() {
       {/* PRINT ENGINE */}
       {currentTicket && (
         <div className="lucra-print-area">
-          <PrintableTicket ticket={currentTicket} profiles={allProfiles} user={userProfile} />
+          <PrintableTicket ticket={currentTicket} />
         </div>
       )}
 
       <style jsx global>{`
-        @media screen {
-          .lucra-print-area { display: none !important; }
-        }
+        @media screen { .lucra-print-area { display: none !important; } }
         @media print {
           .no-print { display: none !important; }
           .lucra-print-area { display: block !important; position: absolute; left: 0; top: 0; width: 72mm; }
