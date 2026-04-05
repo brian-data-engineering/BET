@@ -25,46 +25,45 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // UPDATE 1: THE BODY-INJECTION AUTO-PRINT LOGIC
+  /**
+   * PRODUCTION AUTO-PRINT LOGIC
+   * Uses Body-Injection to bypass Layout restrictions.
+   */
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
-        console.log("🖨️ [INJECTION] Preparing isolated print container...");
-        
-        // 1. Grab the HTML that is already working in the Preview
+        // 1. Capture the working HTML from the visible preview
         const previewElement = document.getElementById('visible-preview');
         if (!previewElement) return;
         const ticketContent = previewElement.innerHTML;
 
-        // 2. Create a temporary container at the root of the document
+        // 2. Create the portal outside of the React tree
         const printContainer = document.createElement('div');
         printContainer.id = 'temp-print-portal';
+        
+        // We wrap it in a div to ensure background is white and clean
         printContainer.innerHTML = `
-          <div style="background: white; padding: 10px;">
-            <h1 style="color: red; text-align: center; font-size: 14px; border: 2px solid red; margin-bottom: 10px;">
-               LUCRA PRINT PORTAL ACTIVE
-            </h1>
+          <div style="background: white; width: 100%;">
             ${ticketContent}
           </div>
         `;
 
-        // 3. Inject directly into the <body> (Sibling to the whole App)
+        // 3. Inject to Body
         document.body.appendChild(printContainer);
 
-        // 4. Trigger Print
+        // 4. Print
         window.focus();
         window.print();
 
-        // 5. Cleanup: Remove the container after the dialog closes
-        // and reset the print ref
+        // 5. Cleanup
         setTimeout(() => {
-            if (document.getElementById('temp-print-portal')) {
-                document.body.removeChild(printContainer);
-            }
-            shouldPrintRef.current = false;
+          if (document.getElementById('temp-print-portal')) {
+            document.body.removeChild(printContainer);
+          }
+          shouldPrintRef.current = false;
         }, 1000);
 
-      }, 2500); // Wait for Barcode to be fully ready in the Preview
+      }, 2000); // 2s is enough for barcodes to stabilize
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -131,6 +130,7 @@ export default function CashierDashboard() {
       <CashierLayout>
         <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
           <div className="lg:col-span-2 space-y-6">
+            {/* Terminal Input */}
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
                <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2 italic uppercase">
                 <Search className="text-[#10b981]" /> Terminal Load
@@ -149,6 +149,7 @@ export default function CashierDashboard() {
               </div>
             </div>
 
+            {/* Float Info */}
             <div className="grid grid-cols-2 gap-4">
                <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
                  <p className="text-zinc-500 text-[10px] font-black uppercase">Available Float</p>
@@ -176,14 +177,14 @@ export default function CashierDashboard() {
           </div>
         </div>
 
-        {/* --- VISIBLE PREVIEW (Keep this, we use its HTML for the printer) --- */}
+        {/* --- LIVE PREVIEW (Used as Source for Printer) --- */}
         {currentTicket && (
-          <div className="lucra-preview-container no-print">
-            <div className="bg-white p-6 shadow-2xl border-2 border-[#10b981] max-w-[320px] mx-auto mt-10 rounded-lg">
-              <p className="text-[10px] text-gray-500 text-center mb-4 font-mono font-bold uppercase tracking-widest border-b pb-2">
-                --- Live Printer Preview ---
+          <div className="lucra-preview-container no-print pb-20">
+            <div className="bg-white p-4 shadow-2xl border-2 border-[#10b981] max-w-[320px] mx-auto mt-10 rounded-lg">
+              <p className="text-[10px] text-gray-400 text-center mb-4 font-mono font-bold uppercase tracking-tighter border-b pb-2">
+                --- Printer Snapshot ---
               </p>
-              <div id="visible-preview" className="text-black bg-white">
+              <div id="visible-preview" className="bg-white">
                 <PrintableTicket ticket={currentTicket} />
               </div>
             </div>
@@ -191,39 +192,18 @@ export default function CashierDashboard() {
         )}
       </CashierLayout>
 
-      {/* UPDATE 2: THE GLOBAL CSS FOR THE INJECTED PORTAL */}
+      {/* Note: We keep the styles here as a backup, 
+          but your globals.css should handle the heavy lifting. 
+      */}
       <style jsx global>{`
         @media screen {
           #temp-print-portal { display: none !important; }
         }
-
         @media print {
-          /* Kill everything inside the React root */
-          #__next, #lucra-layout-root, body > div:not(#temp-print-portal) {
-            display: none !important;
-            visibility: hidden !important;
-          }
-
-          html, body {
-            background: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            height: auto !important;
-          }
-
-          #temp-print-portal {
-            display: block !important;
-            visibility: visible !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-          }
-
-          /* Ensure all content inside the portal is visible and black */
-          #temp-print-portal * {
-            visibility: visible !important;
-            color: black !important;
+          #__next, .no-print { display: none !important; }
+          #temp-print-portal { 
+            display: block !important; 
+            width: 100%;
           }
         }
       `}</style>
