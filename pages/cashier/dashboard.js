@@ -164,7 +164,7 @@ export default function CashierDashboard() {
         </div>
       )}
 
-      <style jsx global>{`
+     <style jsx global>{`
   @media screen {
     /* Hide the real print area from the dashboard view */
     .lucra-print-area { 
@@ -181,33 +181,45 @@ export default function CashierDashboard() {
     .lucra-preview-container { display: block; padding-bottom: 100px; }
   }
 
-  /* THIS SECTION FIXES THE BLANK PRINT DIALOG */
+  /* --- CRITICAL PRINT OVERRIDE --- */
   @media print {
-    /* 1. Hide everything else on the page */
+    /* 1. Force the body to allow content to show (fixes the 'hidden' issue) */
+    html, body {
+      height: auto !important;
+      overflow: visible !important;
+      background: white !important;
+    }
+
+    /* 2. Hide everything by default */
     body * { 
       visibility: hidden !important; 
     }
 
-    /* 2. Force the print area to be visible only for the printer */
-    .lucra-print-area, .lucra-print-area * { 
+    /* 3. Force the Ticket Area and ALL its children to be visible */
+    .lucra-print-area, 
+    .lucra-print-area *, 
+    .lucra-print-area div, 
+    .lucra-print-area span, 
+    .lucra-print-area img { 
       visibility: visible !important; 
       display: block !important;
     }
 
-    /* 3. Position the ticket at the very top-left of the paper */
+    /* 4. Position it at the top so it's not off-screen */
     .lucra-print-area { 
       position: absolute !important; 
       left: 0 !important; 
       top: 0 !important; 
       width: 100% !important;
       margin: 0 !important;
-      padding: 0 !important;
-      background: white !important;
+      padding: 10px !important; /* Small margin for the thermal edge */
+      z-index: 9999999 !important;
     }
 
-    /* 4. Hide the preview box so you don't get two tickets */
+    /* 5. Hide the dashboard elements and the preview box */
     .no-print, .lucra-preview-container { 
       display: none !important; 
+      visibility: hidden !important;
     }
   }
 `}</style>
