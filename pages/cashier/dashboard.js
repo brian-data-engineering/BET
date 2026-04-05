@@ -25,49 +25,63 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // 1. UPDATED EFFECT (No Auto-Print, No Reset)
-  // This ensures the data stays in the state so we can inspect it.
+  // 1. DIAGNOSTIC EFFECT (Keeps data on screen for inspection)
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
       console.log("🛠️ [DEBUG] Ticket Data detected in State:", currentTicket);
-      // window.print(); // DISABLED for testing
-      // shouldPrintRef.current = false; // DISABLED for testing
+      // window.print(); // STILL DISABLED - We want to see it on the dashboard first
     }
   }, [currentTicket]);
 
+  // 2. HIGH-INTELLIGENCE SEARCH LOGIC
   const handleLoadTicket = async () => {
     if (!searchQuery || isSearching) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
     
     try {
-      const { data: ticket, error } = await supabase
-        .from('betsnow')
-        .select('*')
-        .or(`booking_code.eq.${input},ticket_serial.eq.${input}`)
-        .single();
+      console.log("🔍 [DEBUG] Searching for:", input);
 
-      if (error || !ticket) {
-        alert("⚠️ INVALID CODE OR TICKET NOT FOUND");
+      // STEP 1: Check if this is an ALREADY PAID ticket in the 'print' table
+      const { data: printedTicket } = await supabase
+        .from('print')
+        .select('*')
+        .or(`ticket_serial.eq.${input},booking_code.eq.${input}`)
+        .maybeSingle();
+
+      if (printedTicket) {
+        console.log("✅ [DEBUG] Found PAID Ticket. Serial:", printedTicket.ticket_serial);
+        shouldPrintRef.current = true; 
+        setCurrentTicket(printedTicket); 
+        setSearchQuery('');
         return;
       }
 
-      const rawSelections = typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections;
-      
-      if (ticket.ticket_serial) {
-        if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          const { data: printedDoc } = await supabase.from('print').select('*').eq('ticket_serial', ticket.ticket_serial).single();
-          shouldPrintRef.current = true;
-          setCurrentTicket(printedDoc);
-        }
-      } else {
-        setCart(rawSelections || []);
-        setStake(ticket.stake?.toString() || "100");
-        setCurrentTicket(ticket); 
+      // STEP 2: Check for a new booking in 'betsnow'
+      const { data: booking } = await supabase
+        .from('betsnow')
+        .select('*')
+        .eq('booking_code', input)
+        .maybeSingle();
+
+      if (!booking) {
+        console.error("❌ [DEBUG] No record found in either table.");
+        alert("⚠️ CODE NOT FOUND");
+        return;
       }
+
+      console.log("🎟️ [DEBUG] Found UNPAID Booking. Loading to slip...");
+      const rawSelections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : booking.selections;
+      
+      setCart(rawSelections || []);
+      setStake(booking.stake?.toString() || "100");
+      
+      shouldPrintRef.current = false; 
+      setCurrentTicket(booking); 
       setSearchQuery('');
+
     } catch (err) {
-      console.error("❌ Search Error:", err);
+      console.error("💥 [DEBUG] Search Crash:", err);
     } finally {
       setIsSearching(false);
     }
@@ -75,8 +89,7 @@ export default function CashierDashboard() {
 
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
-    if (!numStake || numStake <= 0) return alert("Enter stake");
-    if (numStake > (userProfile?.balance || 0)) return alert("⚠️ INSUFFICIENT FLOAT");
+    if (!numStake || numStake <= 0 || numStake > (userProfile?.balance || 0)) return alert("Check Stake/Balance");
     
     setIsProcessing(true);
     console.log("💳 [PAYMENT] Initiating transaction...");
@@ -93,25 +106,24 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
+      // Give Supabase a moment to finish the 'print' table insert
       await new Promise(res => setTimeout(res, 1200));
 
-      const { data: officialTicket, error: fetchError } = await supabase
+      const { data: officialTicket } = await supabase
         .from('print')
         .select('*')
         .eq('ticket_serial', newSerial)
         .single();
 
-      if (fetchError || !officialTicket) throw new Error("Ledger Sync failed.");
-
-      console.log("✅ [PAYMENT] Success. Setting State (Frozen for Debug)...");
-      
-      shouldPrintRef.current = true;
-      setCurrentTicket(officialTicket);
-      
-      setCart([]);
-      setStake("");
-      initTerminal(); 
-
+      if (officialTicket) {
+        console.log("✅ [PAYMENT] Official Ledger Sync Complete.");
+        shouldPrintRef.current = true;
+        setCurrentTicket(officialTicket);
+        
+        setCart([]);
+        setStake("");
+        initTerminal(); 
+      }
     } catch (err) {
       alert("❌ TERMINAL ERROR: " + err.message);
     } finally {
@@ -121,33 +133,26 @@ export default function CashierDashboard() {
 
   return (
     <CashierLayout>
-      {/* 2. FORCED DEBUG VIEW - ALWAYS VISIBLE AT THE TOP */}
+      {/* --- DEBUG VIEW START --- */}
       <div style={{ 
-        position: 'relative', 
-        zIndex: 9999, 
-        background: 'white', 
-        padding: '20px', 
-        margin: '20px',
-        border: '10px solid #10b981',
-        color: 'black',
-        minHeight: '200px'
+        position: 'relative', zIndex: 9999, background: 'white', padding: '20px', 
+        margin: '20px', border: '10px solid #10b981', color: 'black' 
       }}>
         <h1 style={{ fontWeight: '900', color: 'red', fontSize: '24px' }}>DEBUG POWER-ON</h1>
-        <p style={{ fontWeight: 'bold' }}>Ticket ID: <span style={{ color: 'blue' }}>{currentTicket?.id || "NULL - NO DATA"}</span></p>
-        <p style={{ fontWeight: 'bold' }}>Serial: <span style={{ color: 'blue' }}>{currentTicket?.ticket_serial || "NULL"}</span></p>
+        <p><strong>Ticket ID:</strong> <span style={{ color: 'blue' }}>{currentTicket?.id || "NULL"}</span></p>
+        <p><strong>Serial:</strong> <span style={{ color: 'blue' }}>{currentTicket?.ticket_serial || "PENDING (NOT PAID)"}</span></p>
         
         {currentTicket ? (
            <div className="border-4 border-black p-4 mt-4 bg-gray-50">
-             <p className="text-xs text-gray-500 mb-2 font-mono">--- START PRINTABLE CONTENT ---</p>
              <PrintableTicket ticket={currentTicket} />
-             <p className="text-xs text-gray-500 mt-2 font-mono">--- END PRINTABLE CONTENT ---</p>
            </div>
         ) : (
-          <div className="p-10 text-center border-2 border-dashed border-gray-300 mt-4">
-            Waiting for Ticket Data...
+          <div className="p-10 text-center border-2 border-dashed border-gray-300 mt-4 text-gray-400">
+            LOAD A CODE TO START DEBUGGING
           </div>
         )}
       </div>
+      {/* --- DEBUG VIEW END --- */}
 
       <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
         <div className="lg:col-span-2 space-y-6">
@@ -163,34 +168,28 @@ export default function CashierDashboard() {
                 placeholder="Enter Booking Code..." 
                 className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl outline-none focus:border-[#10b981]" 
               />
-              <button 
-                onClick={handleLoadTicket} 
-                disabled={isSearching} 
-                className="bg-[#10b981] hover:bg-[#059669] text-black font-black px-8 rounded-xl transition-all active:scale-95"
-              >
+              <button onClick={handleLoadTicket} disabled={isSearching} className="bg-[#10b981] text-black font-black px-8 rounded-xl">
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Available Float</p>
-              <p className="text-white text-3xl font-black italic tabular-nums">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
+            <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 text-white">
+              <p className="text-zinc-500 text-[10px] uppercase font-black">Float Balance</p>
+              <p className="text-3xl font-black italic tabular-nums">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
             </div>
-            <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Terminal</p>
-              <p className="text-[#10b981] text-xl font-black uppercase truncate">{userProfile?.shop_name || "LUCRA"}</p>
+            <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 text-[#10b981]">
+              <p className="text-zinc-500 text-[10px] uppercase font-black">Terminal</p>
+              <p className="text-xl font-black truncate">{userProfile?.shop_name || "LUCRA"}</p>
             </div>
           </div>
         </div>
 
         <div className="lg:col-span-1">
           <Betslip 
-            cart={cart} 
-            setCart={setCart} 
-            stake={stake} 
-            onStakeChange={setStake} 
+            cart={cart} setCart={setCart} 
+            stake={stake} onStakeChange={setStake} 
             onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} 
             onClear={() => {setCart([]); setCurrentTicket(null);}} 
             onProcess={handleProcessPayment} 
