@@ -1,44 +1,35 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import { TrendingUp, TrendingDown, Wallet, Calendar, RefreshCcw, BarChart3, ShieldCheck } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, RefreshCcw, ShieldCheck, Loader2, BarChart3 } from 'lucide-react';
 
 export default function CashierReport() {
-  const [stats, setStats] = useState({ sales: 0, payouts: 0, count: 0 });
+  const [stats, setStats] = useState({ sales: 0, payouts: 0, count: 0, profit: 0 });
   const [loading, setLoading] = useState(true);
 
   const fetchTodayStats = useCallback(async () => {
     setLoading(true);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // FETCH DIRECTLY FROM THE LEDGER
-      const { data: ledgerRows, error } = await supabase
-        .from('ledger')
-        .select('amount, type, source')
-        .eq('user_id', user.id)
-        .gte('created_at', today.toISOString());
+      // CALLING YOUR SQL RPC FUNCTION DIRECTLY
+      const { data, error } = await supabase.rpc('get_daily_cashier_report', { 
+        p_cashier_id: user.id 
+      });
 
       if (error) throw error;
 
-      const summary = ledgerRows.reduce((acc, row) => {
-        const val = parseFloat(row.amount);
-        if (row.source === 'bet_placed') {
-          acc.sales += val;
-          acc.count += 1;
-        } else if (row.source === 'bet_won') {
-          acc.payouts += val;
-        }
-        return acc;
-      }, { sales: 0, payouts: 0, count: 0 });
-
-      setStats(summary);
+      if (data && data[0]) {
+        setStats({
+          count: parseInt(data[0].total_tickets),
+          sales: parseFloat(data[0].total_sales),
+          payouts: parseFloat(data[0].total_payouts),
+          profit: parseFloat(data[0].net_profit)
+        });
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Report Fetch Error:", err.message);
     } finally {
       setLoading(false);
     }
@@ -46,40 +37,78 @@ export default function CashierReport() {
 
   useEffect(() => { fetchTodayStats(); }, [fetchTodayStats]);
 
-  const netBalance = stats.sales - stats.payouts;
-
   return (
     <CashierLayout>
-      <div className="p-8 max-w-5xl mx-auto bg-[#0b0f1a] min-h-screen text-white">
+      <div className="p-8 max-w-5xl mx-auto bg-[#0b0f1a] min-h-screen text-white font-sans">
+        
+        {/* Header */}
         <div className="flex justify-between items-end mb-12">
           <div>
             <div className="flex items-center gap-2 text-[#10b981] mb-2">
               <ShieldCheck size={16} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Financial Integrity Audit</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">Midnight to Midnight Audit</span>
             </div>
             <h1 className="text-5xl font-black italic uppercase tracking-tighter">Shift Audit</h1>
+            <p className="text-zinc-500 text-[10px] font-bold uppercase mt-2">Live Database Statistics</p>
           </div>
-          <button onClick={fetchTodayStats} className="p-5 bg-[#111926] rounded-3xl border border-white/5">
-            <RefreshCcw size={22} className={`${loading ? 'animate-spin' : ''} text-[#10b981]`} />
+          
+          <button 
+            onClick={fetchTodayStats} 
+            disabled={loading}
+            className="p-5 bg-[#111926] rounded-3xl border border-white/5 hover:border-[#10b981]/30 transition-all"
+          >
+            {loading ? <Loader2 size={22} className="animate-spin text-[#10b981]" /> : <RefreshCcw size={22} className="text-[#10b981]" />}
           </button>
         </div>
 
+        {/* Top Level Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <StatCard icon={<TrendingUp size={24} className="text-[#10b981]" />} label="Total Sales (In)" value={stats.sales} trend="Digital Collection" />
-          <StatCard icon={<TrendingDown size={24} className="text-red-500" />} label="Total Payouts (Out)" value={stats.payouts} trend="Digital Reimbursement" />
-          <StatCard icon={<Wallet size={24} className="text-blue-500" />} label="Expected Cash" value={netBalance} isHighlight color={netBalance >= 0 ? "text-[#10b981]" : "text-red-500"} />
+          <StatCard 
+            icon={<TrendingUp size={24} className="text-[#10b981]" />} 
+            label="Total Sales (Stakes)" 
+            value={stats.sales} 
+            trend="Today's Collection" 
+          />
+          <StatCard 
+            icon={<TrendingDown size={24} className="text-red-500" />} 
+            label="Total Payouts (Wins)" 
+            value={stats.payouts} 
+            trend="Settled Tickets" 
+          />
+          <StatCard 
+            icon={<Wallet size={24} className="text-blue-500" />} 
+            label="Expected Profit/Loss" 
+            value={stats.profit} 
+            isHighlight 
+            color={stats.profit >= 0 ? "text-[#10b981]" : "text-red-500"} 
+            trend="Net Result"
+          />
         </div>
 
-        <div className="bg-[#111926] border border-white/5 rounded-[3.5rem] p-12">
-           <div className="space-y-8">
-              <ReportLine label="Tickets Processed" value={stats.count} />
-              <ReportLine label="Net Sales" value={`KES ${stats.sales.toLocaleString()}`} />
-              <div className="pt-10 border-t border-white/5 flex justify-between items-end">
-                <span className="text-4xl font-black italic text-[#10b981]">
-                  TOTAL: KES {netBalance.toLocaleString()}
-                </span>
-              </div>
-           </div>
+        {/* Detailed Breakdown Area */}
+        <div className="bg-[#111926] border border-white/5 rounded-[3.5rem] p-12 shadow-2xl relative overflow-hidden">
+            {/* Decorative Background Icon */}
+            <BarChart3 className="absolute -right-10 -bottom-10 w-64 h-64 opacity-[0.02] text-white" />
+            
+            <div className="relative z-10 space-y-8">
+               <ReportLine label="Tickets Issued Today" value={stats.count.toLocaleString()} />
+               <ReportLine label="Total Cash In (Stakes)" value={`KES ${stats.sales.toLocaleString()}`} />
+               <ReportLine label="Total Cash Out (Payouts)" value={`KES ${stats.payouts.toLocaleString()}`} />
+               
+               <div className="pt-10 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
+                 <div>
+                   <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em]">Final Net Balance</p>
+                   <span className={`text-5xl font-black italic tracking-tighter ${stats.profit >= 0 ? 'text-[#10b981]' : 'text-red-500'}`}>
+                     KES {stats.profit.toLocaleString()}
+                   </span>
+                 </div>
+                 
+                 <div className="text-center md:text-right">
+                    <p className="text-[8px] font-bold text-zinc-600 uppercase">Audit Timestamp</p>
+                    <p className="text-xs font-mono text-zinc-400">{new Date().toLocaleString()}</p>
+                 </div>
+               </div>
+            </div>
         </div>
       </div>
     </CashierLayout>
@@ -89,19 +118,24 @@ export default function CashierReport() {
 // Helpers
 function StatCard({ icon, label, value, color, isHighlight, trend }) {
   return (
-    <div className={`bg-[#111926] p-8 rounded-[2.5rem] border ${isHighlight ? 'border-blue-500/20' : 'border-white/5'}`}>
-      <div className="flex justify-between mb-6"><div className="p-3 bg-[#0b0f1a] rounded-2xl">{icon}</div><span className="text-[8px] font-black opacity-40 uppercase">{trend}</span></div>
-      <p className="text-[9px] font-black opacity-50 uppercase mb-1">{label}</p>
-      <h3 className={`text-3xl font-black italic ${color || 'text-white'}`}>KES {value.toLocaleString()}</h3>
+    <div className={`bg-[#111926] p-8 rounded-[2.5rem] border ${isHighlight ? 'border-[#10b981]/20 shadow-[0_0_40px_-15px_rgba(16,185,129,0.1)]' : 'border-white/5'}`}>
+      <div className="flex justify-between mb-6">
+        <div className="p-3 bg-[#0b0f1a] rounded-2xl">{icon}</div>
+        <span className="text-[8px] font-black opacity-40 uppercase tracking-widest">{trend}</span>
+      </div>
+      <p className="text-[9px] font-black opacity-50 uppercase mb-1 tracking-wider">{label}</p>
+      <h3 className={`text-3xl font-black italic tabular-nums ${color || 'text-white'}`}>
+        KES {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+      </h3>
     </div>
   );
 }
 
 function ReportLine({ label, value }) {
   return (
-    <div className="flex justify-between border-b border-white/5 pb-4">
-      <span className="text-xs font-black opacity-50 uppercase">{label}</span>
-      <span className="text-lg font-black italic">{value}</span>
+    <div className="flex justify-between items-center border-b border-white/5 pb-4">
+      <span className="text-xs font-black opacity-40 uppercase tracking-widest">{label}</span>
+      <span className="text-xl font-black italic tracking-tight">{value}</span>
     </div>
   );
 }
