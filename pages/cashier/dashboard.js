@@ -26,12 +26,12 @@ export default function CashierDashboard() {
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
   // EFFECT: Watches for the official DB record to arrive before printing
-  useEffect(() => {
+ useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
       const timer = setTimeout(() => {
         window.print();
         shouldPrintRef.current = false; 
-      }, 1000); 
+      }, 1500); // Increased slightly for slower asset loads
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
