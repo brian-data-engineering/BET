@@ -25,20 +25,39 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // EFFECT: The "Blank Page Killer"
+  /**
+   * THE LUCRA PRINT ENGINE v2.1
+   * Fixes: 7.9s Timeout Violation & White Blank Screen
+   */
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
-      // 1.5s allows React to render and the Browser to cache the Logo/Barcode
+      console.log("🛠️ [SYSTEM] Print requested. Starting render cycle...");
+
+      // STEP 1: Wait for assets (Logo/Barcode) to begin mounting
       const timer = setTimeout(() => {
-        window.print();
-        shouldPrintRef.current = false; 
         
-        // Safety: Keep ticket on screen for 3 more seconds after print window opens
-        // This ensures the browser doesn't "lose" the content if the cashier hits cancel
-        setTimeout(() => {
-          if (!shouldPrintRef.current) setCurrentTicket(null);
-        }, 3000);
-      }, 1500); 
+        console.log("🎨 [SYSTEM] HTML injection complete. Waiting for browser 'Paint'...");
+
+        // STEP 2: Wait for the Browser's next animation frame (ensures no freeze)
+        requestAnimationFrame(() => {
+          
+          // STEP 3: Final 500ms "Settle" time for react-barcode to finish drawing
+          setTimeout(() => {
+            console.log("🖨️ [SYSTEM] TRIGGERING WINDOW.PRINT()");
+            window.print();
+            
+            shouldPrintRef.current = false;
+
+            // Cleanup: Wait 5 seconds before clearing ticket so the preview stays stable
+            setTimeout(() => {
+              console.log("🧹 [SYSTEM] Resetting printer area.");
+              setCurrentTicket(null);
+            }, 5000);
+          }, 500);
+
+        });
+      }, 2500); // 2.5s Total Buffer for slow assets
+      
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -47,6 +66,7 @@ export default function CashierDashboard() {
     if (!searchQuery || isSearching) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
+    console.log(`🔍 [ACTION] Searching for code: ${input}`);
     
     try {
       const { data: ticket, error } = await supabase
@@ -64,17 +84,19 @@ export default function CashierDashboard() {
       
       if (ticket.ticket_serial) {
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
+          console.log("♻️ [ACTION] Fetching paid record for reprint...");
           const { data: printedDoc } = await supabase.from('print').select('*').eq('ticket_serial', ticket.ticket_serial).single();
           shouldPrintRef.current = true;
           setCurrentTicket(printedDoc);
         }
       } else {
+        console.log("📋 [ACTION] Loading booking into cart.");
         setCart(rawSelections || []);
         setStake(ticket.stake?.toString() || "100");
         setCurrentTicket(ticket); 
       }
       setSearchQuery('');
-    } catch (err) { console.error(err); } finally { setIsSearching(false); }
+    } catch (err) { console.error("❌ Search Error:", err); } finally { setIsSearching(false); }
   };
 
   const handleProcessPayment = async () => {
@@ -83,6 +105,8 @@ export default function CashierDashboard() {
     if (numStake > (userProfile?.balance || 0)) return alert("⚠️ INSUFFICIENT FLOAT");
     
     setIsProcessing(true);
+    console.log("💳 [PAYMENT] Initiating transaction...");
+
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
       
@@ -95,7 +119,7 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // Wait for DB consistency
+      console.log("🔗 [PAYMENT] Deducted float. Waiting for Ledger Sync...");
       await new Promise(res => setTimeout(res, 1200));
 
       const { data: officialTicket, error: fetchError } = await supabase
@@ -104,13 +128,12 @@ export default function CashierDashboard() {
         .eq('ticket_serial', newSerial)
         .single();
 
-      if (fetchError || !officialTicket) throw new Error("Sync failed. Record not found.");
+      if (fetchError || !officialTicket) throw new Error("Ledger Sync failed.");
 
-      // Set print intent BEFORE setting the ticket
+      console.log("✅ [PAYMENT] Official record retrieved. Handing to Printer.");
       shouldPrintRef.current = true;
       setCurrentTicket(officialTicket);
       
-      // RESET UI elements only - currentTicket stays until the Effect clears it
       setCart([]);
       setStake("");
       initTerminal(); 
@@ -120,7 +143,6 @@ export default function CashierDashboard() {
 
   return (
     <CashierLayout>
-      {/* Container for the Screen UI */}
       <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
@@ -172,7 +194,6 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* Container for the Printer - Absolute positioning for thermal paper */}
       {currentTicket && (
         <div className="lucra-print-area">
           <PrintableTicket ticket={currentTicket} />
@@ -181,24 +202,32 @@ export default function CashierDashboard() {
 
       <style jsx global>{`
         @media screen { 
-          .lucra-print-area { display: none !important; } 
+          .lucra-print-area { 
+            position: absolute !important;
+            top: -9999px !important;
+            opacity: 0 !important;
+          } 
         }
         @media print {
-          /* Force everything else to disappear */
           #__next > :not(.lucra-print-area),
           .no-print,
           aside,
-          nav { display: none !important; }
+          nav,
+          header { display: none !important; height: 0 !important; overflow: hidden !important; }
           
-          /* Show only the ticket area */
+          html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+
           .lucra-print-area { 
             display: block !important; 
+            visibility: visible !important;
             position: absolute !important; 
             left: 0 !important; 
             top: 0 !important; 
             width: 72mm !important; 
             background: white !important;
           }
+          
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
     </CashierLayout>
