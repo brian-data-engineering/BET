@@ -26,34 +26,33 @@ export default function CashierDashboard() {
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
   /**
-   * THE LUCRA PRINT ENGINE v2.5 (High Performance)
-   * Solves: 32s Violation, Opacity: 0, and White Blank Screens
+   * THE LUCRA PRINT ENGINE v3.0
+   * Fixes: 36s Edge Lag, White Screen, and Opacity bugs.
    */
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
-      console.log("🛠️ [SYSTEM] Print requested. Starting render cycle...");
+      console.log("🛠️ [SYSTEM] Render detected. Stabilizing for print...");
 
-      // STEP 1: Small delay to let React mount the 'lucra-print-area'
+      // Give React 800ms to mount the component and the Canvas Barcode
       const timer = setTimeout(() => {
         
-        // STEP 2: Use requestAnimationFrame to ensure the browser isn't "busy"
+        // requestAnimationFrame ensures the 'Paint' cycle is finished
         requestAnimationFrame(() => {
           console.log("🖨️ [SYSTEM] TRIGGERING WINDOW.PRINT()");
           
-          // Force window focus before printing to prevent "background" hang
-          window.focus();
+          window.focus(); // Vital for Edge to prevent background hangs
           window.print();
           
           shouldPrintRef.current = false;
 
-          // STEP 3: Wait 5 seconds before clearing state to allow print preview to finish
+          // Clear ticket state after 4 seconds to keep the preview stable
           setTimeout(() => {
             console.log("🧹 [SYSTEM] Resetting printer area.");
             setCurrentTicket(null);
-          }, 5000);
+          }, 4000);
         });
 
-      }, 1000); // 1s is perfect balance for Canvas + Assets
+      }, 800); 
       
       return () => clearTimeout(timer);
     }
@@ -63,7 +62,6 @@ export default function CashierDashboard() {
     if (!searchQuery || isSearching) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
-    console.log(`🔍 [ACTION] Searching for code: ${input}`);
     
     try {
       const { data: ticket, error } = await supabase
@@ -81,19 +79,21 @@ export default function CashierDashboard() {
       
       if (ticket.ticket_serial) {
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          console.log("♻️ [ACTION] Fetching paid record for reprint...");
           const { data: printedDoc } = await supabase.from('print').select('*').eq('ticket_serial', ticket.ticket_serial).single();
           shouldPrintRef.current = true;
           setCurrentTicket(printedDoc);
         }
       } else {
-        console.log("📋 [ACTION] Loading booking into cart.");
         setCart(rawSelections || []);
         setStake(ticket.stake?.toString() || "100");
         setCurrentTicket(ticket); 
       }
       setSearchQuery('');
-    } catch (err) { console.error("❌ Search Error:", err); } finally { setIsSearching(false); }
+    } catch (err) {
+      console.error("❌ Search Error:", err);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleProcessPayment = async () => {
@@ -116,8 +116,8 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      console.log("🔗 [PAYMENT] Deducted float. Waiting for Ledger Sync...");
-      await new Promise(res => setTimeout(res, 1200));
+      // Small delay to let Supabase write the print record
+      await new Promise(res => setTimeout(res, 1000));
 
       const { data: officialTicket, error: fetchError } = await supabase
         .from('print')
@@ -127,15 +127,22 @@ export default function CashierDashboard() {
 
       if (fetchError || !officialTicket) throw new Error("Ledger Sync failed.");
 
-      console.log("✅ [PAYMENT] Official record retrieved. Handing to Printer.");
+      console.log("✅ [PAYMENT] Success. Sending to thermal engine...");
+      
+      // TRIGGER PRINT
       shouldPrintRef.current = true;
       setCurrentTicket(officialTicket);
       
+      // CLEAR UI
       setCart([]);
       setStake("");
       initTerminal(); 
 
-    } catch (err) { alert("❌ TERMINAL ERROR: " + err.message); } finally { setIsProcessing(false); }
+    } catch (err) {
+      alert("❌ TERMINAL ERROR: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -143,7 +150,7 @@ export default function CashierDashboard() {
       <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
-            <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2 italic uppercase">
+            <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2 italic uppercase tracking-tighter">
               <Search className="text-[#10b981]" /> Load Terminal Code
             </h2>
             <div className="flex gap-2">
@@ -157,7 +164,7 @@ export default function CashierDashboard() {
               <button 
                 onClick={handleLoadTicket} 
                 disabled={isSearching} 
-                className="bg-[#10b981] hover:bg-[#059669] text-black font-black px-8 rounded-xl"
+                className="bg-[#10b981] hover:bg-[#059669] text-black font-black px-8 rounded-xl transition-all active:scale-95"
               >
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
@@ -191,7 +198,7 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* TICKET CONTAINER */}
+      {/* HIDDEN PRINT COMPONENT */}
       {currentTicket && (
         <div className="lucra-print-area">
           <PrintableTicket ticket={currentTicket} />
@@ -201,46 +208,40 @@ export default function CashierDashboard() {
       <style jsx global>{`
         @media screen { 
           .lucra-print-area { 
-            position: absolute !important;
+            position: fixed !important;
             top: -9999px !important;
             left: -9999px !important;
-            opacity: 0 !important; /* Invisible on screen but exists for the engine */
+            opacity: 0 !important;
             pointer-events: none !important;
           } 
         }
 
         @media print {
-          /* 1. Hide every container except the ticket */
+          /* Hide everything except the ticket area */
           body > *:not(.lucra-print-area) { 
             display: none !important; 
           }
 
-          /* 2. FORCE THE TICKET TO BE VISIBLE AND FULL OPACITY */
           .lucra-print-area { 
             display: block !important; 
             visibility: visible !important;
             opacity: 1 !important; 
-            position: relative !important;
-            top: 0 !important;
-            left: 0 !important;
+            position: static !important;
             width: 72mm !important;
             background: white !important;
-            color: black !important;
           }
 
-          /* Force browser to show images and text */
+          /* Global override for potential child opacity issues */
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             opacity: 1 !important;
-            visibility: visible !important;
             color: black !important;
           }
 
-          html, body { 
-            background: white !important; 
-            margin: 0 !important; 
-            padding: 0 !important; 
+          @page {
+            size: auto;
+            margin: 0mm;
           }
         }
       `}</style>
