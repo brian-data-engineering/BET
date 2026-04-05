@@ -25,36 +25,13 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  /**
-   * THE LUCRA PRINT ENGINE v3.0
-   * Fixes: 36s Edge Lag, White Screen, and Opacity bugs.
-   */
+  // 1. UPDATED EFFECT (No Auto-Print, No Reset)
+  // This ensures the data stays in the state so we can inspect it.
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
-      console.log("🛠️ [SYSTEM] Render detected. Stabilizing for print...");
-
-      // Give React 800ms to mount the component and the Canvas Barcode
-      const timer = setTimeout(() => {
-        
-        // requestAnimationFrame ensures the 'Paint' cycle is finished
-        requestAnimationFrame(() => {
-          console.log("🖨️ [SYSTEM] TRIGGERING WINDOW.PRINT()");
-          
-          window.focus(); // Vital for Edge to prevent background hangs
-          window.print();
-          
-          shouldPrintRef.current = false;
-
-          // Clear ticket state after 4 seconds to keep the preview stable
-          setTimeout(() => {
-            console.log("🧹 [SYSTEM] Resetting printer area.");
-            setCurrentTicket(null);
-          }, 4000);
-        });
-
-      }, 800); 
-      
-      return () => clearTimeout(timer);
+      console.log("🛠️ [DEBUG] Ticket Data detected in State:", currentTicket);
+      // window.print(); // DISABLED for testing
+      // shouldPrintRef.current = false; // DISABLED for testing
     }
   }, [currentTicket]);
 
@@ -116,8 +93,7 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // Small delay to let Supabase write the print record
-      await new Promise(res => setTimeout(res, 1000));
+      await new Promise(res => setTimeout(res, 1200));
 
       const { data: officialTicket, error: fetchError } = await supabase
         .from('print')
@@ -127,13 +103,11 @@ export default function CashierDashboard() {
 
       if (fetchError || !officialTicket) throw new Error("Ledger Sync failed.");
 
-      console.log("✅ [PAYMENT] Success. Sending to thermal engine...");
+      console.log("✅ [PAYMENT] Success. Setting State (Frozen for Debug)...");
       
-      // TRIGGER PRINT
       shouldPrintRef.current = true;
       setCurrentTicket(officialTicket);
       
-      // CLEAR UI
       setCart([]);
       setStake("");
       initTerminal(); 
@@ -147,6 +121,34 @@ export default function CashierDashboard() {
 
   return (
     <CashierLayout>
+      {/* 2. FORCED DEBUG VIEW - ALWAYS VISIBLE AT THE TOP */}
+      <div style={{ 
+        position: 'relative', 
+        zIndex: 9999, 
+        background: 'white', 
+        padding: '20px', 
+        margin: '20px',
+        border: '10px solid #10b981',
+        color: 'black',
+        minHeight: '200px'
+      }}>
+        <h1 style={{ fontWeight: '900', color: 'red', fontSize: '24px' }}>DEBUG POWER-ON</h1>
+        <p style={{ fontWeight: 'bold' }}>Ticket ID: <span style={{ color: 'blue' }}>{currentTicket?.id || "NULL - NO DATA"}</span></p>
+        <p style={{ fontWeight: 'bold' }}>Serial: <span style={{ color: 'blue' }}>{currentTicket?.ticket_serial || "NULL"}</span></p>
+        
+        {currentTicket ? (
+           <div className="border-4 border-black p-4 mt-4 bg-gray-50">
+             <p className="text-xs text-gray-500 mb-2 font-mono">--- START PRINTABLE CONTENT ---</p>
+             <PrintableTicket ticket={currentTicket} />
+             <p className="text-xs text-gray-500 mt-2 font-mono">--- END PRINTABLE CONTENT ---</p>
+           </div>
+        ) : (
+          <div className="p-10 text-center border-2 border-dashed border-gray-300 mt-4">
+            Waiting for Ticket Data...
+          </div>
+        )}
+      </div>
+
       <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
@@ -197,38 +199,6 @@ export default function CashierDashboard() {
           />
         </div>
       </div>
-
-      {/* HIDDEN PRINT COMPONENT */}
-      {currentTicket && (
-        <div className="lucra-print-area">
-          <PrintableTicket ticket={currentTicket} />
-        </div>
-      )}
-
-     <style jsx global>{`
-  @media screen { 
-    /* FORCE VISIBILITY FOR TESTING */
-    .lucra-print-area { 
-      position: relative !important; /* Brings it back into the layout */
-      top: 0 !important;
-      left: 0 !important;
-      opacity: 1 !important;
-      display: block !important;
-      border: 10px solid #10b981 !important; /* Lucra Green Border */
-      background: white !important;
-      width: 72mm; /* Matches your thermal paper width */
-      margin: 50px auto !important; /* Centers it at the bottom */
-      padding: 10px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-    } 
-  }
-
-  /* Keep the @media print block the same as before */
-  @media print {
-    body > *:not(.lucra-print-area) { display: none !important; }
-    .lucra-print-area { display: block !important; border: none !important; }
-  }
-`}</style>
     </CashierLayout>
   );
 }
