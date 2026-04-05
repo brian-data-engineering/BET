@@ -28,10 +28,12 @@ export default function CashierDashboard() {
   // AUTO-PRINT LOGIC
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
+      // 2 second delay - gives Chrome plenty of time to 'see' the content
       const timer = setTimeout(() => {
+        console.log("🖨️ Triggering Print...");
         window.print();
         shouldPrintRef.current = false; 
-      }, 1500); // Increased to 1.5s to ensure content is fully loaded
+      }, 8000); 
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -164,62 +166,40 @@ export default function CashierDashboard() {
         </div>
       )}
 
-     <style jsx global>{`
+    <style jsx global>{`
+  /* SCREEN ONLY */
   @media screen {
-    /* Hide the real print area from the dashboard view */
-    .lucra-print-area { 
-      display: none !important; 
-    }
-    
-    /* Keep the Preview visible on screen */
+    .lucra-print-area { display: none !important; }
     #visible-preview .lucra-print-area { 
       display: block !important; 
       visibility: visible !important;
-      position: relative !important;
     }
-    
-    .lucra-preview-container { display: block; padding-bottom: 100px; }
   }
 
-  /* --- CRITICAL PRINT OVERRIDE --- */
+  /* PRINT ONLY - This is what that 'embed' plugin sees */
   @media print {
-    /* 1. Force the body to allow content to show (fixes the 'hidden' issue) */
-    html, body {
-      height: auto !important;
-      overflow: visible !important;
+    /* Kill everything on the page first */
+    html, body, #__next, .no-print, .lucra-preview-container {
+      display: none !important;
+      visibility: hidden !important;
+    }
+
+    /* Force the specific print area to exist and be visible */
+    .lucra-print-area {
+      display: block !important;
+      visibility: visible !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
       background: white !important;
     }
 
-    /* 2. Hide everything by default */
-    body * { 
-      visibility: hidden !important; 
-    }
-
-    /* 3. Force the Ticket Area and ALL its children to be visible */
-    .lucra-print-area, 
-    .lucra-print-area *, 
-    .lucra-print-area div, 
-    .lucra-print-area span, 
-    .lucra-print-area img { 
-      visibility: visible !important; 
-      display: block !important;
-    }
-
-    /* 4. Position it at the top so it's not off-screen */
-    .lucra-print-area { 
-      position: absolute !important; 
-      left: 0 !important; 
-      top: 0 !important; 
-      width: 100% !important;
-      margin: 0 !important;
-      padding: 10px !important; /* Small margin for the thermal edge */
-      z-index: 9999999 !important;
-    }
-
-    /* 5. Hide the dashboard elements and the preview box */
-    .no-print, .lucra-preview-container { 
-      display: none !important; 
-      visibility: hidden !important;
+    /* Make sure every single piece of text inside it is visible */
+    .lucra-print-area * {
+      visibility: visible !important;
+      display: inline-block !important; /* Forces text to show */
+      color: black !important;
     }
   }
 `}</style>
