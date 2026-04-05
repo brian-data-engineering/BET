@@ -33,7 +33,6 @@ export default function CashierDashboard() {
         window.focus();
         window.print();
         shouldPrintRef.current = false; 
-        // We do NOT null the ticket here so it stays visible for you to see
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -110,30 +109,51 @@ export default function CashierDashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)} 
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} 
                 placeholder="Enter Code..." 
-                className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl" 
+                className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-[#10b981] outline-none" 
               />
-              <button onClick={handleLoadTicket} disabled={isSearching} className="bg-[#10b981] text-black font-black px-8 rounded-xl">
+              <button onClick={handleLoadTicket} disabled={isSearching} className="bg-[#10b981] text-black font-black px-8 rounded-xl hover:bg-[#059669] transition-colors">
                 {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
               </button>
             </div>
           </div>
-          {/* Stats area */}
+
           <div className="grid grid-cols-2 gap-4">
-             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800"><p className="text-zinc-500 text-[10px] font-black uppercase">Float</p><p className="text-white text-3xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p></div>
-             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800"><p className="text-zinc-500 text-[10px] font-black uppercase">Shop</p><p className="text-[#10b981] text-xl font-black">{userProfile?.shop_name || "LUCRA"}</p></div>
+             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+               <p className="text-zinc-500 text-[10px] font-black uppercase">Available Float</p>
+               <p className="text-white text-3xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
+             </div>
+             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+               <p className="text-zinc-500 text-[10px] font-black uppercase">Shop</p>
+               <p className="text-[#10b981] text-xl font-black">{userProfile?.shop_name || "LUCRA"}</p>
+             </div>
           </div>
         </div>
+
         <div className="lg:col-span-1">
-          <Betslip cart={cart} setCart={setCart} stake={stake} onStakeChange={setStake} onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} onClear={() => {setCart([]); setCurrentTicket(null);}} onProcess={handleProcessPayment} isProcessing={isProcessing} user={userProfile} />
+          <Betslip 
+            cart={cart} 
+            setCart={setCart} 
+            stake={stake} 
+            onStakeChange={setStake} 
+            onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} 
+            onClear={() => {setCart([]); setCurrentTicket(null);}} 
+            onProcess={handleProcessPayment} 
+            isProcessing={isProcessing} 
+            user={userProfile} 
+          />
         </div>
       </div>
 
-      {/* --- VISIBLE TICKET PREVIEW AREA --- */}
+      {/* --- VISIBLE PREVIEW --- */}
       {currentTicket && (
         <div className="lucra-preview-container no-print">
-          <div className="bg-white p-4 shadow-2xl border-t-4 border-[#10b981] max-w-[350px] mx-auto mt-10">
-            <p className="text-[10px] text-gray-400 text-center mb-2 font-mono">--- LIVE PRINTER PREVIEW ---</p>
-            <PrintableTicket ticket={currentTicket} />
+          <div className="bg-white p-6 shadow-2xl border-2 border-[#10b981] max-w-[320px] mx-auto mt-10 rounded-lg">
+            <p className="text-[10px] text-gray-500 text-center mb-4 font-mono font-bold uppercase tracking-widest border-b pb-2">
+              --- Live Printer Preview ---
+            </p>
+            <div className="text-black bg-white">
+              <PrintableTicket ticket={currentTicket} />
+            </div>
           </div>
         </div>
       )}
@@ -147,12 +167,24 @@ export default function CashierDashboard() {
 
       <style jsx global>{`
         @media screen {
-          .lucra-print-area { display: none; }
-          .lucra-preview-container { display: block; }
+          .lucra-print-area { display: none !important; }
+          .lucra-preview-container { display: block; padding-bottom: 100px; }
         }
+
         @media print {
-          body > *:not(.lucra-print-area) { display: none !important; }
-          .lucra-print-area { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+          body * { visibility: hidden; }
+          .lucra-print-area, .lucra-print-area * { 
+            visibility: visible !important; 
+            display: block !important;
+          }
+          .lucra-print-area { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 100%;
+            background: white !important;
+            color: black !important;
+          }
           .no-print { display: none !important; }
         }
       `}</style>
