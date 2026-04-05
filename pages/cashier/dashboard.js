@@ -205,46 +205,30 @@ export default function CashierDashboard() {
         </div>
       )}
 
-      <style jsx global>{`
-        @media screen { 
-          .lucra-print-area { 
-            position: fixed !important;
-            top: -9999px !important;
-            left: -9999px !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-          } 
-        }
+     <style jsx global>{`
+  @media screen { 
+    /* FORCE VISIBILITY FOR TESTING */
+    .lucra-print-area { 
+      position: relative !important; /* Brings it back into the layout */
+      top: 0 !important;
+      left: 0 !important;
+      opacity: 1 !important;
+      display: block !important;
+      border: 10px solid #10b981 !important; /* Lucra Green Border */
+      background: white !important;
+      width: 72mm; /* Matches your thermal paper width */
+      margin: 50px auto !important; /* Centers it at the bottom */
+      padding: 10px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    } 
+  }
 
-        @media print {
-          /* Hide everything except the ticket area */
-          body > *:not(.lucra-print-area) { 
-            display: none !important; 
-          }
-
-          .lucra-print-area { 
-            display: block !important; 
-            visibility: visible !important;
-            opacity: 1 !important; 
-            position: static !important;
-            width: 72mm !important;
-            background: white !important;
-          }
-
-          /* Global override for potential child opacity issues */
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            opacity: 1 !important;
-            color: black !important;
-          }
-
-          @page {
-            size: auto;
-            margin: 0mm;
-          }
-        }
-      `}</style>
+  /* Keep the @media print block the same as before */
+  @media print {
+    body > *:not(.lucra-print-area) { display: none !important; }
+    .lucra-print-area { display: block !important; border: none !important; }
+  }
+`}</style>
     </CashierLayout>
   );
 }
