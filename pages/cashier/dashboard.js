@@ -25,19 +25,46 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // AUTO-PRINT LOGIC (Diagnostic Version)
+  // UPDATE 1: THE BODY-INJECTION AUTO-PRINT LOGIC
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
-        console.log("🖨️ [DIAGNOSTIC] Triggering Print...");
-        window.focus(); 
-        window.print();
+        console.log("🖨️ [INJECTION] Preparing isolated print container...");
         
-        // Give the printer 2 seconds to "capture" before we reset the ref
+        // 1. Grab the HTML that is already working in the Preview
+        const previewElement = document.getElementById('visible-preview');
+        if (!previewElement) return;
+        const ticketContent = previewElement.innerHTML;
+
+        // 2. Create a temporary container at the root of the document
+        const printContainer = document.createElement('div');
+        printContainer.id = 'temp-print-portal';
+        printContainer.innerHTML = `
+          <div style="background: white; padding: 10px;">
+            <h1 style="color: red; text-align: center; font-size: 14px; border: 2px solid red; margin-bottom: 10px;">
+               LUCRA PRINT PORTAL ACTIVE
+            </h1>
+            ${ticketContent}
+          </div>
+        `;
+
+        // 3. Inject directly into the <body> (Sibling to the whole App)
+        document.body.appendChild(printContainer);
+
+        // 4. Trigger Print
+        window.focus();
+        window.print();
+
+        // 5. Cleanup: Remove the container after the dialog closes
+        // and reset the print ref
         setTimeout(() => {
+            if (document.getElementById('temp-print-portal')) {
+                document.body.removeChild(printContainer);
+            }
             shouldPrintRef.current = false;
-        }, 2000);
-      }, 3000); // 3s delay to ensure Barcode canvas is fully drawn
+        }, 1000);
+
+      }, 2500); // Wait for Barcode to be fully ready in the Preview
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -149,7 +176,7 @@ export default function CashierDashboard() {
           </div>
         </div>
 
-        {/* --- VISIBLE PREVIEW --- */}
+        {/* --- VISIBLE PREVIEW (Keep this, we use its HTML for the printer) --- */}
         {currentTicket && (
           <div className="lucra-preview-container no-print">
             <div className="bg-white p-6 shadow-2xl border-2 border-[#10b981] max-w-[320px] mx-auto mt-10 rounded-lg">
@@ -164,36 +191,15 @@ export default function CashierDashboard() {
         )}
       </CashierLayout>
 
-      {/* --- ULTIMATE PRINT PORTAL (OUTSIDE THE LAYOUT) --- */}
-      {currentTicket && shouldPrintRef.current && (
-        <div className="ultimate-print-portal" style={{ background: 'white' }}>
-          <h1 style={{ 
-            color: 'red', 
-            fontSize: '20px', 
-            fontWeight: 'bold', 
-            textAlign: 'center',
-            padding: '20px',
-            border: '5px solid red',
-            display: 'block' 
-          }}>
-            IF YOU SEE THIS RED BOX, THE PORTAL IS WORKING
-          </h1>
-          <PrintableTicket ticket={currentTicket} />
-        </div>
-      )}
-
+      {/* UPDATE 2: THE GLOBAL CSS FOR THE INJECTED PORTAL */}
       <style jsx global>{`
         @media screen {
-          .ultimate-print-portal { display: none !important; }
-          #visible-preview .lucra-print-area { 
-            display: block !important; 
-            visibility: visible !important;
-            position: relative !important;
-          }
+          #temp-print-portal { display: none !important; }
         }
 
         @media print {
-          body > *:not(.ultimate-print-portal) {
+          /* Kill everything inside the React root */
+          #__next, #lucra-layout-root, body > div:not(#temp-print-portal) {
             display: none !important;
             visibility: hidden !important;
           }
@@ -203,28 +209,22 @@ export default function CashierDashboard() {
             margin: 0 !important;
             padding: 0 !important;
             height: auto !important;
-            overflow: visible !important;
           }
 
-          .ultimate-print-portal {
+          #temp-print-portal {
             display: block !important;
             visibility: visible !important;
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
-            z-index: 9999999 !important;
           }
 
-          .ultimate-print-portal *, 
-          .ultimate-print-portal .lucra-print-area {
+          /* Ensure all content inside the portal is visible and black */
+          #temp-print-portal * {
             visibility: visible !important;
-            display: block !important;
             color: black !important;
           }
-          
-          /* Force the Diagnostic Red Box to show */
-          h1 { visibility: visible !important; color: red !important; }
         }
       `}</style>
     </>
