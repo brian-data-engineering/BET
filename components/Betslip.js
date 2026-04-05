@@ -2,9 +2,10 @@ import { Ticket, X, Trash2, Zap, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export default function Betslip({ items = [], setItems, stake, onStakeChange }) {
+export default function Betslip({ items = [], setItems }) {
   const [bookingCode, setBookingCode] = useState(null);
   const [isBooking, setIsBooking] = useState(false);
+  const [stake, setStake] = useState(100);
   const MAX_GAMES = 20;
 
   // --- AUTO-CLEAR BOOKING CODE ON NEW INTERACTION ---
@@ -14,7 +15,7 @@ export default function Betslip({ items = [], setItems, stake, onStakeChange }) 
     }
   }, [items, bookingCode]);
 
-  // --- AUTO-REMOVE EXPIRED MATCHES (60s Lock) ---
+  // --- AUTO-REMOVE EXPIRED MATCHES ---
   useEffect(() => {
     const checkInterval = setInterval(() => {
       const now = new Date().getTime();
@@ -22,11 +23,14 @@ export default function Betslip({ items = [], setItems, stake, onStakeChange }) 
       setItems(prevItems => {
         const filtered = prevItems.filter(item => {
           if (!item.startTime) return true;
+
+          // 1. Clean the string (handle potential scrap artifacts)
           const cleanTime = item.startTime.split('+')[0].replace(' ', 'T');
           const matchDate = new Date(cleanTime).getTime();
-          if (isNaN(matchDate)) return true; 
 
-          // Remove if match starts in less than 60 seconds
+          if (isNaN(matchDate)) return true; // Keep if date is weird
+
+          // 2. NO OFFSET: Treat DB time as the actual kickoff time
           return (matchDate - now) > 60000; 
         });
 
@@ -37,8 +41,7 @@ export default function Betslip({ items = [], setItems, stake, onStakeChange }) 
   }, [setItems]);
 
   const totalOdds = useMemo(() => {
-    const odds = items.reduce((acc, item) => acc * (parseFloat(item.odds) || 1), 1);
-    return odds.toFixed(2);
+    return items.reduce((acc, item) => acc * (parseFloat(item.odds) || 1), 1).toFixed(2);
   }, [items]);
 
   const potentialWinningsRaw = useMemo(() => {
@@ -46,10 +49,7 @@ export default function Betslip({ items = [], setItems, stake, onStakeChange }) 
   }, [totalOdds, stake]);
 
   const potentialWinningsFormatted = useMemo(() => {
-    return potentialWinningsRaw.toLocaleString(undefined, { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
-    });
+    return potentialWinningsRaw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [potentialWinningsRaw]);
 
   const handleBookBet = async () => {
@@ -60,30 +60,38 @@ export default function Betslip({ items = [], setItems, stake, onStakeChange }) 
       const finalCode = Math.floor(1000 + Math.random() * 9000).toString();
       const matchIds = items.map(item => item.matchId).filter(Boolean);
       
-      // 1. Fetch League Data for the Snapshot
-      let enrichedItems = [...items];
-      try {
-        const { data: eventsData } = await supabase
-          .from('api_events')
-          .select('id, display_league')
-          .in('id', matchIds);
+      let countryValue = "Unknown";
+      let leagueValue = "Unknown League";
 
-        if (eventsData) {
-          enrichedItems = items.map(item => ({
-            ...item,
-            leagueName: eventsData.find(e => String(e.id) === String(item.matchId))?.display_league || "Soccer"
-          }));
+      if (matchIds.length > 0) {
+        try {
+          const { data: eventsData } = await supabase
+            .from('api_events')
+            .select('country, display_league, league_name')
+            .in('id', matchIds);
+
+          if (eventsData && eventsData.length > 0) {
+            const countries = [...new Set(eventsData.map(e => e.country).filter(Boolean))];
+            const leagues = [...new Set(eventsData.map(e => e.display_league || e.league_name).filter(Boolean))];
+            countryValue = countries.length > 0 ? countries.join(', ') : "Unknown";
+            leagueValue = leagues.length > 0 ? leagues.join(', ') : "Unknown League";
+          }
+        } catch (err) {
+          console.warn("Could not fetch multi-match mapping.");
         }
-      } catch (e) { console.warn("League mapping failed, using defaults."); }
+      }
       
-      // 2. Save to 'betsnow' (This is the table used for Terminal Loading)
       const { error } = await supabase.from('betsnow').insert([{ 
         booking_code: finalCode, 
-        selections: enrichedItems, 
+        selections: items, 
         stake: parseFloat(stake) || 100,
         total_odds: parseFloat(totalOdds),
         potential_payout: potentialWinningsRaw,
-        status: 'pending'
+        status: 'pending',
+        is_paid: false,
+        event_id: matchIds.join(','),
+        country: countryValue,
+        league_name: leagueValue
       }]);
 
       if (error) throw error;
@@ -103,8 +111,7 @@ export default function Betslip({ items = [], setItems, stake, onStakeChange }) 
   };
 
   return (
-    <div className="bg-[#111926] border border-white/5 lg:rounded-2xl overflow-hidden flex flex-col h-full w-full shadow-2xl">
-      {/* Header */}
+    <div className="bg-[#111926] border border-white/5 lg:rounded-2xl overflow-hidden flex flex-col h-full w-full">
       <div className="bg-[#0b0f1a]/50 p-4 border-b border-white/5 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <Ticket size={18} className="text-[#10b981]" />
@@ -119,92 +126,23 @@ export default function Betslip({ items = [], setItems, stake, onStakeChange }) 
         )}
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto no-scrollbar bg-[#0b0f1a]/20">
+      <div className="flex-1 overflow-y-auto no-scrollbar">
         <div className="p-3">
           {bookingCode ? (
-            <div className="py-10 text-center animate-in zoom-in-95 duration-300">
+            <div className="py-6 text-center animate-in zoom-in-95">
               <CheckCircle2 size={44} className="text-[#10b981] mx-auto mb-3" />
-              <p className="text-white font-black text-sm uppercase italic mb-4">Code Generated</p>
-              <div className="bg-black border-2 border-dashed border-[#10b981]/40 p-6 rounded-2xl mb-4 shadow-inner">
-                <span className="text-4xl font-black tracking-[0.2em] text-[#f59e0b] drop-shadow-lg">{bookingCode}</span>
-                <p className="text-[9px] text-slate-500 mt-2 font-bold uppercase tracking-widest">Saved to Terminal</p>
+              <div className="bg-[#0b0f1a] border-2 border-dashed border-[#10b981]/40 p-6 rounded-2xl mb-4">
+                <span className="text-4xl font-black tracking-[0.2em] text-[#f59e0b]">{bookingCode}</span>
+                <p className="text-[9px] text-slate-500 mt-2 font-bold uppercase">Code Copied!</p>
               </div>
-              <button onClick={() => setBookingCode(null)} className="px-6 py-2 bg-white/5 rounded-full text-[10px] font-bold text-[#10b981] uppercase hover:bg-[#10b981]/10 transition-all">Done</button>
+              <button onClick={() => setBookingCode(null)} className="text-[10px] font-bold text-[#10b981] uppercase hover:underline">Done</button>
             </div>
           ) : items.length === 0 ? (
-            <div className="py-24 flex flex-col items-center justify-center opacity-20">
+            <div className="py-20 flex flex-col items-center justify-center opacity-20">
               <Ticket size={48} className="text-white mb-2" />
-              <p className="text-[10px] font-bold text-white uppercase tracking-widest">Select events to start</p>
+              <p className="text-[10px] font-bold text-white uppercase tracking-widest">Empty Slip</p>
             </div>
           ) : (
             <div className="flex flex-col">
               <div className="space-y-2 mb-6">
-                {items.map((item) => (
-                  <div key={item.id} className="bg-[#1c2636]/60 border border-white/5 rounded-xl p-3 relative group hover:border-[#10b981]/30 transition-all">
-                    <button onClick={() => setItems(prev => prev.filter(i => i.id !== item.id))} className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-white/5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 transition-all">
-                      <X size={14} />
-                    </button>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase truncate pr-8 mb-1 tracking-tight">{item.matchName}</p>
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <p className="text-xs font-black text-white">{item.selection}</p>
-                        <p className="text-[10px] text-[#10b981] font-black uppercase italic tracking-tighter">{item.marketName || '1X2 Market'}</p>
-                      </div>
-                      <span className="text-sm font-black text-[#f59e0b] tabular-nums">{parseFloat(item.odds).toFixed(2)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Bottom Totals & Actions */}
-              <div className="pt-4 border-t border-white/10 space-y-4">
-                {items.length > MAX_GAMES && (
-                  <div className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg flex items-center gap-2 text-red-500">
-                    <AlertCircle size={14} />
-                    <span className="text-[10px] font-bold uppercase">Limit of {MAX_GAMES} reached</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-[10px] font-black text-slate-500 uppercase">Total Odds</span>
-                  <span className="text-[#f59e0b] text-xl font-black italic">{totalOdds}</span>
-                </div>
-
-                <div className="bg-[#1c2636] border border-white/10 rounded-xl p-3 flex justify-between items-center focus-within:border-[#10b981]/50 transition-all">
-                  <span className="text-[9px] font-black text-slate-400 uppercase">Stake KES</span>
-                  <input 
-                    type="number" 
-                    value={stake} 
-                    onChange={(e) => onStakeChange(e.target.value)} 
-                    className="bg-transparent text-right font-black text-white outline-none w-24 text-lg tabular-nums" 
-                  />
-                </div>
-
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase">Est. Payout</span>
-                  <span className="text-lg font-black text-[#10b981] tabular-nums">KES {potentialWinningsFormatted}</span>
-                </div>
-
-                <button 
-                  onClick={handleBookBet} 
-                  disabled={isBooking || items.length > MAX_GAMES} 
-                  className={`w-full font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg ${
-                    items.length > MAX_GAMES 
-                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-50' 
-                    : 'bg-[#10b981] text-[#0b0f1a] hover:bg-[#059669] active:scale-[0.97]'
-                  }`}
-                >
-                  {isBooking ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} fill="currentColor" />}
-                  <span className="uppercase italic tracking-tighter text-[13px]">
-                    {isBooking ? 'Booking...' : 'Get Booking Code'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+                {
