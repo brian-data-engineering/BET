@@ -4,106 +4,86 @@ import Barcode from 'react-barcode';
 export default function PrintableTicket({ ticket }) {
   if (!ticket) return null;
 
-  // Safe parsing for selections
+  // 1. DATA RECOVERY: Ensure selections are a readable array
   const selections = typeof ticket.selections === 'string' 
     ? JSON.parse(ticket.selections) 
-    : ticket.selections;
+    : (Array.isArray(ticket.selections) ? ticket.selections : []);
+
+  // 2. SERIAL RECOVERY: Force it to find the ID or Serial
+  const displaySerial = ticket.ticket_serial || ticket.serial_no || ticket.id || "0000000000";
 
   return (
     <div className="lucra-print-area" style={{ 
       width: '72mm', 
       margin: '0 auto',
-      padding: '10px', 
-      fontFamily: "'Courier New', Courier, monospace", 
+      padding: '5px', 
+      fontFamily: 'monospace', 
       color: '#000', 
       backgroundColor: '#fff',
       lineHeight: '1.2'
     }}>
-      {/* --- SHOP HEADER --- */}
-      <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-        <h1 style={{ margin: '0', fontSize: '28px', fontWeight: 'bold', letterSpacing: '2px' }}>LUCRA</h1>
-        <p style={{ margin: '2px 0', fontSize: '12px' }}>www.lucrabets.com</p>
-        <div style={{ borderBottom: '2px solid #000', margin: '5px 0' }}></div>
+      {/* --- BIG VISIBLE SERIAL AT TOP --- */}
+      <div style={{ textAlign: 'center', borderBottom: '2px solid #000', marginBottom: '8px', paddingBottom: '4px' }}>
+        <h1 style={{ margin: '0', fontSize: '26px', fontWeight: '900' }}>LUCRA</h1>
+        <div style={{ fontSize: '14px', fontWeight: 'bold' }}>#{displaySerial}</div>
       </div>
 
-      {/* --- TICKET INFO --- */}
-      <div style={{ fontSize: '11px', marginBottom: '10px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Date: {new Date(ticket.created_at).toLocaleDateString()}</span>
-          <span>Time: {new Date(ticket.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-        </div>
-        <div>Ticket ID: <span style={{ fontWeight: 'bold' }}>{ticket.ticket_serial}</span></div>
-        <div>Cashier: {ticket.cashier_id?.substring(0, 8) || 'Admin'}</div>
-      </div>
-
-      {/* --- SELECTIONS BOXES --- */}
+      {/* --- THE GAMES LIST (Defensive Mapping) --- */}
       <div style={{ marginBottom: '10px' }}>
-        {selections?.map((sel, idx) => (
+        {selections.length > 0 ? selections.map((sel, idx) => (
           <div key={idx} style={{ 
             border: '1px solid #000', 
             padding: '5px', 
-            marginBottom: '5px',
+            marginBottom: '4px',
             fontSize: '11px' 
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderBottom: '1px dotted #000', marginBottom: '3px' }}>
-              <span>{sel.league || 'SOCCER'}</span>
-              <span>{sel.event_id || ''}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold' }}>
+              <span>{sel.league || sel.category || 'SOCCER'}</span>
+              <span>{sel.event_id || sel.match_id || ''}</span>
             </div>
-            <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{sel.event_name}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-              <span>{sel.market_name}: <span style={{ fontWeight: 'bold' }}>{sel.selection_name}</span></span>
-              <span style={{ fontWeight: 'bold' }}>{sel.odds}</span>
+            
+            {/* The Match Name - Checking multiple possible keys */}
+            <div style={{ fontWeight: 'bold', fontSize: '12px', margin: '3px 0' }}>
+              {sel.event_name || sel.match_name || sel.teams || sel.match || "Match Data Missing"}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{sel.market_name || 'PICK'}: <strong>{sel.selection_name || sel.outcome || sel.pick}</strong></span>
+              <span style={{ fontWeight: 'bold' }}>{sel.odds || sel.price}</span>
             </div>
           </div>
-        ))}
+        )) : (
+          <div style={{ textAlign: 'center', padding: '10px', border: '1px dashed red' }}>
+            DATA ERROR: NO SELECTIONS FOUND
+          </div>
+        )}
       </div>
 
-      {/* --- SUMMARY SECTION --- */}
-      <div style={{ borderTop: '2px dashed #000', paddingTop: '5px', marginTop: '10px' }}>
+      {/* --- TOTALS --- */}
+      <div style={{ borderTop: '2px dashed #000', paddingTop: '5px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span>Total Odds:</span>
-          <span style={{ fontWeight: 'bold' }}>{ticket.total_odds}</span>
+          <span style={{ fontWeight: 'bold' }}>{ticket.total_odds || '0.00'}</span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Total Stake:</span>
-          <span style={{ fontWeight: 'bold' }}>{ticket.stake} KSh</span>
-        </div>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          fontSize: '18px', 
-          fontWeight: '900', 
-          marginTop: '5px',
-          borderTop: '1px solid #000',
-          paddingTop: '5px'
-        }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: '900', marginTop: '5px', borderTop: '1px solid #000', paddingTop: '3px' }}>
           <span>PAYOUT:</span>
-          <span>{ticket.potential_payout} KSh</span>
+          <span>{ticket.potential_payout || ticket.payout || '0'} KSh</span>
         </div>
       </div>
 
-      {/* --- BARCODE --- */}
-      <div style={{ 
-        marginTop: '20px', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center',
-        textAlign: 'center' 
-      }}>
+      {/* --- BARCODE SECTION --- */}
+      <div style={{ marginTop: '15px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <Barcode 
-          value={ticket.ticket_serial || "000000000"} 
-          width={1.2} 
-          height={40} 
+          value={String(displaySerial)} 
+          width={1.4} 
+          height={45} 
           displayValue={false}
           margin={0}
         />
-        <div style={{ fontSize: '10px', marginTop: '5px', fontWeight: 'bold' }}>
-          *{ticket.booking_code || ticket.ticket_serial}*
+        <div style={{ fontSize: '11px', fontWeight: 'bold', marginTop: '4px' }}>
+          *{displaySerial}*
         </div>
-        <p style={{ fontSize: '9px', marginTop: '10px' }}>
-          Terms & Conditions apply. Tickets expire in 30 days.
-          <br />Keep this receipt for payout.
-        </p>
+        <p style={{ fontSize: '9px', marginTop: '8px' }}>Thank you for betting with Lucra!</p>
       </div>
     </div>
   );
