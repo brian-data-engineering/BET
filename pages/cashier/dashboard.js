@@ -26,37 +26,34 @@ export default function CashierDashboard() {
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
   /**
-   * THE LUCRA PRINT ENGINE v2.1
-   * Fixes: 7.9s Timeout Violation & White Blank Screen
+   * THE LUCRA PRINT ENGINE v2.5 (High Performance)
+   * Solves: 32s Violation, Opacity: 0, and White Blank Screens
    */
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
       console.log("🛠️ [SYSTEM] Print requested. Starting render cycle...");
 
-      // STEP 1: Wait for assets (Logo/Barcode) to begin mounting
+      // STEP 1: Small delay to let React mount the 'lucra-print-area'
       const timer = setTimeout(() => {
         
-        console.log("🎨 [SYSTEM] HTML injection complete. Waiting for browser 'Paint'...");
-
-        // STEP 2: Wait for the Browser's next animation frame (ensures no freeze)
+        // STEP 2: Use requestAnimationFrame to ensure the browser isn't "busy"
         requestAnimationFrame(() => {
+          console.log("🖨️ [SYSTEM] TRIGGERING WINDOW.PRINT()");
           
-          // STEP 3: Final 500ms "Settle" time for react-barcode to finish drawing
+          // Force window focus before printing to prevent "background" hang
+          window.focus();
+          window.print();
+          
+          shouldPrintRef.current = false;
+
+          // STEP 3: Wait 5 seconds before clearing state to allow print preview to finish
           setTimeout(() => {
-            console.log("🖨️ [SYSTEM] TRIGGERING WINDOW.PRINT()");
-            window.print();
-            
-            shouldPrintRef.current = false;
-
-            // Cleanup: Wait 5 seconds before clearing ticket so the preview stays stable
-            setTimeout(() => {
-              console.log("🧹 [SYSTEM] Resetting printer area.");
-              setCurrentTicket(null);
-            }, 5000);
-          }, 500);
-
+            console.log("🧹 [SYSTEM] Resetting printer area.");
+            setCurrentTicket(null);
+          }, 5000);
         });
-      }, 2500); // 2.5s Total Buffer for slow assets
+
+      }, 1000); // 1s is perfect balance for Canvas + Assets
       
       return () => clearTimeout(timer);
     }
@@ -194,58 +191,59 @@ export default function CashierDashboard() {
         </div>
       </div>
 
+      {/* TICKET CONTAINER */}
       {currentTicket && (
         <div className="lucra-print-area">
           <PrintableTicket ticket={currentTicket} />
         </div>
       )}
 
-     <style jsx global>{`
-  @media screen { 
-    .lucra-print-area { 
-      position: absolute !important;
-      top: -9999px !important;
-      left: -9999px !important;
-      opacity: 0 !important; /* This is what we saw in the log */
-      pointer-events: none !important;
-    } 
-  }
+      <style jsx global>{`
+        @media screen { 
+          .lucra-print-area { 
+            position: absolute !important;
+            top: -9999px !important;
+            left: -9999px !important;
+            opacity: 0 !important; /* Invisible on screen but exists for the engine */
+            pointer-events: none !important;
+          } 
+        }
 
-  @media print {
-    /* 1. Kill everything else */
-    #__next > :not(.lucra-print-area),
-    .no-print,
-    nav, aside, header { 
-      display: none !important; 
-    }
+        @media print {
+          /* 1. Hide every container except the ticket */
+          body > *:not(.lucra-print-area) { 
+            display: none !important; 
+          }
 
-    /* 2. FORCE THE TICKET TO BE VISIBLE */
-    .lucra-print-area { 
-      display: block !important; 
-      visibility: visible !important;
-      opacity: 1 !important; /* 🔥 THIS FIXES THE LOG ERROR */
-      position: relative !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 72mm !important;
-      background: white !important;
-      color: black !important;
-    }
+          /* 2. FORCE THE TICKET TO BE VISIBLE AND FULL OPACITY */
+          .lucra-print-area { 
+            display: block !important; 
+            visibility: visible !important;
+            opacity: 1 !important; 
+            position: relative !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 72mm !important;
+            background: white !important;
+            color: black !important;
+          }
 
-    /* Ensure text isn't transparent */
-    .lucra-print-area * {
-      opacity: 1 !important;
-      visibility: visible !important;
-      color: black !important;
-    }
+          /* Force browser to show images and text */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            color: black !important;
+          }
 
-    html, body { 
-      background: white !important; 
-      margin: 0 !important; 
-      padding: 0 !important; 
-    }
-  }
-`}</style>
+          html, body { 
+            background: white !important; 
+            margin: 0 !important; 
+            padding: 0 !important; 
+          }
+        }
+      `}</style>
     </CashierLayout>
   );
 }
