@@ -2,11 +2,12 @@ import { useEffect } from 'react';
 import Barcode from 'react-barcode';
 
 export default function PrintableTicket({ ticket }) {
-  // 1. Initial Data Load Log
+  // Log every time this renders to see if it's being "killed" too early
+  console.count("🎟️ PrintableTicket Rendered");
+
   useEffect(() => {
     if (ticket) {
-      console.log("🎟️ [TICKET ENGINE] Data received from 'print' table:", ticket);
-      console.log("📊 [TICKET ENGINE] Serial Number to generate:", ticket.ticket_serial);
+      console.log("📊 [TICKET ENGINE] Serial Number:", ticket.ticket_serial);
     }
   }, [ticket]);
 
@@ -15,10 +16,7 @@ export default function PrintableTicket({ ticket }) {
     return null;
   }
 
-  // Handle selections safely
-  const selections = Array.isArray(ticket.selections) 
-    ? ticket.selections 
-    : [];
+  const selections = Array.isArray(ticket.selections) ? ticket.selections : [];
 
   return (
     <div className="lucra-print-area">
@@ -26,13 +24,13 @@ export default function PrintableTicket({ ticket }) {
         
         {/* DYNAMIC HEADER */}
         <center className="header-section mb-4">
-          <img 
-            src={ticket.logo_url} 
-            alt="SHOP LOGO"
-            className="h-10 mb-2 grayscale contrast-200"
-            onLoad={() => console.log("✅ [ASSET] Logo Image fully loaded and sharpened.")}
-            onError={() => console.error("❌ [ASSET] Logo failed to load from URL:", ticket.logo_url)}
-          />
+          {ticket.logo_url && (
+            <img 
+              src={ticket.logo_url} 
+              alt="SHOP LOGO"
+              className="h-10 mb-2 grayscale contrast-200"
+            />
+          )}
           <h1 className="text-sm font-black uppercase tracking-tighter">
             {ticket.shop_name || "LUCRA TERMINAL"}
           </h1>
@@ -61,7 +59,7 @@ export default function PrintableTicket({ ticket }) {
               </div>
             ))
           ) : (
-            <p className="text-center text-[10px]">No selections found in record.</p>
+            <p className="text-center text-[10px]">No selections found.</p>
           )}
         </div>
 
@@ -94,35 +92,29 @@ export default function PrintableTicket({ ticket }) {
                 height={45} 
                 displayValue={false}
                 margin={0}
-                renderer="canvas" /* 🔥 Faster rendering than SVG */
+                renderer="canvas"
               />
             ) : (
               <span className="text-[8px] animate-pulse">GENERATING BARCODE...</span>
             )}
-            {console.log("🏁 [ENGINE] Canvas Barcode requested for serial.")}
           </div>
           <p className="text-[9px] font-mono font-bold tracking-tighter">
             PRINTED: {new Date(ticket.created_at || Date.now()).toLocaleString()}
           </p>
-          <div className="border-t border-black/10 pt-2">
-            <p className="text-[8px] uppercase font-bold italic">Thank you for playing at {ticket.shop_name}!</p>
-            <p className="text-[7px] opacity-50 mt-1">Lucra Terminal v2.0 • Secure Ledger Verified</p>
-          </div>
         </center>
-
       </div>
 
-     <style jsx>{`
+      <style jsx>{`
         .ticket-container {
-          width: 72mm; /* Standard Thermal Paper Width */
+          width: 72mm;
           margin: 0 auto;
           background: white;
         }
 
-        /* Ensure that when printing, the ticket takes up the full width of the paper */
         @media print {
           .lucra-print-area {
             display: block !important;
+            visibility: visible !important;
             width: 100% !important;
           }
           .ticket-container { 
@@ -130,6 +122,8 @@ export default function PrintableTicket({ ticket }) {
             padding: 5px !important; 
             margin: 0 !important;
           }
+          /* This ensures the test text shows up in the dialog */
+          h1 { visibility: visible !important; color: red !important; }
         }
       `}</style>
     </div>
