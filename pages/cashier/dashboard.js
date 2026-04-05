@@ -151,14 +151,15 @@ export default function CashierDashboard() {
             <p className="text-[10px] text-gray-500 text-center mb-4 font-mono font-bold uppercase tracking-widest border-b pb-2">
               --- Live Printer Preview ---
             </p>
-            <div className="text-black bg-white">
+            {/* The #visible-preview ID is used to unlock the .lucra-print-area class */}
+            <div id="visible-preview" className="text-black bg-white">
               <PrintableTicket ticket={currentTicket} />
             </div>
           </div>
         </div>
       )}
 
-      {/* --- REAL PRINT AREA (HIDDEN) --- */}
+      {/* --- REAL PRINT AREA --- */}
       {currentTicket && shouldPrintRef.current && (
         <div className="lucra-print-area">
           <PrintableTicket ticket={currentTicket} />
@@ -167,7 +168,16 @@ export default function CashierDashboard() {
 
       <style jsx global>{`
         @media screen {
+          /* Hide the default print area so it doesn't mess up the UI */
           .lucra-print-area { display: none !important; }
+          
+          /* UNLOCK the print area ONLY when it's inside the preview box */
+          #visible-preview .lucra-print-area { 
+            display: block !important; 
+            visibility: visible !important;
+            position: relative !important;
+          }
+          
           .lucra-preview-container { display: block; padding-bottom: 100px; }
         }
 
@@ -185,7 +195,7 @@ export default function CashierDashboard() {
             background: white !important;
             color: black !important;
           }
-          .no-print { display: none !important; }
+          .no-print, .lucra-preview-container { display: none !important; }
         }
       `}</style>
     </CashierLayout>
