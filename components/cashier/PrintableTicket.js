@@ -1,9 +1,21 @@
+import { useEffect } from 'react';
 import Barcode from 'react-barcode';
 
 export default function PrintableTicket({ ticket }) {
-  if (!ticket) return null;
+  // 1. Initial Data Load Log
+  useEffect(() => {
+    if (ticket) {
+      console.log("🎟️ [TICKET ENGINE] Data received from 'print' table:", ticket);
+      console.log("📊 [TICKET ENGINE] Serial Number to generate:", ticket.ticket_serial);
+    }
+  }, [ticket]);
 
-  // Since we fetch from the 'print' table, selections is already a clean array
+  if (!ticket) {
+    console.warn("⚠️ [TICKET ENGINE] Attempted to render but 'ticket' prop is null.");
+    return null;
+  }
+
+  // Handle selections safely
   const selections = Array.isArray(ticket.selections) 
     ? ticket.selections 
     : [];
@@ -18,9 +30,11 @@ export default function PrintableTicket({ ticket }) {
             src={ticket.logo_url} 
             alt="SHOP LOGO"
             className="h-10 mb-2 grayscale contrast-200"
+            onLoad={() => console.log("✅ [ASSET] Logo Image fully loaded and sharpened.")}
+            onError={() => console.error("❌ [ASSET] Logo failed to load from URL:", ticket.logo_url)}
           />
           <h1 className="text-sm font-black uppercase tracking-tighter">
-            {ticket.shop_name}
+            {ticket.shop_name || "LUCRA TERMINAL"}
           </h1>
           <p className="text-[9px] uppercase font-bold opacity-70">Official Betting Receipt</p>
         </center>
@@ -33,18 +47,22 @@ export default function PrintableTicket({ ticket }) {
 
         {/* SELECTIONS LOOP */}
         <div className="space-y-3 mb-4">
-          {selections.map((sel, i) => (
-            <div key={i} className="selection-row">
-              <div className="flex justify-between font-black uppercase text-[11px]">
-                <span>{sel.matchName}</span>
-                <span>@{parseFloat(sel.odds || 0).toFixed(2)}</span>
+          {selections.length > 0 ? (
+            selections.map((sel, i) => (
+              <div key={i} className="selection-row">
+                <div className="flex justify-between font-black uppercase text-[11px]">
+                  <span>{sel.matchName || sel.event}</span>
+                  <span>@{parseFloat(sel.odds || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[10px] italic">
+                  <span>{sel.marketName || 'Match Result'}: <b>{sel.selection}</b></span>
+                  <span className="opacity-60">{sel.leagueName || 'Soccer'}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-[10px] italic">
-                <span>{sel.marketName || 'Match Result'}: <b>{sel.selection}</b></span>
-                <span className="opacity-60">{sel.leagueName || 'Soccer'}</span>
-              </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="text-center text-[10px]">No selections found in record.</p>
+          )}
         </div>
 
         {/* FINANCIALS */}
@@ -75,7 +93,9 @@ export default function PrintableTicket({ ticket }) {
               height={45} 
               displayValue={false}
               margin={0}
+              // Barcode component doesn't have an onLoad, so we log it here
             />
+            {console.log("🏁 [ENGINE] Barcode component generated for serial.")}
           </div>
           <p className="text-[9px] font-mono font-bold tracking-tighter">
             PRINTED: {new Date(ticket.created_at || Date.now()).toLocaleString()}
@@ -90,12 +110,12 @@ export default function PrintableTicket({ ticket }) {
 
       <style jsx>{`
         .ticket-container {
-          width: 72mm; /* Standard Thermal Paper Width */
+          width: 72mm;
           margin: 0 auto;
         }
         @media print {
-          body { background: white; }
-          .ticket-container { width: 100%; padding: 0; }
+          body { background: white !important; }
+          .ticket-container { width: 100% !important; padding: 0 !important; }
         }
       `}</style>
     </div>
