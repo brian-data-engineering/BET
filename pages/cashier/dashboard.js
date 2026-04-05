@@ -167,37 +167,52 @@ export default function CashierDashboard() {
       )}
 
       <style jsx global>{`
-        @media screen {
-          /* Hide the default print area so it doesn't mess up the UI */
-          .lucra-print-area { display: none !important; }
-          
-          /* UNLOCK the print area ONLY when it's inside the preview box */
-          #visible-preview .lucra-print-area { 
-            display: block !important; 
-            visibility: visible !important;
-            position: relative !important;
-          }
-          
-          .lucra-preview-container { display: block; padding-bottom: 100px; }
-        }
+  @media screen {
+    /* Hide the real print area from the dashboard view */
+    .lucra-print-area { 
+      display: none !important; 
+    }
+    
+    /* Keep the Preview visible on screen */
+    #visible-preview .lucra-print-area { 
+      display: block !important; 
+      visibility: visible !important;
+      position: relative !important;
+    }
+    
+    .lucra-preview-container { display: block; padding-bottom: 100px; }
+  }
 
-        @media print {
-          body * { visibility: hidden; }
-          .lucra-print-area, .lucra-print-area * { 
-            visibility: visible !important; 
-            display: block !important;
-          }
-          .lucra-print-area { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 100%;
-            background: white !important;
-            color: black !important;
-          }
-          .no-print, .lucra-preview-container { display: none !important; }
-        }
-      `}</style>
+  /* THIS SECTION FIXES THE BLANK PRINT DIALOG */
+  @media print {
+    /* 1. Hide everything else on the page */
+    body * { 
+      visibility: hidden !important; 
+    }
+
+    /* 2. Force the print area to be visible only for the printer */
+    .lucra-print-area, .lucra-print-area * { 
+      visibility: visible !important; 
+      display: block !important;
+    }
+
+    /* 3. Position the ticket at the very top-left of the paper */
+    .lucra-print-area { 
+      position: absolute !important; 
+      left: 0 !important; 
+      top: 0 !important; 
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: white !important;
+    }
+
+    /* 4. Hide the preview box so you don't get two tickets */
+    .no-print, .lucra-preview-container { 
+      display: none !important; 
+    }
+  }
+`}</style>
     </CashierLayout>
   );
 }
