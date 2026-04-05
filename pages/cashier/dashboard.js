@@ -25,17 +25,16 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // AUTO-PRINT VIA INJECTION
+  // AUTO-PRINT VIA BODY INJECTION
   useEffect(() => {
-    if (currentTicket && shouldPrintRef.current) {
+    if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
         const previewElement = document.getElementById('visible-preview');
         if (!previewElement) return;
         
-        const ticketContent = previewElement.innerHTML;
         const printContainer = document.createElement('div');
         printContainer.id = 'temp-print-portal';
-        printContainer.innerHTML = `<div style="background:white;width:100%;">${ticketContent}</div>`;
+        printContainer.innerHTML = `<div style="background:white;width:100%;">${previewElement.innerHTML}</div>`;
 
         document.body.appendChild(printContainer);
         window.focus();
@@ -47,7 +46,7 @@ export default function CashierDashboard() {
           }
           shouldPrintRef.current = false;
         }, 1000);
-      }, 2000); 
+      }, 1500); // 1.5s is perfect for rendering
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -57,6 +56,7 @@ export default function CashierDashboard() {
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
     try {
+      // 1. Try Ticket Serial or Booking Code in 'print' table
       const { data: printed } = await supabase.from('print').select('*')
         .or(`ticket_serial.eq.${input},booking_code.eq.${input}`).maybeSingle();
 
@@ -67,10 +67,12 @@ export default function CashierDashboard() {
         return;
       }
 
+      // 2. Try 'betsnow' table
       const { data: booking } = await supabase.from('betsnow').select('*').eq('booking_code', input).maybeSingle();
       if (!booking) return alert("⚠️ NOT FOUND");
 
-      setCart(typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []));
+      const selections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []);
+      setCart(selections);
       setStake(booking.stake?.toString() || "100");
       shouldPrintRef.current = false; 
       setCurrentTicket(booking); 
@@ -106,45 +108,43 @@ export default function CashierDashboard() {
   };
 
   return (
-    <>
-      <CashierLayout>
-        <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-              <h2 className="text-white text-xl font-black mb-4 flex items-center gap-2 italic uppercase">
-                <Search className="text-[#10b981]" /> Terminal Load
-              </h2>
-              <div className="flex gap-2">
-                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} placeholder="Enter Code..." className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-[#10b981] outline-none" />
-                <button onClick={handleLoadTicket} disabled={isSearching} className="bg-[#10b981] text-black font-black px-8 rounded-xl">{isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-               <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-                 <p className="text-zinc-500 text-[10px] font-black uppercase">Float</p>
-                 <p className="text-white text-3xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
-               </div>
-               <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-                 <p className="text-zinc-500 text-[10px] font-black uppercase">Shop</p>
-                 <p className="text-[#10b981] text-xl font-black">{userProfile?.shop_name || "LUCRA"}</p>
-               </div>
+    <CashierLayout>
+      <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+            <h2 className="text-white text-xl font-black mb-4 italic uppercase flex items-center gap-2">
+              <Search className="text-[#10b981]" /> Terminal Load
+            </h2>
+            <div className="flex gap-2">
+              <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} placeholder="Enter Code..." className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-[#10b981] outline-none" />
+              <button onClick={handleLoadTicket} disabled={isSearching} className="bg-[#10b981] text-black font-black px-8 rounded-xl">{isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}</button>
             </div>
           </div>
-          <div className="lg:col-span-1">
-            <Betslip cart={cart} setCart={setCart} stake={stake} onStakeChange={setStake} onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} onClear={() => {setCart([]); setCurrentTicket(null);}} onProcess={handleProcessPayment} isProcessing={isProcessing} user={userProfile} />
+          <div className="grid grid-cols-2 gap-4">
+             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+               <p className="text-zinc-500 text-[10px] font-black uppercase">Float</p>
+               <p className="text-white text-3xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
+             </div>
+             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+               <p className="text-zinc-500 text-[10px] font-black uppercase">Shop</p>
+               <p className="text-[#10b981] text-xl font-black">{userProfile?.shop_name || "LUCRA"}</p>
+             </div>
           </div>
         </div>
+        <div className="lg:col-span-1">
+          <Betslip cart={cart} setCart={setCart} stake={stake} onStakeChange={setStake} onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} onClear={() => {setCart([]); setCurrentTicket(null);}} onProcess={handleProcessPayment} isProcessing={isProcessing} user={userProfile} />
+        </div>
+      </div>
 
-        {currentTicket && (
-          <div className="lucra-preview-container no-print pb-20">
-            <div className="bg-white p-4 shadow-2xl border-2 border-[#10b981] max-w-[320px] mx-auto mt-10 rounded-lg">
-              <div id="visible-preview" className="bg-white">
-                <PrintableTicket ticket={currentTicket} />
-              </div>
+      {currentTicket && (
+        <div className="lucra-preview-container no-print pb-20">
+          <div className="bg-white p-4 shadow-2xl border-2 border-[#10b981] max-w-[320px] mx-auto mt-10 rounded-lg">
+            <div id="visible-preview" className="bg-white">
+              <PrintableTicket ticket={currentTicket} />
             </div>
           </div>
-        )}
-      </CashierLayout>
+        </div>
+      )}
 
       <style jsx global>{`
         @media screen { #temp-print-portal { display: none !important; } }
@@ -153,6 +153,6 @@ export default function CashierDashboard() {
           #temp-print-portal { display: block !important; width: 100%; }
         }
       `}</style>
-    </>
+    </CashierLayout>
   );
 }
