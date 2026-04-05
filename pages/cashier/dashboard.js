@@ -200,36 +200,52 @@ export default function CashierDashboard() {
         </div>
       )}
 
-      <style jsx global>{`
-        @media screen { 
-          .lucra-print-area { 
-            position: absolute !important;
-            top: -9999px !important;
-            opacity: 0 !important;
-          } 
-        }
-        @media print {
-          #__next > :not(.lucra-print-area),
-          .no-print,
-          aside,
-          nav,
-          header { display: none !important; height: 0 !important; overflow: hidden !important; }
-          
-          html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+     <style jsx global>{`
+  @media screen { 
+    .lucra-print-area { 
+      position: absolute !important;
+      top: -9999px !important;
+      left: -9999px !important;
+      opacity: 0 !important; /* This is what we saw in the log */
+      pointer-events: none !important;
+    } 
+  }
 
-          .lucra-print-area { 
-            display: block !important; 
-            visibility: visible !important;
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 72mm !important; 
-            background: white !important;
-          }
-          
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        }
-      `}</style>
+  @media print {
+    /* 1. Kill everything else */
+    #__next > :not(.lucra-print-area),
+    .no-print,
+    nav, aside, header { 
+      display: none !important; 
+    }
+
+    /* 2. FORCE THE TICKET TO BE VISIBLE */
+    .lucra-print-area { 
+      display: block !important; 
+      visibility: visible !important;
+      opacity: 1 !important; /* 🔥 THIS FIXES THE LOG ERROR */
+      position: relative !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 72mm !important;
+      background: white !important;
+      color: black !important;
+    }
+
+    /* Ensure text isn't transparent */
+    .lucra-print-area * {
+      opacity: 1 !important;
+      visibility: visible !important;
+      color: black !important;
+    }
+
+    html, body { 
+      background: white !important; 
+      margin: 0 !important; 
+      padding: 0 !important; 
+    }
+  }
+`}</style>
     </CashierLayout>
   );
 }
