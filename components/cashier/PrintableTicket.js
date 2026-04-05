@@ -112,14 +112,24 @@ export default function PrintableTicket({ ticket }) {
 
       </div>
 
-      <style jsx>{`
+     <style jsx>{`
         .ticket-container {
-          width: 72mm;
+          width: 72mm; /* Standard Thermal Paper Width */
           margin: 0 auto;
+          background: white;
         }
+
+        /* Ensure that when printing, the ticket takes up the full width of the paper */
         @media print {
-          body { background: white !important; }
-          .ticket-container { width: 100% !important; padding: 0 !important; }
+          .lucra-print-area {
+            display: block !important;
+            width: 100% !important;
+          }
+          .ticket-container { 
+            width: 100% !important; 
+            padding: 5px !important; 
+            margin: 0 !important;
+          }
         }
       `}</style>
     </div>
