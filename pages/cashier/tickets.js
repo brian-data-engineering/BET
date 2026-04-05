@@ -1,31 +1,46 @@
-import { useState, useEffect, useCallback } from 'react'; 
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
-import { Search, CheckCircle2, Clock, Loader2, Receipt, Banknote } from 'lucide-react';
+import PrintableTicket from '../../components/cashier/PrintableTicket'; 
+import { Search, CheckCircle2, Clock, Loader2, Receipt, Banknote, ChevronLeft, ChevronRight, Printer, X, Eye } from 'lucide-react';
 
 export default function TicketManager() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [user, setUser] = useState(null);
+  const [selectedTicket, setSelectedTicket] = useState(null);
 
-  // 1. STABLE FETCH LOGIC
-  const fetchTickets = useCallback(async (userId) => {
+  // PAGINATION STATE
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 10;
+
+  // 1. STABLE FETCH LOGIC (Updated to use 'print' table and pagination)
+  const fetchTickets = useCallback(async (userId, currentPage, currentSearch) => {
     if (!userId) return;
-    
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('betsnow')
-        .select('*')
-        .eq('cashier_id', userId) // CRITICAL: Filter by the logged-in cashier
-        .not('ticket_serial', 'is', null)
-        .neq('ticket_serial', '')
-        .order('created_at', { ascending: false })
-        .limit(50); // Increased limit slightly for better history scroll
 
+    const from = currentPage * pageSize;
+    const to = from + pageSize - 1;
+
+    try {
+      let query = supabase
+        .from('print') // Switched from 'betsnow' to 'print'
+        .select('*', { count: 'exact' })
+        .eq('cashier_id', userId)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (currentSearch) {
+        query = query.or(`ticket_serial.ilike.%${currentSearch}%,booking_code.ilike.%${currentSearch}%`);
+      }
+
+      const { data, count, error } = await query;
       if (error) throw error;
+
       setTickets(data || []);
+      setTotalCount(count || 0);
     } catch (err) {
       console.error("Ledger Fetch Error:", err.message);
     } finally {
@@ -35,22 +50,15 @@ export default function TicketManager() {
 
   // 2. AUTH & INITIALIZATION
   useEffect(() => {
-    let mounted = true;
-
     const initializeTerminal = async () => {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (currentUser && mounted) {
+      if (currentUser) {
         setUser(currentUser);
-        // We fetch directly with the ID here to avoid waiting for the next state render
-        fetchTickets(currentUser.id);
-      } else if (mounted) {
-        setLoading(false);
+        fetchTickets(currentUser.id, page, search);
       }
     };
-
     initializeTerminal();
-    return () => { mounted = false; }; // Cleanup
-  }, [fetchTickets]);
+  }, [fetchTickets, page, search]);
 
   // 3. PAYOUT EXECUTION
   const handlePayout = async (ticket) => {
@@ -59,7 +67,6 @@ export default function TicketManager() {
     
     setLoading(true);
     try {
-      // Ensure we use the 'user.id' from state to verify the cashier
       const { error } = await supabase.rpc('execute_lucra_payout', {
         p_ticket_id: ticket.id,
         p_cashier_id: user.id,
@@ -67,10 +74,8 @@ export default function TicketManager() {
       });
 
       if (error) throw error;
-
-      alert("✅ PAYOUT SUCCESSFUL: FLOAT REIMBURSED");
-      // Refresh only after success
-      await fetchTickets(user.id); 
+      alert("✅ PAYOUT SUCCESSFUL");
+      fetchTickets(user.id, page, search); 
     } catch (err) {
       alert(`❌ PAYOUT FAILED: ${err.message}`);
     } finally {
@@ -78,25 +83,22 @@ export default function TicketManager() {
     }
   };
 
-  // 4. SEARCH FILTERING
-  const filteredTickets = tickets.filter(t => 
-    t.ticket_serial?.toLowerCase().includes(search.toLowerCase()) ||
-    t.booking_code?.toLowerCase().includes(search.toLowerCase())
-  );
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <CashierLayout>
-      <div className="p-8 bg-[#0b0f1a] min-h-screen text-white font-sans">
+      <div className="p-8 bg-[#0b0f1a] min-h-screen text-white font-sans no-print">
         
         {/* Header Section */}
-        <div className="flex gap-4 mb-10">
-          <div className="flex-1 bg-[#111926] p-5 rounded-2xl border border-white/5 flex items-center gap-4 focus-within:border-[#10b981]/50 transition-all shadow-2xl">
+        <div className="flex flex-col md:flex-row gap-4 mb-10 items-center">
+          <h1 className="text-2xl font-black italic uppercase tracking-tighter text-[#10b981]">Terminal Ledger</h1>
+          <div className="flex-1 bg-[#111926] p-4 rounded-2xl border border-white/5 flex items-center gap-4 focus-within:border-[#10b981]/50 transition-all shadow-2xl w-full">
             <Search size={18} className="text-[#10b981] opacity-50" />
             <input 
               className="bg-transparent outline-none w-full font-black uppercase tracking-widest text-sm placeholder:text-white/10" 
-              placeholder="SCAN OR ENTER SERIAL NUMBER..." 
+              placeholder="SEARCH SERIAL..." 
               value={search} 
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPage(0); }}
             />
           </div>
         </div>
@@ -108,86 +110,103 @@ export default function TicketManager() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredTickets.length === 0 ? (
+            {tickets.length === 0 ? (
               <div className="text-center mt-20 opacity-10">
                 <Receipt size={64} className="mx-auto mb-4" />
-                <p className="font-black uppercase tracking-widest text-xs">No Active Receipts</p>
+                <p className="font-black uppercase tracking-widest text-xs">No Records Found</p>
               </div>
             ) : (
-              filteredTickets.map(t => (
-                <div key={t.id} className="bg-[#111926]/80 backdrop-blur-md p-6 rounded-[2.5rem] flex justify-between items-center border border-white/5 hover:border-white/10 transition-all group">
-                  
-                  {/* Left: Ticket Info */}
-                  <div className="flex items-center gap-5">
-                    <div className={`p-4 rounded-2xl transition-all ${
-                      t.status === 'won' 
-                        ? 'bg-[#10b981] text-black shadow-lg shadow-[#10b981]/40' 
-                        : t.status === 'lost' 
-                        ? 'bg-red-500/20 text-red-500'
-                        : 'bg-white/5 text-white/20'
-                    }`}>
-                      {t.status === 'won' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
+              <>
+                {tickets.map(t => (
+                  <div key={t.id} className="bg-[#111926]/80 backdrop-blur-md p-5 rounded-[2rem] flex justify-between items-center border border-white/5 hover:border-[#10b981]/20 transition-all group">
+                    <div className="flex items-center gap-5">
+                      <div className={`p-4 rounded-2xl ${t.status === 'won' ? 'bg-[#10b981] text-black shadow-lg shadow-[#10b981]/20' : 'bg-white/5 text-white/20'}`}>
+                        {t.status === 'won' ? <CheckCircle2 size={22} /> : <Clock size={22} />}
+                      </div>
+                      <div>
+                        <h4 className="font-black italic text-lg uppercase tracking-tight">#{t.ticket_serial}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                           <button onClick={() => setSelectedTicket(t)} className="text-[9px] text-[#10b981] font-black uppercase bg-[#10b981]/10 px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[#10b981]/30">
+                            <Eye size={10}/> View Ticket
+                           </button>
+                           <span className="text-[10px] opacity-30 font-bold">{new Date(t.created_at).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-black italic text-xl uppercase tracking-tighter text-white">
-                        {t.ticket_serial}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[9px] text-[#10b981] font-black uppercase tracking-tighter bg-[#10b981]/10 px-2 py-0.5 rounded">
-                          {t.booking_code}
-                        </span>
-                        <span className="text-[10px] opacity-30 font-bold uppercase">
-                          {new Date(t.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </span>
+
+                    <div className="flex items-center gap-8">
+                      <div className="text-right">
+                        <p className="text-[8px] font-black opacity-20 uppercase tracking-widest mb-1">Potential Payout</p>
+                        <p className={`text-xl font-black italic ${t.status === 'won' ? 'text-[#10b981]' : 'text-white'}`}>
+                          {parseFloat(t.potential_payout).toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="w-32 flex justify-end">
+                        {t.status === 'won' && !t.settled_at ? (
+                          <button onClick={() => handlePayout(t)} className="bg-[#10b981] text-black px-4 py-3 rounded-xl font-black italic uppercase text-[9px] hover:scale-105 transition-all shadow-lg flex items-center gap-2">
+                            <Banknote size={14} /> Collect
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-black uppercase opacity-20 italic">
+                            {t.status === 'won' ? 'Settled' : t.status}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
-                  
-                  {/* Right: Financials & Settlement */}
-                  <div className="flex items-center gap-10">
-                    <div className="text-right">
-                      <p className="text-[9px] font-black opacity-20 uppercase tracking-widest mb-1">Potential Payout</p>
-                      <p className={`text-2xl font-black italic tabular-nums ${t.status === 'won' ? 'text-[#10b981]' : 'text-white'}`}>
-                        <span className="text-[10px] mr-1">KES</span>
-                        {parseFloat(t.potential_payout || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
+                ))}
 
-                    <div className="w-40 flex justify-end">
-                      {t.status === 'won' && !t.settled_at ? (
-                        <button 
-                          onClick={() => handlePayout(t)} 
-                          disabled={loading}
-                          className="bg-[#10b981] text-black px-6 py-4 rounded-2xl font-black italic uppercase text-[10px] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#10b981]/30 flex items-center gap-2 disabled:opacity-50"
-                        >
-                          {loading ? <Loader2 className="animate-spin" size={14} /> : <Banknote size={14} />}
-                          Collect Win
-                        </button>
-                      ) : t.settled_at ? (
-                        <div className="flex flex-col items-end">
-                           <span className="text-[#10b981] font-black italic text-[11px] uppercase tracking-tighter flex items-center gap-1">
-                             <CheckCircle2 size={12} /> Settled
-                           </span>
-                           <span className="text-[8px] font-bold uppercase text-white/30 italic">Ledger Updated</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-end opacity-20">
-                          <span className="text-white font-black italic text-[11px] uppercase tracking-tighter">
-                            {t.status === 'lost' ? 'Lost' : 'Running'}
-                          </span>
-                          <span className="text-[8px] font-bold uppercase">
-                            {t.status === 'lost' ? 'Ticket Closed' : 'Awaiting Result'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                {/* PAGINATION CONTROLS */}
+                <div className="flex items-center justify-between pt-6 border-t border-white/5 mt-10">
+                  <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+                    Page {page + 1} of {totalPages || 1}
+                  </p>
+                  <div className="flex gap-2">
+                    <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="p-3 rounded-xl bg-[#111926] border border-white/5 disabled:opacity-10 hover:border-[#10b981]/50 transition-all">
+                      <ChevronLeft size={20} />
+                    </button>
+                    <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="p-3 rounded-xl bg-[#111926] border border-white/5 disabled:opacity-10 hover:border-[#10b981]/50 transition-all">
+                      <ChevronRight size={20} />
+                    </button>
                   </div>
                 </div>
-              ))
+              </>
             )}
           </div>
         )}
       </div>
+
+      {/* REPRINT / VIEW MODAL */}
+      {selectedTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 no-print">
+          <div className="bg-[#111926] border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full relative shadow-2xl">
+            <button onClick={() => setSelectedTicket(null)} className="absolute -top-12 right-0 text-white hover:text-[#10b981] transition-colors">
+              <X size={40} />
+            </button>
+
+            <button 
+              onClick={() => window.print()}
+              className="w-full bg-[#10b981] text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all mb-8 text-sm italic uppercase"
+            >
+              <Printer size={20} /> Reprint Receipt
+            </button>
+
+            <div id="visible-preview" className="bg-white p-2 rounded-xl">
+               <PrintableTicket ticket={selectedTicket} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRINT STYLES */}
+      <style jsx global>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #visible-preview, #visible-preview * { visibility: visible !important; }
+          #visible-preview { position: fixed; left: 0; top: 0; width: 100vw; }
+        }
+      `}</style>
     </CashierLayout>
   );
 }
