@@ -4,16 +4,11 @@ import CashierLayout from '../../components/cashier/CashierLayout';
 import { TrendingUp, TrendingDown, RefreshCcw, ShieldCheck, Loader2, BarChart3, Calendar, PieChart } from 'lucide-react';
 
 export default function CashierReport() {
-  // Simplified state to match the new 4-column SQL function
-  const [stats, setStats] = useState({ 
-    sales: 0, 
-    payouts: 0, 
-    profit: 0, 
-    count: 0 
-  });
+  const [stats, setStats] = useState({ sales: 0, payouts: 0, profit: 0, count: 0 });
   const [loading, setLoading] = useState(true);
-  // Date state for "every single day" reporting (defaults to today)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Use local date format to prevent timezone shifting in the input
+  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
@@ -21,7 +16,6 @@ export default function CashierReport() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Passing both cashier_id and the selected date
       const { data, error } = await supabase.rpc('get_daily_cashier_report', { 
         p_cashier_id: user.id,
         p_date: selectedDate
@@ -40,9 +34,10 @@ export default function CashierReport() {
     } catch (err) {
       console.error("Report Fetch Error:", err.message);
     } finally {
-      setLoading(false);
+      // Small timeout prevents the "Violation" by letting the calendar close first
+      setTimeout(() => setLoading(false), 150);
     }
-  }, [selectedDate]); // Re-fetch whenever the date changes
+  }, [selectedDate]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -61,21 +56,22 @@ export default function CashierReport() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Date Picker for Daily Reports */}
-            <div className="bg-[#111926] p-4 rounded-3xl border border-white/5 flex items-center gap-3 shadow-xl">
+            {/* FIXED CALENDAR INPUT */}
+            <div className="bg-[#111926] p-4 rounded-3xl border border-white/5 flex items-center gap-3 shadow-xl hover:border-[#10b981]/40 transition-colors">
               <Calendar size={18} className="text-[#10b981]" />
               <input 
                 type="date" 
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent outline-none font-black uppercase text-xs text-white cursor-pointer"
+                // [color-scheme:dark] fixes the browser jank in dark themed apps
+                className="bg-transparent outline-none font-black uppercase text-xs text-white cursor-pointer [color-scheme:dark]"
               />
             </div>
             
             <button 
               onClick={fetchStats} 
               disabled={loading}
-              className="p-5 bg-[#111926] rounded-3xl border border-white/5 hover:border-[#10b981]/30 transition-all shadow-xl"
+              className="p-5 bg-[#111926] rounded-3xl border border-white/5 hover:border-[#10b981]/30 transition-all shadow-xl active:scale-95"
             >
               {loading ? <Loader2 size={22} className="animate-spin text-[#10b981]" /> : <RefreshCcw size={22} className="text-[#10b981]" />}
             </button>
@@ -126,7 +122,7 @@ export default function CashierReport() {
                  
                  <div className="text-center md:text-right bg-black/20 p-4 rounded-2xl border border-white/5">
                     <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Database Verified</p>
-                    <p className="text-xs font-mono text-zinc-400">SHIFT_ID: {selectedDate.replace(/-/g, '')}</p>
+                    <p className="text-xs font-mono text-zinc-400 uppercase">Audit_{selectedDate.replace(/-/g, '')}</p>
                  </div>
                </div>
             </div>
