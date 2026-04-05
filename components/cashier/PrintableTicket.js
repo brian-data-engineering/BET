@@ -41,7 +41,7 @@ export default function PrintableTicket({ ticket }) {
 
         {/* TICKET META */}
         <div className="border-y-2 border-black border-dashed py-2 mb-3 flex justify-between text-[10px] font-bold">
-          <span>SERIAL: {ticket.ticket_serial}</span>
+          <span>SERIAL: {ticket.ticket_serial || 'PENDING'}</span>
           <span>CODE: {ticket.booking_code}</span>
         </div>
 
@@ -86,16 +86,20 @@ export default function PrintableTicket({ ticket }) {
 
         {/* BARCODE & FOOTER */}
         <center className="mt-6 space-y-2">
-          <div className="flex justify-center bg-white p-1">
-            <Barcode 
-              value={String(ticket.ticket_serial)} 
-              width={1.2} 
-              height={45} 
-              displayValue={false}
-              margin={0}
-              // Barcode component doesn't have an onLoad, so we log it here
-            />
-            {console.log("🏁 [ENGINE] Barcode component generated for serial.")}
+          <div className="flex justify-center bg-white p-1 min-h-[45px]">
+            {ticket.ticket_serial ? (
+              <Barcode 
+                value={String(ticket.ticket_serial)} 
+                width={1.2} 
+                height={45} 
+                displayValue={false}
+                margin={0}
+                renderer="canvas" /* 🔥 Faster rendering than SVG */
+              />
+            ) : (
+              <span className="text-[8px] animate-pulse">GENERATING BARCODE...</span>
+            )}
+            {console.log("🏁 [ENGINE] Canvas Barcode requested for serial.")}
           </div>
           <p className="text-[9px] font-mono font-bold tracking-tighter">
             PRINTED: {new Date(ticket.created_at || Date.now()).toLocaleString()}
