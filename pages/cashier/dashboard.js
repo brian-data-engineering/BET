@@ -25,13 +25,20 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // EFFECT: Watches for the official DB record to arrive before printing
- useEffect(() => {
+  // EFFECT: The "Blank Page Killer"
+  useEffect(() => {
     if (currentTicket && shouldPrintRef.current) {
+      // 1.5s allows React to render and the Browser to cache the Logo/Barcode
       const timer = setTimeout(() => {
         window.print();
         shouldPrintRef.current = false; 
-      }, 1500); // Increased slightly for slower asset loads
+        
+        // Safety: Keep ticket on screen for 3 more seconds after print window opens
+        // This ensures the browser doesn't "lose" the content if the cashier hits cancel
+        setTimeout(() => {
+          if (!shouldPrintRef.current) setCurrentTicket(null);
+        }, 3000);
+      }, 1500); 
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -53,15 +60,13 @@ export default function CashierDashboard() {
         return;
       }
 
-      // Format selections for the cart UI
       const rawSelections = typeof ticket.selections === 'string' ? JSON.parse(ticket.selections) : ticket.selections;
       
       if (ticket.ticket_serial) {
         if (confirm("🎟️ TICKET ALREADY PAID. REPRINT?")) {
-          // If already paid, fetch from the official 'print' table instead of 'betsnow'
           const { data: printedDoc } = await supabase.from('print').select('*').eq('ticket_serial', ticket.ticket_serial).single();
-          setCurrentTicket(printedDoc);
           shouldPrintRef.current = true;
+          setCurrentTicket(printedDoc);
         }
       } else {
         setCart(rawSelections || []);
@@ -81,7 +86,6 @@ export default function CashierDashboard() {
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
       
-      // 1. EXECUTE: RPC Deducts float and creates 'print' entry
       const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
@@ -91,10 +95,9 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // 2. THE LUCRA SYNC: Wait for database to commit
+      // Wait for DB consistency
       await new Promise(res => setTimeout(res, 1200));
 
-      // 3. FETCH: Get the Official Record (includes logo_url, shop_name from DB defaults)
       const { data: officialTicket, error: fetchError } = await supabase
         .from('print')
         .select('*')
@@ -103,11 +106,11 @@ export default function CashierDashboard() {
 
       if (fetchError || !officialTicket) throw new Error("Sync failed. Record not found.");
 
-      // 4. PRINT: Hand verified DB data to the printer
+      // Set print intent BEFORE setting the ticket
       shouldPrintRef.current = true;
       setCurrentTicket(officialTicket);
       
-      // 5. RESET UI
+      // RESET UI elements only - currentTicket stays until the Effect clears it
       setCart([]);
       setStake("");
       initTerminal(); 
@@ -117,6 +120,7 @@ export default function CashierDashboard() {
 
   return (
     <CashierLayout>
+      {/* Container for the Screen UI */}
       <div className="max-w-6xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
@@ -168,7 +172,7 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* PRINT ENGINE */}
+      {/* Container for the Printer - Absolute positioning for thermal paper */}
       {currentTicket && (
         <div className="lucra-print-area">
           <PrintableTicket ticket={currentTicket} />
@@ -176,10 +180,25 @@ export default function CashierDashboard() {
       )}
 
       <style jsx global>{`
-        @media screen { .lucra-print-area { display: none !important; } }
+        @media screen { 
+          .lucra-print-area { display: none !important; } 
+        }
         @media print {
-          .no-print { display: none !important; }
-          .lucra-print-area { display: block !important; position: absolute; left: 0; top: 0; width: 72mm; }
+          /* Force everything else to disappear */
+          #__next > :not(.lucra-print-area),
+          .no-print,
+          aside,
+          nav { display: none !important; }
+          
+          /* Show only the ticket area */
+          .lucra-print-area { 
+            display: block !important; 
+            position: absolute !important; 
+            left: 0 !important; 
+            top: 0 !important; 
+            width: 72mm !important; 
+            background: white !important;
+          }
         }
       `}</style>
     </CashierLayout>
