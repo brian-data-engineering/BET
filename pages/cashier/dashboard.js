@@ -57,7 +57,6 @@ export default function CashierDashboard() {
     const input = searchQuery.trim().toUpperCase();
     try {
       // 1. Search ONLY for 'ticket_serial' in the print table.
-      // Removing booking_code here ensures used codes don't load as reprints.
       const { data: printed } = await supabase.from('print')
         .select('*')
         .eq('ticket_serial', input)
@@ -70,17 +69,39 @@ export default function CashierDashboard() {
         return;
       }
 
-      // 2. Try 'betsnow' table (Will return null if killed in DB side)
+      // 2. Try 'betsnow' table
       const { data: booking } = await supabase.from('betsnow').select('*').eq('booking_code', input).maybeSingle();
       if (!booking) return alert("⚠️ EXPIRED OR NOT FOUND");
 
-      const selections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []);
+      let selections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []);
+
+      // --- FIX: ENRICH SELECTIONS WITH LEAGUE NAMES ---
+      const matchIds = selections.map(s => s.matchId);
+      const { data: eventData } = await supabase
+        .from('api_events')
+        .select('id, display_league')
+        .in('id', matchIds);
+
+      if (eventData) {
+        selections = selections.map(sel => ({
+          ...sel,
+          display_league: eventData.find(e => String(e.id) === String(sel.matchId))?.display_league || "League"
+        }));
+      }
+      // -----------------------------------------------
+
       setCart(selections);
       setStake(booking.stake?.toString() || "100");
       shouldPrintRef.current = false; 
-      setCurrentTicket(booking); 
+      
+      // Update the current ticket with the enriched selections so the preview shows them
+      setCurrentTicket({ ...booking, selections }); 
       setSearchQuery('');
-    } catch (err) { console.error(err); } finally { setIsSearching(false); }
+    } catch (err) { 
+      console.error(err); 
+    } finally { 
+      setIsSearching(false); 
+    }
   };
 
   const handleProcessPayment = async () => {
@@ -89,6 +110,8 @@ export default function CashierDashboard() {
     setIsProcessing(true);
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+      
+      // We pass the enriched currentTicket data to ensure the RPC captures everything
       const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
@@ -119,23 +142,45 @@ export default function CashierDashboard() {
               <Search className="text-[#10b981]" /> Terminal Load
             </h2>
             <div className="flex gap-2">
-              <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} placeholder="Enter Code..." className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-[#10b981] outline-none" />
-              <button onClick={handleLoadTicket} disabled={isSearching} className="bg-[#10b981] text-black font-black px-8 rounded-xl">{isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}</button>
+              <input 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} 
+                placeholder="Enter Code..." 
+                className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-[#10b981] outline-none" 
+              />
+              <button 
+                onClick={handleLoadTicket} 
+                disabled={isSearching} 
+                className="bg-[#10b981] text-black font-black px-8 rounded-xl"
+              >
+                {isSearching ? <Loader2 className="animate-spin" /> : "LOAD"}
+              </button>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-               <p className="text-zinc-500 text-[10px] font-black uppercase">Float</p>
-               <p className="text-white text-3xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
-             </div>
-             <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-               <p className="text-zinc-500 text-[10px] font-black uppercase">Shop</p>
-               <p className="text-[#10b981] text-xl font-black">{userProfile?.shop_name || "LUCRA"}</p>
-             </div>
+              <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+                <p className="text-zinc-500 text-[10px] font-black uppercase">Float</p>
+                <p className="text-white text-3xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
+              </div>
+              <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
+                <p className="text-zinc-500 text-[10px] font-black uppercase">Shop</p>
+                <p className="text-[#10b981] text-xl font-black">{userProfile?.shop_name || "LUCRA"}</p>
+              </div>
           </div>
         </div>
         <div className="lg:col-span-1">
-          <Betslip cart={cart} setCart={setCart} stake={stake} onStakeChange={setStake} onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} onClear={() => {setCart([]); setCurrentTicket(null);}} onProcess={handleProcessPayment} isProcessing={isProcessing} user={userProfile} />
+          <Betslip 
+            cart={cart} 
+            setCart={setCart} 
+            stake={stake} 
+            onStakeChange={setStake} 
+            onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} 
+            onClear={() => {setCart([]); setCurrentTicket(null);}} 
+            onProcess={handleProcessPayment} 
+            isProcessing={isProcessing} 
+            user={userProfile} 
+          />
         </div>
       </div>
 
