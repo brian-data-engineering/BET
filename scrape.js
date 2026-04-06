@@ -13,8 +13,17 @@ const sportMapping = {
   'table-tennis': 10
 };
 
+// Helper to convert Unix timestamp to EAT String
+const toEAT = (unixTimestamp) => {
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+    timeZone: 'Africa/Nairobi',
+  }).format(new Date(unixTimestamp * 1000));
+};
+
 async function syncLinebet() {
-  console.log("--- 🔍 DATA STRUCTURE INVESTIGATION START ---");
+  console.log("--- 🏁 DATA STRUCTURE INVESTIGATION START ---");
 
   const now = Math.floor(Date.now() / 1000);
   const roundedTo = Math.floor(now / 3600) * 3600; 
@@ -43,15 +52,24 @@ async function syncLinebet() {
           if (matchCount >= 10) break;
           if (!game.score) continue;
 
+          // CLEANING LOGIC: Remove extra match info and point-by-point noise
+          // 1. Remove anything after a second set of parentheses (Tennis noise)
+          let cleanScore = game.score.replace(/\s\(\d+\).*/, '').trim();
+          // 2. Remove "Match scores" suffix (Hockey noise)
+          cleanScore = cleanScore.split(';')[0].trim();
+
+          const periodPart = cleanScore.match(/\(([^)]+)\)/);
+          const startTimeEAT = toEAT(game.dateStart);
+
           console.log(`[${sportKey}] ID: ${game.id} | ${game.opp1} vs ${game.opp2}`);
-          console.log(`      RAW SCORE: "${game.score}"`);
+          console.log(`      START TIME (EAT): ${startTimeEAT} (Raw: ${game.dateStart})`);
+          console.log(`      CLEAN SCORE: "${cleanScore}"`);
           
-          // Debugging the breakdown
-          const periodPart = game.score.match(/\(([^)]+)\)/);
           if (periodPart) {
-             console.log(`      BREAKDOWN: ${periodPart[1]}`);
+             const subScores = periodPart[1].split(',');
+             console.log(`      PERIODS (${subScores.length}):`, subScores.map(s => s.trim()));
           } else {
-             console.log(`      BREAKDOWN: No sub-scores found (check if this is normal for ${sportKey})`);
+             console.log(`      PERIODS: None found.`);
           }
           console.log('      -----------------------------------');
           
