@@ -25,7 +25,7 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // AUTO-PRINT VIA BODY INJECTION
+  // AUTO-PRINT LOGIC (Strictly for newly processed payments)
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
@@ -57,39 +57,19 @@ export default function CashierDashboard() {
     const input = searchQuery.trim().toUpperCase();
     
     try {
-      let targetTicket = null;
-      let isReprint = false;
-
-      // 1. First, check if input is an official Serial Number (Reprint)
-      const { data: printed } = await supabase
-        .from('print')
+      // STRICT: Only check betsnow for booking codes
+      const { data: booking, error } = await supabase
+        .from('betsnow')
         .select('*')
-        .eq('ticket_serial', input)
+        .eq('booking_code', input)
         .maybeSingle();
-
-      if (printed) {
-        targetTicket = printed;
-        isReprint = true;
-      } else {
-        // 2. Otherwise, check if input is a Booking Code
-        const { data: booking } = await supabase
-          .from('betsnow')
-          .select('*')
-          .eq('booking_code', input)
-          .maybeSingle();
           
-        if (booking) {
-          targetTicket = booking;
-          isReprint = false;
-        }
-      }
+      if (!booking || error) return alert("⚠️ BOOKING CODE NOT FOUND");
 
-      if (!targetTicket) return alert("⚠️ INVALID CODE OR SERIAL");
-
-      // --- UNIFIED ENRICHMENT & TIME VALIDATION ---
-      let selections = typeof targetTicket.selections === 'string' 
-        ? JSON.parse(targetTicket.selections) 
-        : (targetTicket.selections || []);
+      // --- ENRICHMENT LOGIC ---
+      let selections = typeof booking.selections === 'string' 
+        ? JSON.parse(booking.selections) 
+        : (booking.selections || []);
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id));
       
@@ -106,37 +86,34 @@ export default function CashierDashboard() {
           const event = eventData.find(e => String(e.id) === String(sel.matchId || sel.match_id));
           const startTimeStr = event?.commence_time || sel.startTime || sel.clean_start_time;
           
-          // Strict check: If new booking, match must not have started
-          if (!isReprint && startTimeStr && new Date(startTimeStr) < now) {
+          // Check if any game in the booking has already started
+          if (startTimeStr && new Date(startTimeStr) < now) {
             hasStartedMatch = true;
           }
 
           return {
             ...sel,
+            // Prioritize display_league from api_events
             display_league: event?.display_league || sel.display_league || "League",
             startTime: startTimeStr
           };
         });
       }
 
-      // Block late bookings
-      if (hasStartedMatch && !isReprint) {
-        return alert("⚠️ CANNOT LOAD: One or more matches in this booking have already started!");
+      if (hasStartedMatch) {
+        return alert("⚠️ CANNOT LOAD: One or more matches have already started!");
       }
 
       // --- UPDATE UI ---
-      if (!isReprint) {
-        setCart(selections);
-        setStake(targetTicket.stake?.toString() || "100");
-      }
-      
-      shouldPrintRef.current = isReprint; 
-      setCurrentTicket({ ...targetTicket, selections }); 
+      setCart(selections);
+      setStake(booking.stake?.toString() || "100");
+      setCurrentTicket({ ...booking, selections }); 
+      shouldPrintRef.current = false; // Never auto-print on load
       setSearchQuery('');
 
     } catch (err) { 
       console.error(err); 
-      alert("Error processing ticket");
+      alert("Error loading booking");
     } finally { 
       setIsSearching(false); 
     }
@@ -145,6 +122,8 @@ export default function CashierDashboard() {
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
     if (!numStake || numStake <= 0 || numStake > (userProfile?.balance || 0)) return alert("Check Stake/Balance");
+    if (!currentTicket?.booking_code) return alert("No active booking loaded");
+
     setIsProcessing(true);
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
@@ -157,17 +136,22 @@ export default function CashierDashboard() {
       });
       if (rpcError) throw rpcError;
 
+      // Allow DB time to sync before fetching official ticket for printing
       await new Promise(res => setTimeout(res, 1500));
       const { data: official } = await supabase.from('print').select('*').eq('ticket_serial', newSerial).single();
 
       if (official) {
-        shouldPrintRef.current = true;
+        shouldPrintRef.current = true; // Trigger auto-print
         setCurrentTicket(official);
         setCart([]);
         setStake("");
         initTerminal(); 
       }
-    } catch (err) { alert(err.message); } finally { setIsProcessing(false); }
+    } catch (err) { 
+      alert(err.message); 
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
 
   return (
@@ -183,7 +167,7 @@ export default function CashierDashboard() {
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} 
-                placeholder="Enter Code or Serial..." 
+                placeholder="Enter Booking Code..." 
                 className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-[#10b981] outline-none" 
               />
               <button 
@@ -197,11 +181,11 @@ export default function CashierDashboard() {
           </div>
           <div className="grid grid-cols-2 gap-4">
               <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-                <p className="text-zinc-500 text-[10px] font-black uppercase">Float</p>
+                <p className="text-zinc-500 text-[10px] font-black uppercase">Float Balance</p>
                 <p className="text-white text-3xl font-black">KSh {userProfile?.balance?.toLocaleString() || "0.00"}</p>
               </div>
               <div className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-                <p className="text-zinc-500 text-[10px] font-black uppercase">Shop</p>
+                <p className="text-zinc-500 text-[10px] font-black uppercase">Active Shop</p>
                 <p className="text-[#10b981] text-xl font-black">{userProfile?.shop_name || "LUCRA"}</p>
               </div>
           </div>
@@ -221,11 +205,11 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* HIDDEN PRINT SOURCE */}
+      {/* HIDDEN PRINT SOURCE - isReprint is hardcoded false here as requested */}
       {currentTicket && (
         <div className="hidden no-print" aria-hidden="true">
           <div id="visible-preview">
-            <PrintableTicket ticket={currentTicket} isReprint={shouldPrintRef.current} />
+            <PrintableTicket ticket={currentTicket} isReprint={false} />
           </div>
         </div>
       )}
