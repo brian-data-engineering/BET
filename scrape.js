@@ -5,33 +5,68 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const sports = [
-  { id: 1, name: 'Football' },
-  { id: 3, name: 'Basketball' },
-  { id: 2, name: 'Ice Hockey' },
-  { id: 4, name: 'Tennis' },
-  { id: 10, name: 'Table Tennis' }
-];
+// Mapping your Internal sport_key to Linebet IDs
+const sportMapping = {
+  'soccer': 1,
+  'basketball': 3,
+  'ice-hockey': 2,
+  'tennis': 4,
+  'table-tennis': 10
+};
 
 async function syncLinebet() {
+  console.log("--- 🏁 STARTING TARGETED SYNC ---");
+
+  // STEP 1: Get unique sports and countries from pending tickets
+  const { data: pendingTickets, error: ticketError } = await supabase
+    .from('print')
+    .select('sport_key, country')
+    .eq('status', 'pending');
+
+  if (ticketError || !pendingTickets.length) {
+    console.log("No pending tickets found. Skipping sync.");
+    return;
+  }
+
+  // Gracefully handle nulls and extract unique values
+  const activeSports = [...new Set(pendingTickets
+    .map(t => t.sport_key?.toLowerCase())
+    .filter(s => s && sportMapping[s])
+  )];
+
+  const activeCountries = [...new Set(pendingTickets
+    .flatMap(t => t.country ? t.country.split(', ') : [])
+    .filter(c => c && c !== 'Unknown')
+  )];
+
+  console.log(`📊 WORKLOAD: ${activeSports.length} Sports | ${activeCountries.length} Countries`);
+  console.log(`🎯 TARGET COUNTRIES: ${activeCountries.join(', ') || 'Global Scan'}`);
+
   const now = Math.floor(Date.now() / 1000);
   const roundedTo = Math.floor(now / 3600) * 3600; 
-  const roundedFrom = roundedTo - 86400;
+  const roundedFrom = roundedTo - 86400; // Last 24 hours
 
-  for (const sport of sports) {
-    console.log(`\n--- Processing ${sport.name} ---`);
+  // STEP 2: Loop only through active sports
+  for (const sportKey of activeSports) {
+    const sportId = sportMapping[sportKey];
+    console.log(`\n--- ⚽ Processing ${sportKey.toUpperCase()} (ID: ${sportId}) ---`);
     
-    const champUrl = `https://linebet.com/service-api/result/web/api/v2/champs?dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189&sportIds=${sport.id}`;
+    const champUrl = `https://linebet.com/service-api/result/web/api/v2/champs?dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189&sportIds=${sportId}`;
     
     try {
       const champRes = await fetch(champUrl);
       const champData = await champRes.json();
-      const leagues = champData.items || [];
+      const allLeagues = champData.items || [];
       
-      console.log(`Found ${leagues.length} leagues. Fetching games...`);
+      // STEP 3: Filter leagues by active countries
+      const filteredLeagues = allLeagues.filter(league => {
+        if (activeCountries.length === 0) return true; // Global scan if no countries specified
+        return activeCountries.some(country => league.name.includes(country));
+      });
 
-      for (const league of leagues) {
-        // STEP 2 URL: Fetching games for this specific league
+      console.log(`Filtered ${allLeagues.length} leagues down to ${filteredLeagues.length} matching countries.`);
+
+      for (const league of filteredLeagues) {
         const gamesUrl = `https://linebet.com/service-api/result/web/api/v3/games?champId=${league.id}&dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189`;
         
         const gamesRes = await fetch(gamesUrl);
@@ -41,21 +76,26 @@ async function syncLinebet() {
         if (items.length > 0) {
           console.log(` > ${league.name}: Found ${items.length} games.`);
           
-          items.forEach(game => {
-            // Logic to split "2:0 (2:0,0:0)" into 2 and 0
-            const mainScore = game.score.split(' ')[0]; // Gets "2:0"
-            const scores = mainScore.split(':');
-            const homeScore = parseInt(scores[0]) || 0;
-            const awayScore = parseInt(scores[1]) || 0;
+          for (const game of items) {
+            if (!game.score) continue; // Skip if game hasn't finished/has no score
 
-            console.log(`   [MATCH] ${game.opp1} ${homeScore} : ${awayScore} ${game.opp2}`);
-            
-            // We will add the Supabase .upsert() here in Step 3!
-          });
+            const mainScore = game.score.split(' ')[0]; 
+            const scores = mainScore.split(':');
+            const homeScore = parseInt(scores[0]);
+            const awayScore = parseInt(scores[1]);
+
+            // Logic to verify we have actual numbers
+            if (!isNaN(homeScore) && !isNaN(awayScore)) {
+               console.log(`   [RESULT] ${game.opp1} ${homeScore}:${awayScore} ${game.opp2} (ID: ${game.id})`);
+               
+               // Here we will call the settlement function in the next step
+               // await updateMatchResults(game.id, homeScore, awayScore);
+            }
+          }
         }
       }
     } catch (err) {
-      console.error(`❌ ERROR in ${sport.name}:`, err.message);
+      console.error(`❌ ERROR in ${sportKey}:`, err.message);
     }
   }
 }
