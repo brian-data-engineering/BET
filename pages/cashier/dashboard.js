@@ -70,9 +70,10 @@ export default function CashierDashboard() {
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id));
       
+      // AGGRESSIVE: Pulling country and sport_type for the scraper filter
       const { data: eventData } = await supabase
         .from('api_events')
-        .select('id, display_league, commence_time') 
+        .select('id, display_league, commence_time, country, sport_type') 
         .in('id', matchIds);
 
       if (eventData) {
@@ -81,7 +82,10 @@ export default function CashierDashboard() {
           return {
             ...sel,
             display_league: event?.display_league || sel.display_league || "League",
-            startTime: event?.commence_time || sel.startTime || sel.clean_start_time
+            startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
+            // Tagging the selection with metadata
+            country: event?.country || "Unknown",
+            sport_key: event?.sport_type || "Football"
           };
         });
       }
@@ -117,11 +121,24 @@ export default function CashierDashboard() {
       });
       if (rpcError) throw rpcError;
 
+      // --- NEW AGGRESSIVE CAPTURE ---
+      // Collect unique countries and sports, separated by commas
+      const uniqueCountries = [...new Set(cart.map(s => s.country || "Unknown"))].join(', ');
+      const uniqueSports = [...new Set(cart.map(s => s.sport_key || "Football"))].join(', ');
+
+      await supabase
+        .from('print')
+        .update({
+          country: uniqueCountries,
+          sport_key: uniqueSports
+        })
+        .eq('ticket_serial', newSerial);
+      // ------------------------------
+
       await new Promise(res => setTimeout(res, 1500));
       const { data: official } = await supabase.from('print').select('*').eq('ticket_serial', newSerial).single();
 
       if (official) {
-        // CRITICAL FIX: Pass the current enriched selections (with league names) to the official print object
         const enrichedTicket = {
           ...official,
           selections: currentTicket.selections 
@@ -194,7 +211,6 @@ export default function CashierDashboard() {
       {currentTicket && (
         <div className="hidden no-print" aria-hidden="true">
           <div id="visible-preview">
-            {/* FIX: isReprint is hardcoded false to prevent "REPRINT" label on receipts */}
             <PrintableTicket ticket={currentTicket} isReprint={false} />
           </div>
         </div>
