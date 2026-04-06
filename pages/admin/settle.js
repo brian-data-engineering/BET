@@ -16,7 +16,7 @@ export default function SettlementPage() {
     try {
       const [ticketsRes, resultsRes, mappingsRes] = await Promise.all([
         supabase
-          .from('print') // CHANGED: Now pointing to your correct 'print' table
+          .from('print') 
           .select('*')
           .eq('status', 'pending')
           .not('ticket_serial', 'is', null)
@@ -32,7 +32,6 @@ export default function SettlementPage() {
       const mappings = mappingsRes.data || [];
 
       const ticketsWithData = (ticketsRes.data || []).map(ticket => {
-        // Enriched logic for your selections JSONB column
         const enrichedSelections = (ticket.selections || []).map(sel => {
           const [hBet, aBet] = sel.matchName.split(' vs ');
           const officialH = mappings.find(m => m.bet_team_name === hBet)?.official_team_name || hBet;
@@ -79,13 +78,16 @@ export default function SettlementPage() {
     if (processingId) return;
     setProcessingId(ticket.id);
 
-    // According to your schema, 'status' is text and defaults to 'pending'
+    // FIX: Convert to UPPERCASE so Cashier side "Collect" check passes
+    const formattedStatus = status.toUpperCase();
+
     const updateData = { 
-        status: status, // 'won' or 'lost'
+        status: formattedStatus,
+        settled_at: new Date().toISOString()
     };
 
     const { error } = await supabase
-      .from('print') // CHANGED: Target the print table
+      .from('print') 
       .update(updateData)
       .eq('id', ticket.id);
     
