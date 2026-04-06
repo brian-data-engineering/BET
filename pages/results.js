@@ -14,16 +14,12 @@ export default function ResultsPage() {
   const [activeSport, setActiveSport] = useState('soccer');
   const { slipItems } = useBets();
 
-  // --- CRITICAL SCROLL FIX ---
   useEffect(() => {
     const nextDataFolder = document.getElementById('__next');
     if (nextDataFolder) {
-      // Force the parent container to allow scrolling
       nextDataFolder.style.overflow = 'visible';
       nextDataFolder.style.height = 'auto';
     }
-
-    // Cleanup: Reset it back when leaving the page if necessary
     return () => {
       if (nextDataFolder) {
         nextDataFolder.style.overflow = ''; 
@@ -38,11 +34,10 @@ export default function ResultsPage() {
       setResults([]); 
       try {
         const { data, error } = await supabase
-          .from('results')
+          .from('finalresults') // UPDATED: Pointing to new table
           .select('*')
-          .eq('status', 'settled') 
-          .eq('sport_type', activeSport)
-          .order('match_date', { ascending: false })
+          .eq('sport_key', activeSport) // UPDATED: match your schema column name
+          .order('start_time_eat', { ascending: false }) // UPDATED: ordering by start time
           .limit(150);
 
         if (error) throw error;
@@ -64,9 +59,7 @@ export default function ResultsPage() {
   }, {});
 
   return (
-    // Changed overflow-hidden to overflow-visible here too
     <div className="min-h-screen bg-[#0b0f1a] text-white selection:bg-[#10b981]/30 overflow-visible">
-      {/* Background Ambient Glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-[#10b981]/5 blur-[120px] rounded-full" />
         <div className="absolute top-[20%] -right-[10%] w-[30%] h-[30%] bg-blue-500/5 blur-[120px] rounded-full" />
@@ -75,7 +68,6 @@ export default function ResultsPage() {
       <Navbar />
       
       <div className="relative z-10 max-w-[1400px] mx-auto flex flex-col lg:flex-row gap-6 px-4 pt-4 lg:pt-8 pb-32">
-        
         <aside className="w-full lg:w-72 shrink-0">
           <div className="lg:sticky lg:top-24 lg:h-fit">
              <ResultsSidebar activeSport={activeSport} setActiveSport={setActiveSport} />
@@ -85,7 +77,7 @@ export default function ResultsPage() {
                 </h4>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Total Settled</span>
+                    <span className="text-xs text-slate-400">Total Found</span>
                     <span className="text-xs font-bold text-white">{results.length}</span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -97,10 +89,7 @@ export default function ResultsPage() {
           </div>
         </aside>
 
-        {/* Main Content Area - Ensure overflow is visible */}
         <main className="flex-1 rounded-3xl bg-[#111926]/80 backdrop-blur-md border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col overflow-visible">
-          
-          {/* Header */}
           <div className="sticky top-0 lg:top-[64px] z-30 bg-[#111926] rounded-t-3xl">
             <ResultsHeader count={results.length} activeSport={activeSport} />
           </div>
@@ -114,7 +103,6 @@ export default function ResultsPage() {
             ) : Object.keys(groupedResults).length > 0 ? (
               Object.keys(groupedResults).map((league) => (
                 <div key={league} className="flex flex-col">
-                  {/* Sticky League Header */}
                   <div className="bg-[#1a231f]/90 px-6 py-3 flex items-center gap-4 border-y border-white/5 sticky top-[44px] lg:top-[112px] z-20 backdrop-blur-md">
                     <ChevronRight size={14} className="text-[#10b981]" />
                     <span className="text-[11px] font-black text-slate-100 capitalize">{league}</span>
@@ -125,7 +113,7 @@ export default function ResultsPage() {
                   
                   <div className="flex flex-col divide-y divide-white/[0.03]">
                     {groupedResults[league].map((match) => (
-                      <ResultsRow key={match.id} match={match} />
+                      <ResultsRow key={match.match_id} match={match} />
                     ))}
                   </div>
                 </div>
