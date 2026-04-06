@@ -11,12 +11,10 @@ export default function TicketManager() {
   const [user, setUser] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
 
-  // PAGINATION STATE
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 10;
 
-  // PRINTING LOGIC (PORTAL INJECTION)
   const shouldPrintRef = useRef(false);
 
   useEffect(() => {
@@ -25,29 +23,25 @@ export default function TicketManager() {
         const previewElement = document.getElementById('visible-preview');
         if (!previewElement) return;
         
-        // Create the temporary print portal
         const printContainer = document.createElement('div');
         printContainer.id = 'temp-print-portal';
-        // Force a white background for the thermal print
         printContainer.innerHTML = `<div style="background:white;width:100%;">${previewElement.innerHTML}</div>`;
 
         document.body.appendChild(printContainer);
         window.focus();
         window.print();
 
-        // Cleanup
         setTimeout(() => {
           if (document.getElementById('temp-print-portal')) {
             document.body.removeChild(printContainer);
           }
           shouldPrintRef.current = false;
         }, 1000);
-      }, 1000); // 1s delay to ensure the modal content has rendered
+      }, 1000);
       return () => clearTimeout(timer);
     }
   }, [selectedTicket]);
 
-  // 1. FETCH LOGIC
   const fetchTickets = useCallback(async (userId, currentPage, currentSearch) => {
     if (!userId) return;
     setLoading(true);
@@ -63,8 +57,9 @@ export default function TicketManager() {
         .order('created_at', { ascending: false })
         .range(from, to);
 
+      // FIXED: Only search by ticket_serial, ignore booking_code
       if (currentSearch) {
-        query = query.or(`ticket_serial.ilike.%${currentSearch}%,booking_code.ilike.%${currentSearch}%`);
+        query = query.ilike('ticket_serial', `%${currentSearch}%`);
       }
 
       const { data, count, error } = await query;
@@ -79,7 +74,6 @@ export default function TicketManager() {
     }
   }, []);
 
-  // 2. AUTH & INITIALIZATION
   useEffect(() => {
     const initializeTerminal = async () => {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -91,7 +85,6 @@ export default function TicketManager() {
     initializeTerminal();
   }, [fetchTickets, page, search]);
 
-  // 3. PAYOUT EXECUTION
   const handlePayout = async (ticket) => {
     if (ticket.status !== 'won') {
       alert("❌ This ticket is not marked as won yet.");
@@ -119,13 +112,9 @@ export default function TicketManager() {
     }
   };
 
-  const totalPages = Math.ceil(totalCount / pageSize);
-
   return (
     <CashierLayout>
       <div className="p-8 bg-[#0b0f1a] min-h-screen text-white font-sans no-print">
-        
-        {/* Header Section */}
         <div className="flex flex-col md:flex-row gap-4 mb-10 items-center">
           <h1 className="text-2xl font-black italic uppercase tracking-tighter text-[#10b981]">Terminal Ledger</h1>
           <div className="flex-1 bg-[#111926] p-4 rounded-2xl border border-white/5 flex items-center gap-4 focus-within:border-[#10b981]/50 transition-all shadow-2xl w-full">
@@ -203,25 +192,24 @@ export default function TicketManager() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 no-print overflow-y-auto">
           <div className="relative bg-[#111926] border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl my-auto">
             
+            {/* FIXED: Modal Close button is now visible inside the card header area */}
             <button 
               onClick={() => setSelectedTicket(null)} 
-              className="absolute -top-14 right-0 text-white hover:text-[#10b981] transition-all p-2 flex items-center gap-2 group"
+              className="absolute top-4 right-4 bg-black/20 hover:bg-[#10b981] hover:text-black transition-all p-2 rounded-full text-white/50"
             >
-              <X size={40} />
+              <X size={24} />
             </button>
 
             <button 
               onClick={() => {
                 shouldPrintRef.current = true;
-                // Triggers the useEffect by updating selectedTicket state slightly or re-triggering
                 setSelectedTicket({...selectedTicket}); 
               }}
-              className="w-full bg-[#10b981] text-black font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all mb-8 text-sm italic uppercase shadow-xl"
+              className="w-full bg-[#10b981] text-black font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all mb-8 mt-6 text-sm italic uppercase shadow-xl"
             >
               <Printer size={20} /> Confirm Reprint
             </button>
 
-            {/* PREVIEW AREA (The source for the print injection) */}
             <div id="visible-preview" className="bg-white p-2 rounded-xl mx-auto">
                <PrintableTicket ticket={selectedTicket} isReprint={true} />
             </div>
@@ -233,7 +221,6 @@ export default function TicketManager() {
         </div>
       )}
 
-      {/* SYNCED PRINT STYLES */}
       <style jsx global>{`
         @media screen { #temp-print-portal { display: none !important; } }
         @media print {
