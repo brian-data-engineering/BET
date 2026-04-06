@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
 import PrintableTicket from '../../components/cashier/PrintableTicket'; 
@@ -15,6 +15,37 @@ export default function TicketManager() {
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 10;
+
+  // PRINTING LOGIC (PORTAL INJECTION)
+  const shouldPrintRef = useRef(false);
+
+  useEffect(() => {
+    if (selectedTicket && shouldPrintRef.current) {
+      const timer = setTimeout(() => {
+        const previewElement = document.getElementById('visible-preview');
+        if (!previewElement) return;
+        
+        // Create the temporary print portal
+        const printContainer = document.createElement('div');
+        printContainer.id = 'temp-print-portal';
+        // Force a white background for the thermal print
+        printContainer.innerHTML = `<div style="background:white;width:100%;">${previewElement.innerHTML}</div>`;
+
+        document.body.appendChild(printContainer);
+        window.focus();
+        window.print();
+
+        // Cleanup
+        setTimeout(() => {
+          if (document.getElementById('temp-print-portal')) {
+            document.body.removeChild(printContainer);
+          }
+          shouldPrintRef.current = false;
+        }, 1000);
+      }, 1000); // 1s delay to ensure the modal content has rendered
+      return () => clearTimeout(timer);
+    }
+  }, [selectedTicket]);
 
   // 1. FETCH LOGIC
   const fetchTickets = useCallback(async (userId, currentPage, currentSearch) => {
@@ -161,21 +192,6 @@ export default function TicketManager() {
                     </div>
                   </div>
                 ))}
-
-                {/* PAGINATION */}
-                <div className="flex items-center justify-between pt-6 border-t border-white/5 mt-10">
-                  <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
-                    Page {page + 1} of {totalPages || 1}
-                  </p>
-                  <div className="flex gap-2">
-                    <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="p-3 rounded-xl bg-[#111926] border border-white/5 disabled:opacity-10 hover:border-[#10b981]/50 transition-all">
-                      <ChevronLeft size={20} />
-                    </button>
-                    <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="p-3 rounded-xl bg-[#111926] border border-white/5 disabled:opacity-10 hover:border-[#10b981]/50 transition-all">
-                      <ChevronRight size={20} />
-                    </button>
-                  </div>
-                </div>
               </>
             )}
           </div>
@@ -187,28 +203,26 @@ export default function TicketManager() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 no-print overflow-y-auto">
           <div className="relative bg-[#111926] border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl my-auto">
             
-            {/* CLOSE BUTTON */}
             <button 
               onClick={() => setSelectedTicket(null)} 
               className="absolute -top-14 right-0 text-white hover:text-[#10b981] transition-all p-2 flex items-center gap-2 group"
             >
-              <span className="text-[10px] font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Close</span>
               <X size={40} />
             </button>
 
-            {/* ACTION BUTTON */}
             <button 
-              onClick={() => window.print()}
+              onClick={() => {
+                shouldPrintRef.current = true;
+                // Triggers the useEffect by updating selectedTicket state slightly or re-triggering
+                setSelectedTicket({...selectedTicket}); 
+              }}
               className="w-full bg-[#10b981] text-black font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all mb-8 text-sm italic uppercase shadow-xl"
             >
               <Printer size={20} /> Confirm Reprint
             </button>
 
-            {/* MASTER PRINT TARGET: 
-                We use the class 'lucra-print-area' here so your global 
-                CSS @media print logic can unlock it and set the 72mm width.
-            */}
-            <div className="lucra-print-area mx-auto">
+            {/* PREVIEW AREA (The source for the print injection) */}
+            <div id="visible-preview" className="bg-white p-2 rounded-xl mx-auto">
                <PrintableTicket ticket={selectedTicket} isReprint={true} />
             </div>
             
@@ -218,6 +232,21 @@ export default function TicketManager() {
           </div>
         </div>
       )}
+
+      {/* SYNCED PRINT STYLES */}
+      <style jsx global>{`
+        @media screen { #temp-print-portal { display: none !important; } }
+        @media print {
+          #__next, .no-print, .fixed { display: none !important; }
+          #temp-print-portal { 
+            display: block !important; 
+            width: 72mm !important; 
+            position: absolute;
+            top: 0;
+            left: 0;
+          }
+        }
+      `}</style>
     </CashierLayout>
   );
 }
