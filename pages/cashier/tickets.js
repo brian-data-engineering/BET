@@ -16,7 +16,7 @@ export default function TicketManager() {
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 10;
 
-  // 1. STABLE FETCH LOGIC
+  // 1. FETCH LOGIC
   const fetchTickets = useCallback(async (userId, currentPage, currentSearch) => {
     if (!userId) return;
     setLoading(true);
@@ -62,7 +62,6 @@ export default function TicketManager() {
 
   // 3. PAYOUT EXECUTION
   const handlePayout = async (ticket) => {
-    // We use lowercase 'won' here to match your print_status_check constraint
     if (ticket.status !== 'won') {
       alert("❌ This ticket is not marked as won yet.");
       return;
@@ -73,7 +72,6 @@ export default function TicketManager() {
     
     setLoading(true);
     try {
-      // Ensure the RPC 'execute_lucra_payout' is also checking for lowercase 'won' internally
       const { error } = await supabase.rpc('execute_lucra_payout', {
         p_ticket_id: ticket.id,
         p_cashier_id: user.id,
@@ -84,7 +82,6 @@ export default function TicketManager() {
       alert("✅ PAYOUT SUCCESSFUL");
       fetchTickets(user.id, page, search); 
     } catch (err) {
-      // If the RPC fails with "Not marked as WON", the RPC code itself needs to be changed to lowercase
       alert(`❌ PAYOUT FAILED: ${err.message}`);
     } finally {
       setLoading(false);
@@ -128,7 +125,6 @@ export default function TicketManager() {
                 {tickets.map(t => (
                   <div key={t.id} className="bg-[#111926]/80 backdrop-blur-md p-5 rounded-[2rem] flex justify-between items-center border border-white/5 hover:border-[#10b981]/20 transition-all group">
                     <div className="flex items-center gap-5">
-                      {/* UI matches lowercase 'won' */}
                       <div className={`p-4 rounded-2xl ${t.status === 'won' ? 'bg-[#10b981] text-black shadow-lg shadow-[#10b981]/20' : 'bg-white/5 text-white/20'}`}>
                         {t.status === 'won' ? <CheckCircle2 size={22} /> : <Clock size={22} />}
                       </div>
@@ -152,7 +148,6 @@ export default function TicketManager() {
                       </div>
 
                       <div className="w-32 flex justify-end">
-                        {/* Check for lowercase 'won' */}
                         {t.status === 'won' && !t.settled_at ? (
                           <button onClick={() => handlePayout(t)} className="bg-[#10b981] text-black px-4 py-3 rounded-xl font-black italic uppercase text-[9px] hover:scale-105 transition-all shadow-lg flex items-center gap-2">
                             <Banknote size={14} /> Collect
@@ -189,22 +184,34 @@ export default function TicketManager() {
 
       {/* REPRINT / VIEW MODAL */}
       {selectedTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 no-print">
-          <div className="bg-[#111926] border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full relative shadow-2xl">
-            <button onClick={() => setSelectedTicket(null)} className="absolute -top-12 right-0 text-white hover:text-[#10b981] transition-colors">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 no-print overflow-y-auto">
+          <div className="relative bg-[#111926] border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl my-auto">
+            
+            {/* IMPROVED CLOSE BUTTON */}
+            <button 
+              onClick={() => setSelectedTicket(null)} 
+              className="absolute -top-14 right-0 text-white hover:text-[#10b981] transition-all p-2 flex items-center gap-2 group"
+            >
+              <span className="text-[10px] font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Close</span>
               <X size={40} />
             </button>
 
             <button 
               onClick={() => window.print()}
-              className="w-full bg-[#10b981] text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all mb-8 text-sm italic uppercase"
+              className="w-full bg-[#10b981] text-black font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all mb-8 text-sm italic uppercase shadow-xl"
             >
-              <Printer size={20} /> Reprint Receipt
+              <Printer size={20} /> Confirm Reprint
             </button>
 
+            {/* PREVIEW CONTAINER */}
             <div id="visible-preview" className="bg-white p-2 rounded-xl">
-               <PrintableTicket ticket={selectedTicket} />
+               {/* isReprint={true} ensures the "REPRINT COPY" label shows */}
+               <PrintableTicket ticket={selectedTicket} isReprint={true} />
             </div>
+            
+            <p className="text-[8px] text-center text-white/20 mt-6 uppercase font-bold tracking-[0.3em]">
+              Lucra Terminal System
+            </p>
           </div>
         </div>
       )}
@@ -214,7 +221,14 @@ export default function TicketManager() {
         @media print {
           body * { visibility: hidden !important; }
           #visible-preview, #visible-preview * { visibility: visible !important; }
-          #visible-preview { position: fixed; left: 0; top: 0; width: 100vw; }
+          #visible-preview { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 72mm; /* Exact thermal width */
+            margin: 0;
+            padding: 0;
+          }
         }
       `}</style>
     </CashierLayout>
