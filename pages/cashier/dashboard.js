@@ -56,7 +56,7 @@ export default function CashierDashboard() {
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
     try {
-      // 1. Search ONLY for 'ticket_serial' in the print table.
+      // 1. Check print table (reprints)
       const { data: printed } = await supabase.from('print')
         .select('*')
         .eq('ticket_serial', input)
@@ -69,37 +69,38 @@ export default function CashierDashboard() {
         return;
       }
 
-      // 2. Try 'betsnow' table
+      // 2. Check betsnow table (new bookings)
       const { data: booking } = await supabase.from('betsnow').select('*').eq('booking_code', input).maybeSingle();
       if (!booking) return alert("⚠️ EXPIRED OR NOT FOUND");
 
       let selections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []);
 
-      // --- ENRICH SELECTIONS WITH LEAGUE AND COMMENCE TIME ---
-      const matchIds = selections.map(s => s.matchId);
+      // --- ENRICHMENT LOGIC ---
+      // Force IDs to strings to ensure they match the API events table
+      const matchIds = selections.map(s => String(s.matchId));
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time') 
         .in('id', matchIds);
 
       if (eventData) {
+        console.log("Enrichment Check:", eventData); // Verify data in console
         selections = selections.map(sel => {
           const event = eventData.find(e => String(e.id) === String(sel.matchId));
           return {
             ...sel,
             display_league: event?.display_league || "League",
-            // Map commence_time from DB to startTime for the Ticket component
             startTime: event?.commence_time || sel.startTime 
           };
         });
       }
-      // ----------------------------------------------------
+      // -------------------------
 
       setCart(selections);
       setStake(booking.stake?.toString() || "100");
       shouldPrintRef.current = false; 
       
-      // Update the current ticket with enriched data for the preview
+      // Update state with enriched selections for the printer
       setCurrentTicket({ ...booking, selections }); 
       setSearchQuery('');
     } catch (err) { 
