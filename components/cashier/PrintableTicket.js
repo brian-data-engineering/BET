@@ -53,7 +53,7 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
       <div style={{ marginBottom: '10px' }}>
         {selections.map((sel, idx) => (
           <div key={idx} style={{ border: '1px solid #000', padding: '6px', marginBottom: '5px', fontSize: '11px' }}>
-            {/* LEAGUE HEADER - Optimized for Enrichment */}
+            {/* LEAGUE HEADER */}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 'bold', color: '#333', borderBottom: '0.5px solid #eee', paddingBottom: '2px', marginBottom: '4px' }}>
               <span style={{ textTransform: 'uppercase' }}>
                 {sel.display_league || sel.league_name || "LEAGUE"}
@@ -84,19 +84,31 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
         ))}
       </div>
 
-      {/* TOTALS */}
+      {/* TOTALS WITH COMMA FORMATTING */}
       <div style={{ borderTop: '2px dashed #000', paddingTop: '8px', marginTop: '5px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span>Total Stake:</span>
-          <span style={{ fontWeight: 'bold' }}>KSh {ticket.stake}</span>
+          <span style={{ fontWeight: 'bold' }}>
+            KSh {Number(ticket.stake).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span>Total Odds:</span>
           <span style={{ fontWeight: 'bold' }}>{ticket.total_odds}</span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: '900', marginTop: '8px', borderTop: '1px solid #000', paddingTop: '5px' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          fontSize: '20px', 
+          fontWeight: '900', 
+          marginTop: '8px', 
+          borderTop: '1px solid #000', 
+          paddingTop: '5px' 
+        }}>
           <span>PAYOUT:</span>
-          <span>{ticket.potential_payout}</span>
+          <span>
+            {Number(ticket.potential_payout).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </span>
         </div>
       </div>
 
