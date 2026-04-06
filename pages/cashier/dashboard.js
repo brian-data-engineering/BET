@@ -70,7 +70,6 @@ export default function CashierDashboard() {
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id));
       
-      // AGGRESSIVE: Pulling country and sport_type for the scraper filter
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time, country, sport_type') 
@@ -83,7 +82,7 @@ export default function CashierDashboard() {
             ...sel,
             display_league: event?.display_league || sel.display_league || "League",
             startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
-            // Tagging the selection with metadata
+            // FIX: Map these here so they are available in the cart state
             country: event?.country || "Unknown",
             sport_key: event?.sport_type || "Football"
           };
@@ -121,11 +120,11 @@ export default function CashierDashboard() {
       });
       if (rpcError) throw rpcError;
 
-      // --- NEW AGGRESSIVE CAPTURE ---
-      // Collect unique countries and sports, separated by commas
+      // Extract unique countries and sports from the enriched cart
       const uniqueCountries = [...new Set(cart.map(s => s.country || "Unknown"))].join(', ');
       const uniqueSports = [...new Set(cart.map(s => s.sport_key || "Football"))].join(', ');
 
+      // Update the print table with our identified metadata
       await supabase
         .from('print')
         .update({
@@ -133,7 +132,6 @@ export default function CashierDashboard() {
           sport_key: uniqueSports
         })
         .eq('ticket_serial', newSerial);
-      // ------------------------------
 
       await new Promise(res => setTimeout(res, 1500));
       const { data: official } = await supabase.from('print').select('*').eq('ticket_serial', newSerial).single();
