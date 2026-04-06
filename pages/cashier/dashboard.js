@@ -56,8 +56,12 @@ export default function CashierDashboard() {
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
     try {
-      const { data: printed } = await supabase.from('print').select('*')
-        .or(`ticket_serial.eq.${input},booking_code.eq.${input}`).maybeSingle();
+      // 1. Search ONLY for 'ticket_serial' in the print table.
+      // Removing booking_code here ensures used codes don't load as reprints.
+      const { data: printed } = await supabase.from('print')
+        .select('*')
+        .eq('ticket_serial', input)
+        .maybeSingle();
 
       if (printed) {
         shouldPrintRef.current = true; 
@@ -66,8 +70,9 @@ export default function CashierDashboard() {
         return;
       }
 
+      // 2. Try 'betsnow' table (Will return null if killed in DB side)
       const { data: booking } = await supabase.from('betsnow').select('*').eq('booking_code', input).maybeSingle();
-      if (!booking) return alert("⚠️ NOT FOUND");
+      if (!booking) return alert("⚠️ EXPIRED OR NOT FOUND");
 
       const selections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []);
       setCart(selections);
@@ -134,7 +139,7 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* HIDDEN PRINT SOURCE: Removed the visible classes, added 'hidden' */}
+      {/* HIDDEN PRINT SOURCE */}
       {currentTicket && (
         <div className="hidden no-print" aria-hidden="true">
           <div id="visible-preview">
