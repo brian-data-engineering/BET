@@ -162,7 +162,7 @@ export default function TicketManager() {
                   </div>
                 ))}
 
-                {/* PAGINATION CONTROLS */}
+                {/* PAGINATION */}
                 <div className="flex items-center justify-between pt-6 border-t border-white/5 mt-10">
                   <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
                     Page {page + 1} of {totalPages || 1}
@@ -187,7 +187,7 @@ export default function TicketManager() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 no-print overflow-y-auto">
           <div className="relative bg-[#111926] border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl my-auto">
             
-            {/* IMPROVED CLOSE BUTTON */}
+            {/* CLOSE BUTTON */}
             <button 
               onClick={() => setSelectedTicket(null)} 
               className="absolute -top-14 right-0 text-white hover:text-[#10b981] transition-all p-2 flex items-center gap-2 group"
@@ -196,6 +196,7 @@ export default function TicketManager() {
               <X size={40} />
             </button>
 
+            {/* ACTION BUTTON */}
             <button 
               onClick={() => window.print()}
               className="w-full bg-[#10b981] text-black font-black py-5 rounded-2xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all mb-8 text-sm italic uppercase shadow-xl"
@@ -203,9 +204,11 @@ export default function TicketManager() {
               <Printer size={20} /> Confirm Reprint
             </button>
 
-            {/* PREVIEW CONTAINER */}
-            <div id="visible-preview" className="bg-white p-2 rounded-xl">
-               {/* isReprint={true} ensures the "REPRINT COPY" label shows */}
+            {/* MASTER PRINT TARGET: 
+                We use the class 'lucra-print-area' here so your global 
+                CSS @media print logic can unlock it and set the 72mm width.
+            */}
+            <div className="lucra-print-area mx-auto">
                <PrintableTicket ticket={selectedTicket} isReprint={true} />
             </div>
             
@@ -215,22 +218,6 @@ export default function TicketManager() {
           </div>
         </div>
       )}
-
-      {/* PRINT STYLES */}
-      <style jsx global>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #visible-preview, #visible-preview * { visibility: visible !important; }
-          #visible-preview { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 72mm; /* Exact thermal width */
-            margin: 0;
-            padding: 0;
-          }
-        }
-      `}</style>
     </CashierLayout>
   );
 }
