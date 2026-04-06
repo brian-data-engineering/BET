@@ -16,7 +16,7 @@ export default function TicketManager() {
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 10;
 
-  // 1. STABLE FETCH LOGIC (Updated to use 'print' table and pagination)
+  // 1. STABLE FETCH LOGIC
   const fetchTickets = useCallback(async (userId, currentPage, currentSearch) => {
     if (!userId) return;
     setLoading(true);
@@ -26,7 +26,7 @@ export default function TicketManager() {
 
     try {
       let query = supabase
-        .from('print') // Switched from 'betsnow' to 'print'
+        .from('print') 
         .select('*', { count: 'exact' })
         .eq('cashier_id', userId)
         .order('created_at', { ascending: false })
@@ -62,11 +62,18 @@ export default function TicketManager() {
 
   // 3. PAYOUT EXECUTION
   const handlePayout = async (ticket) => {
+    // We use lowercase 'won' here to match your print_status_check constraint
+    if (ticket.status !== 'won') {
+      alert("❌ This ticket is not marked as won yet.");
+      return;
+    }
+
     const payoutAmount = parseFloat(ticket.potential_payout);
     if (!window.confirm(`PAYOUT KES ${payoutAmount.toLocaleString()}?`)) return;
     
     setLoading(true);
     try {
+      // Ensure the RPC 'execute_lucra_payout' is also checking for lowercase 'won' internally
       const { error } = await supabase.rpc('execute_lucra_payout', {
         p_ticket_id: ticket.id,
         p_cashier_id: user.id,
@@ -77,6 +84,7 @@ export default function TicketManager() {
       alert("✅ PAYOUT SUCCESSFUL");
       fetchTickets(user.id, page, search); 
     } catch (err) {
+      // If the RPC fails with "Not marked as WON", the RPC code itself needs to be changed to lowercase
       alert(`❌ PAYOUT FAILED: ${err.message}`);
     } finally {
       setLoading(false);
@@ -120,6 +128,7 @@ export default function TicketManager() {
                 {tickets.map(t => (
                   <div key={t.id} className="bg-[#111926]/80 backdrop-blur-md p-5 rounded-[2rem] flex justify-between items-center border border-white/5 hover:border-[#10b981]/20 transition-all group">
                     <div className="flex items-center gap-5">
+                      {/* UI matches lowercase 'won' */}
                       <div className={`p-4 rounded-2xl ${t.status === 'won' ? 'bg-[#10b981] text-black shadow-lg shadow-[#10b981]/20' : 'bg-white/5 text-white/20'}`}>
                         {t.status === 'won' ? <CheckCircle2 size={22} /> : <Clock size={22} />}
                       </div>
@@ -143,6 +152,7 @@ export default function TicketManager() {
                       </div>
 
                       <div className="w-32 flex justify-end">
+                        {/* Check for lowercase 'won' */}
                         {t.status === 'won' && !t.settled_at ? (
                           <button onClick={() => handlePayout(t)} className="bg-[#10b981] text-black px-4 py-3 rounded-xl font-black italic uppercase text-[9px] hover:scale-105 transition-all shadow-lg flex items-center gap-2">
                             <Banknote size={14} /> Collect
