@@ -53,14 +53,18 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
       <div style={{ marginBottom: '10px' }}>
         {selections.map((sel, idx) => (
           <div key={idx} style={{ border: '1px solid #000', padding: '6px', marginBottom: '5px', fontSize: '11px' }}>
-            {/* LEAGUE HEADER */}
+            {/* LEAGUE HEADER - Optimized for Enrichment */}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 'bold', color: '#333', borderBottom: '0.5px solid #eee', paddingBottom: '2px', marginBottom: '4px' }}>
-              <span style={{ textTransform: 'uppercase' }}>{sel.league_name || sel.display_league || "LEAGUE"}</span>
+              <span style={{ textTransform: 'uppercase' }}>
+                {sel.display_league || sel.league_name || "LEAGUE"}
+              </span>
               <span>ID: {sel.matchId || sel.match_id}</span>
             </div>
 
             {/* MATCH NAME */}
-            <div style={{ fontWeight: 'bold', fontSize: '13px', margin: '2px 0' }}>{sel.matchName || sel.match_name}</div>
+            <div style={{ fontWeight: 'bold', fontSize: '13px', margin: '2px 0' }}>
+              {sel.matchName || sel.match_name}
+            </div>
             
             {/* CLEAN START TIME */}
             {(sel.startTime || sel.clean_start_time) && (
@@ -72,7 +76,7 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
             {/* PICK & ODDS */}
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '0.5px dashed #000', paddingTop: '3px', marginTop: '2px' }}>
               <div style={{ fontSize: '10px' }}>
-                {sel.marketName}: <strong>{sel.selection}</strong>
+                {sel.marketName || '1X2'}: <strong>{sel.selection}</strong>
               </div>
               <span style={{ fontWeight: 'bold', fontSize: '12px' }}>{sel.odds}</span>
             </div>
@@ -98,8 +102,10 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
 
       {/* BARCODE */}
       <div style={{ marginTop: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Barcode value={String(ticket.ticket_serial)} width={1.5} height={50} displayValue={false} margin={0} />
-        <div style={{ fontSize: '14px', fontWeight: '900', marginTop: '5px' }}>#{ticket.ticket_serial}</div>
+        <Barcode value={String(ticket.ticket_serial || ticket.booking_code)} width={1.5} height={50} displayValue={false} margin={0} />
+        <div style={{ fontSize: '14px', fontWeight: '900', marginTop: '5px' }}>
+          #{ticket.ticket_serial || "BOOKING"}
+        </div>
         <div style={{ fontSize: '10px', marginTop: '5px' }}>Code: {ticket.booking_code}</div>
       </div>
     </div>
