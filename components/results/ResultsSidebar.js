@@ -1,9 +1,10 @@
-import { Trophy, Dribbble, CircleDot, Activity, ChevronRight, Zap } from 'lucide-react';
+import { Trophy, Dribbble, CircleDot, Activity, ChevronRight, Zap, Target } from 'lucide-react';
 
 export default function ResultsSidebar({ activeSport, setActiveSport }) {
   const sports = [
     { id: 'soccer', name: 'Football', icon: <Trophy size={16} /> },
     { id: 'basketball', name: 'Basketball', icon: <Dribbble size={16} /> },
+    { id: 'tennis', name: 'Tennis', icon: <Target size={16} /> }, // Added Tennis
     { id: 'ice-hockey', name: 'Ice Hockey', icon: <Activity size={16} /> },
     { id: 'table-tennis', name: 'Table Tennis', icon: <CircleDot size={16} /> },
   ];
@@ -21,7 +22,7 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
           <div className="flex items-center gap-2 mb-1">
              <div className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse" />
              <h3 className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
-               Lucra Engine
+                Lucra Engine
              </h3>
           </div>
           <p className="text-white text-[13px] font-black italic tracking-tight">SETTLED RESULTS</p>
@@ -88,8 +89,8 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
       <div className="hidden lg:block">
         <div className="p-5 rounded-2xl bg-gradient-to-br from-[#111926] to-transparent border border-white/5 space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 font-black uppercase">Refresh</span>
-            <span className="text-[10px] text-[#10b981] font-black uppercase">Auto-Live</span>
+            <span className="text-[10px] text-slate-500 font-black uppercase">Sync Status</span>
+            <span className="text-[10px] text-[#10b981] font-black uppercase">Live</span>
           </div>
           
           <div className="space-y-2">
@@ -109,7 +110,7 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
 
           <div className="pt-2 border-t border-white/5">
              <button className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-[9px] font-black text-slate-300 transition-colors uppercase tracking-widest">
-                Support Center
+                System Health: OK
              </button>
           </div>
         </div>
