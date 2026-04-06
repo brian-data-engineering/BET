@@ -42,7 +42,7 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
             height: 'auto', 
             margin: '0 auto 8px auto', 
             display: 'block',
-            filter: 'grayscale(1) contrast(200%)' // Optimized for thermal printing
+            filter: 'grayscale(1) contrast(200%)' 
           }} 
         />
         <div style={{ fontSize: '12px', fontWeight: 'bold' }}>SHOP: {ticket.shop_name || "LUCRA"}</div>
@@ -53,14 +53,28 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
       <div style={{ marginBottom: '10px' }}>
         {selections.map((sel, idx) => (
           <div key={idx} style={{ border: '1px solid #000', padding: '6px', marginBottom: '5px', fontSize: '11px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold', color: '#555' }}>
-              <span>ID: {sel.matchId}</span>
-              <span>{sel.marketName}</span>
+            {/* LEAGUE HEADER */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 'bold', color: '#333', borderBottom: '0.5px solid #eee', paddingBottom: '2px', marginBottom: '4px' }}>
+              <span style={{ textTransform: 'uppercase' }}>{sel.league_name || sel.display_league || "LEAGUE"}</span>
+              <span>ID: {sel.matchId || sel.match_id}</span>
             </div>
-            <div style={{ fontWeight: 'bold', fontSize: '13px', margin: '3px 0' }}>{sel.matchName}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '0.5px solid #eee', paddingTop: '2px' }}>
-              <span>PICK: <strong>{sel.selection}</strong></span>
-              <span style={{ fontWeight: 'bold' }}>{sel.odds}</span>
+
+            {/* MATCH NAME */}
+            <div style={{ fontWeight: 'bold', fontSize: '13px', margin: '2px 0' }}>{sel.matchName || sel.match_name}</div>
+            
+            {/* CLEAN START TIME */}
+            {(sel.startTime || sel.clean_start_time) && (
+              <div style={{ fontSize: '9px', marginBottom: '4px', fontStyle: 'italic' }}>
+                {(sel.clean_start_time || sel.startTime).replace('T', ' ').replace(/\+00:00$/, '')}
+              </div>
+            )}
+
+            {/* PICK & ODDS */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '0.5px dashed #000', paddingTop: '3px', marginTop: '2px' }}>
+              <div style={{ fontSize: '10px' }}>
+                {sel.marketName}: <strong>{sel.selection}</strong>
+              </div>
+              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>{sel.odds}</span>
             </div>
           </div>
         ))}
