@@ -25,7 +25,6 @@ export default function CashierDashboard() {
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // AUTO-PRINT LOGIC (Strictly for newly processed payments)
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
@@ -57,7 +56,6 @@ export default function CashierDashboard() {
     const input = searchQuery.trim().toUpperCase();
     
     try {
-      // STRICT: Only check betsnow for booking codes
       const { data: booking, error } = await supabase
         .from('betsnow')
         .select('*')
@@ -66,7 +64,6 @@ export default function CashierDashboard() {
           
       if (!booking || error) return alert("⚠️ BOOKING CODE NOT FOUND");
 
-      // --- ENRICHMENT LOGIC ---
       let selections = typeof booking.selections === 'string' 
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
@@ -78,37 +75,21 @@ export default function CashierDashboard() {
         .select('id, display_league, commence_time') 
         .in('id', matchIds);
 
-      const now = new Date();
-      let hasStartedMatch = false;
-
       if (eventData) {
         selections = selections.map(sel => {
           const event = eventData.find(e => String(e.id) === String(sel.matchId || sel.match_id));
-          const startTimeStr = event?.commence_time || sel.startTime || sel.clean_start_time;
-          
-          // Check if any game in the booking has already started
-          if (startTimeStr && new Date(startTimeStr) < now) {
-            hasStartedMatch = true;
-          }
-
           return {
             ...sel,
-            // Prioritize display_league from api_events
             display_league: event?.display_league || sel.display_league || "League",
-            startTime: startTimeStr
+            startTime: event?.commence_time || sel.startTime || sel.clean_start_time
           };
         });
       }
 
-      if (hasStartedMatch) {
-        return alert("⚠️ CANNOT LOAD: One or more matches have already started!");
-      }
-
-      // --- UPDATE UI ---
       setCart(selections);
       setStake(booking.stake?.toString() || "100");
       setCurrentTicket({ ...booking, selections }); 
-      shouldPrintRef.current = false; // Never auto-print on load
+      shouldPrintRef.current = false; 
       setSearchQuery('');
 
     } catch (err) { 
@@ -136,13 +117,18 @@ export default function CashierDashboard() {
       });
       if (rpcError) throw rpcError;
 
-      // Allow DB time to sync before fetching official ticket for printing
       await new Promise(res => setTimeout(res, 1500));
       const { data: official } = await supabase.from('print').select('*').eq('ticket_serial', newSerial).single();
 
       if (official) {
-        shouldPrintRef.current = true; // Trigger auto-print
-        setCurrentTicket(official);
+        // CRITICAL FIX: Pass the current enriched selections (with league names) to the official print object
+        const enrichedTicket = {
+          ...official,
+          selections: currentTicket.selections 
+        };
+        
+        shouldPrintRef.current = true; 
+        setCurrentTicket(enrichedTicket);
         setCart([]);
         setStake("");
         initTerminal(); 
@@ -205,10 +191,10 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* HIDDEN PRINT SOURCE - isReprint is hardcoded false here as requested */}
       {currentTicket && (
         <div className="hidden no-print" aria-hidden="true">
           <div id="visible-preview">
+            {/* FIX: isReprint is hardcoded false to prevent "REPRINT" label on receipts */}
             <PrintableTicket ticket={currentTicket} isReprint={false} />
           </div>
         </div>
