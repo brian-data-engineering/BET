@@ -32,9 +32,19 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
         </div>
       )}
 
-      {/* HEADER */}
-      <div style={{ textAlign: 'center', borderBottom: '2px solid #000', marginBottom: '10px', paddingBottom: '5px' }}>
-        <h1 style={{ margin: '0', fontSize: '28px', fontWeight: '900' }}>LUCRA</h1>
+      {/* HEADER WITH LOGO IMAGE */}
+      <div style={{ textAlign: 'center', borderBottom: '2px solid #000', marginBottom: '10px', paddingBottom: '10px' }}>
+        <img 
+          src="https://i.ibb.co/67wb7Zm1/download.png" 
+          alt="LUCRA" 
+          style={{ 
+            width: '150px', 
+            height: 'auto', 
+            margin: '0 auto 8px auto', 
+            display: 'block',
+            filter: 'grayscale(1) contrast(200%)' // Optimized for thermal printing
+          }} 
+        />
         <div style={{ fontSize: '12px', fontWeight: 'bold' }}>SHOP: {ticket.shop_name || "LUCRA"}</div>
         <div style={{ fontSize: '10px' }}>DATE: {new Date(ticket.created_at).toLocaleString()}</div>
       </div>
