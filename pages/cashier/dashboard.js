@@ -46,7 +46,7 @@ export default function CashierDashboard() {
           }
           shouldPrintRef.current = false;
         }, 1000);
-      }, 1500); // 1.5s is perfect for rendering
+      }, 1500); 
       return () => clearTimeout(timer);
     }
   }, [currentTicket]);
@@ -56,7 +56,6 @@ export default function CashierDashboard() {
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
     try {
-      // 1. Try Ticket Serial or Booking Code in 'print' table
       const { data: printed } = await supabase.from('print').select('*')
         .or(`ticket_serial.eq.${input},booking_code.eq.${input}`).maybeSingle();
 
@@ -67,7 +66,6 @@ export default function CashierDashboard() {
         return;
       }
 
-      // 2. Try 'betsnow' table
       const { data: booking } = await supabase.from('betsnow').select('*').eq('booking_code', input).maybeSingle();
       if (!booking) return alert("⚠️ NOT FOUND");
 
@@ -136,12 +134,11 @@ export default function CashierDashboard() {
         </div>
       </div>
 
+      {/* HIDDEN PRINT SOURCE: Removed the visible classes, added 'hidden' */}
       {currentTicket && (
-        <div className="lucra-preview-container no-print pb-20">
-          <div className="bg-white p-4 shadow-2xl border-2 border-[#10b981] max-w-[320px] mx-auto mt-10 rounded-lg">
-            <div id="visible-preview" className="bg-white">
-              <PrintableTicket ticket={currentTicket} />
-            </div>
+        <div className="hidden no-print" aria-hidden="true">
+          <div id="visible-preview">
+            <PrintableTicket ticket={currentTicket} />
           </div>
         </div>
       )}
