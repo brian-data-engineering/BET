@@ -55,56 +55,72 @@ export default function CashierDashboard() {
     if (!searchQuery || isSearching) return;
     setIsSearching(true);
     const input = searchQuery.trim().toUpperCase();
+    
     try {
-      // 1. Check print table (reprints)
-      const { data: printed } = await supabase.from('print')
+      let targetTicket = null;
+      let isReprint = false;
+
+      // 1. Try finding in the print table (Reprint)
+      const { data: printed } = await supabase
+        .from('print')
         .select('*')
         .eq('ticket_serial', input)
         .maybeSingle();
 
       if (printed) {
-        shouldPrintRef.current = true; 
-        setCurrentTicket(printed); 
-        setSearchQuery('');
-        return;
+        targetTicket = printed;
+        isReprint = true;
+      } else {
+        // 2. Try finding in the betsnow table (Booking)
+        const { data: booking } = await supabase
+          .from('betsnow')
+          .select('*')
+          .eq('booking_code', input)
+          .maybeSingle();
+          
+        if (booking) {
+          targetTicket = booking;
+        }
       }
 
-      // 2. Check betsnow table (new bookings)
-      const { data: booking } = await supabase.from('betsnow').select('*').eq('booking_code', input).maybeSingle();
-      if (!booking) return alert("⚠️ EXPIRED OR NOT FOUND");
+      if (!targetTicket) return alert("⚠️ CODE NOT FOUND");
 
-      let selections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []);
+      // --- UNIFIED ENRICHMENT LOGIC ---
+      let selections = typeof targetTicket.selections === 'string' 
+        ? JSON.parse(targetTicket.selections) 
+        : (targetTicket.selections || []);
 
-      // --- ENRICHMENT LOGIC ---
-      // Force IDs to strings to ensure they match the API events table
-      const matchIds = selections.map(s => String(s.matchId));
+      const matchIds = selections.map(s => String(s.matchId || s.match_id));
+      
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time') 
         .in('id', matchIds);
 
       if (eventData) {
-        console.log("Enrichment Check:", eventData); // Verify data in console
         selections = selections.map(sel => {
-          const event = eventData.find(e => String(e.id) === String(sel.matchId));
+          const event = eventData.find(e => String(e.id) === String(sel.matchId || sel.match_id));
           return {
             ...sel,
-            display_league: event?.display_league || "League",
-            startTime: event?.commence_time || sel.startTime 
+            display_league: event?.display_league || sel.display_league || "League",
+            startTime: event?.commence_time || sel.startTime || sel.clean_start_time
           };
         });
       }
-      // -------------------------
 
-      setCart(selections);
-      setStake(booking.stake?.toString() || "100");
-      shouldPrintRef.current = false; 
+      // --- UPDATE UI ---
+      if (!isReprint) {
+        setCart(selections);
+        setStake(targetTicket.stake?.toString() || "100");
+      }
       
-      // Update state with enriched selections for the printer
-      setCurrentTicket({ ...booking, selections }); 
+      shouldPrintRef.current = isReprint; 
+      setCurrentTicket({ ...targetTicket, selections }); 
       setSearchQuery('');
+
     } catch (err) { 
       console.error(err); 
+      alert("Error loading ticket data");
     } finally { 
       setIsSearching(false); 
     }
@@ -193,7 +209,7 @@ export default function CashierDashboard() {
       {currentTicket && (
         <div className="hidden no-print" aria-hidden="true">
           <div id="visible-preview">
-            <PrintableTicket ticket={currentTicket} />
+            <PrintableTicket ticket={currentTicket} isReprint={shouldPrintRef.current} />
           </div>
         </div>
       )}
