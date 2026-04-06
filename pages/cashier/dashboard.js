@@ -60,7 +60,7 @@ export default function CashierDashboard() {
       let targetTicket = null;
       let isReprint = false;
 
-      // 1. Try finding in the print table (Reprint)
+      // 1. First, check if input is an official Serial Number (Reprint)
       const { data: printed } = await supabase
         .from('print')
         .select('*')
@@ -71,7 +71,7 @@ export default function CashierDashboard() {
         targetTicket = printed;
         isReprint = true;
       } else {
-        // 2. Try finding in the betsnow table (Booking)
+        // 2. Otherwise, check if input is a Booking Code
         const { data: booking } = await supabase
           .from('betsnow')
           .select('*')
@@ -80,12 +80,13 @@ export default function CashierDashboard() {
           
         if (booking) {
           targetTicket = booking;
+          isReprint = false;
         }
       }
 
-      if (!targetTicket) return alert("⚠️ CODE NOT FOUND");
+      if (!targetTicket) return alert("⚠️ INVALID CODE OR SERIAL");
 
-      // --- UNIFIED ENRICHMENT LOGIC ---
+      // --- UNIFIED ENRICHMENT & TIME VALIDATION ---
       let selections = typeof targetTicket.selections === 'string' 
         ? JSON.parse(targetTicket.selections) 
         : (targetTicket.selections || []);
@@ -97,15 +98,30 @@ export default function CashierDashboard() {
         .select('id, display_league, commence_time') 
         .in('id', matchIds);
 
+      const now = new Date();
+      let hasStartedMatch = false;
+
       if (eventData) {
         selections = selections.map(sel => {
           const event = eventData.find(e => String(e.id) === String(sel.matchId || sel.match_id));
+          const startTimeStr = event?.commence_time || sel.startTime || sel.clean_start_time;
+          
+          // Strict check: If new booking, match must not have started
+          if (!isReprint && startTimeStr && new Date(startTimeStr) < now) {
+            hasStartedMatch = true;
+          }
+
           return {
             ...sel,
             display_league: event?.display_league || sel.display_league || "League",
-            startTime: event?.commence_time || sel.startTime || sel.clean_start_time
+            startTime: startTimeStr
           };
         });
+      }
+
+      // Block late bookings
+      if (hasStartedMatch && !isReprint) {
+        return alert("⚠️ CANNOT LOAD: One or more matches in this booking have already started!");
       }
 
       // --- UPDATE UI ---
@@ -120,7 +136,7 @@ export default function CashierDashboard() {
 
     } catch (err) { 
       console.error(err); 
-      alert("Error loading ticket data");
+      alert("Error processing ticket");
     } finally { 
       setIsSearching(false); 
     }
@@ -167,7 +183,7 @@ export default function CashierDashboard() {
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
                 onKeyDown={(e) => e.key === 'Enter' && handleLoadTicket()} 
-                placeholder="Enter Code..." 
+                placeholder="Enter Code or Serial..." 
                 className="flex-1 bg-black border-2 border-zinc-700 rounded-xl px-4 py-4 text-white font-mono text-xl focus:border-[#10b981] outline-none" 
               />
               <button 
