@@ -75,26 +75,31 @@ export default function CashierDashboard() {
 
       let selections = typeof booking.selections === 'string' ? JSON.parse(booking.selections) : (booking.selections || []);
 
-      // --- FIX: ENRICH SELECTIONS WITH LEAGUE NAMES ---
+      // --- ENRICH SELECTIONS WITH LEAGUE AND COMMENCE TIME ---
       const matchIds = selections.map(s => s.matchId);
       const { data: eventData } = await supabase
         .from('api_events')
-        .select('id, display_league')
+        .select('id, display_league, commence_time') 
         .in('id', matchIds);
 
       if (eventData) {
-        selections = selections.map(sel => ({
-          ...sel,
-          display_league: eventData.find(e => String(e.id) === String(sel.matchId))?.display_league || "League"
-        }));
+        selections = selections.map(sel => {
+          const event = eventData.find(e => String(e.id) === String(sel.matchId));
+          return {
+            ...sel,
+            display_league: event?.display_league || "League",
+            // Map commence_time from DB to startTime for the Ticket component
+            startTime: event?.commence_time || sel.startTime 
+          };
+        });
       }
-      // -----------------------------------------------
+      // ----------------------------------------------------
 
       setCart(selections);
       setStake(booking.stake?.toString() || "100");
       shouldPrintRef.current = false; 
       
-      // Update the current ticket with the enriched selections so the preview shows them
+      // Update the current ticket with enriched data for the preview
       setCurrentTicket({ ...booking, selections }); 
       setSearchQuery('');
     } catch (err) { 
@@ -111,7 +116,6 @@ export default function CashierDashboard() {
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
       
-      // We pass the enriched currentTicket data to ensure the RPC captures everything
       const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
