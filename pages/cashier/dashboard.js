@@ -68,23 +68,27 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
+      // 1. Keep IDs as clean Strings to match your 'text' column type
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
+      // 2. Removed 'sport_type' from query because it doesn't exist in your table
       const { data: eventData } = await supabase
         .from('api_events')
-        .select('id, display_league, commence_time, country, sport_type') 
+        .select('id, display_league, commence_time, country') 
         .in('id', matchIds);
 
       if (eventData) {
         selections = selections.map(sel => {
           const mid = String(sel.matchId || sel.match_id).trim();
           const event = eventData.find(e => String(e.id).trim() === mid);
+          
           return {
             ...sel,
             display_league: event?.display_league || sel.display_league || "League",
             startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
             country: event?.country || "Unknown",
-            sport_key: event?.sport_type || "Football"
+            // 3. Since column is missing, we hardcode "Soccer" as requested
+            sport_key: "Soccer" 
           };
         });
       }
@@ -120,10 +124,9 @@ export default function CashierDashboard() {
       });
       if (rpcError) throw rpcError;
 
-      // FIX: Use currentTicket.selections instead of cart to ensure we have the latest enriched data
       const activeSelections = currentTicket.selections || cart;
       const uniqueCountries = [...new Set(activeSelections.map(s => s.country || "Unknown"))].join(', ');
-      const uniqueSports = [...new Set(activeSelections.map(s => s.sport_key || "Football"))].join(', ');
+      const uniqueSports = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))].join(', ');
 
       await supabase
         .from('print')
