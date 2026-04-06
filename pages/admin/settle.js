@@ -16,10 +16,9 @@ export default function SettlementPage() {
     try {
       const [ticketsRes, resultsRes, mappingsRes] = await Promise.all([
         supabase
-          .from('betsnow')
+          .from('print') // CHANGED: Now pointing to your correct 'print' table
           .select('*')
           .eq('status', 'pending')
-          // FIX: Filter out tickets without serial numbers
           .not('ticket_serial', 'is', null)
           .neq('ticket_serial', '')
           .order('created_at', { ascending: false }),
@@ -33,6 +32,7 @@ export default function SettlementPage() {
       const mappings = mappingsRes.data || [];
 
       const ticketsWithData = (ticketsRes.data || []).map(ticket => {
+        // Enriched logic for your selections JSONB column
         const enrichedSelections = (ticket.selections || []).map(sel => {
           const [hBet, aBet] = sel.matchName.split(' vs ');
           const officialH = mappings.find(m => m.bet_team_name === hBet)?.official_team_name || hBet;
@@ -40,8 +40,7 @@ export default function SettlementPage() {
 
           const res = allResults.find(r => 
             String(r.event_id) === String(sel.matchId) || 
-            (r.home_team === officialH && r.away_team === officialA) ||
-            (r.home_team.includes(hBet.split(' ')[0]) && r.away_team.includes(aBet.split(' ')[0]))
+            (r.home_team === officialH && r.away_team === officialA)
           );
 
           return { ...sel, res, status: checkLegStatus(sel, res) };
@@ -80,13 +79,13 @@ export default function SettlementPage() {
     if (processingId) return;
     setProcessingId(ticket.id);
 
+    // According to your schema, 'status' is text and defaults to 'pending'
     const updateData = { 
-        status, 
-        settled_at: status === 'lost' ? new Date() : null 
+        status: status, // 'won' or 'lost'
     };
 
     const { error } = await supabase
-      .from('betsnow')
+      .from('print') // CHANGED: Target the print table
       .update(updateData)
       .eq('id', ticket.id);
     
@@ -123,13 +122,12 @@ export default function SettlementPage() {
           {loading ? (
             <div className="py-40 text-center font-black uppercase tracking-[1em] text-slate-800 text-xl animate-pulse">Scanning Results...</div>
           ) : (
-            tickets.filter(t => t.ticket_serial?.includes(searchTerm) || t.selections?.some(s => s.matchName?.toLowerCase().includes(searchTerm.toLowerCase()))).map(ticket => {
+            tickets.filter(t => t.ticket_serial?.includes(searchTerm)).map(ticket => {
               const isWon = ticket.enrichedSelections.every(s => s.status === 'WON');
               const isLost = ticket.enrichedSelections.some(s => s.status === 'LOST');
 
               return (
                 <div key={ticket.id} className="bg-[#111926] border border-white/5 rounded-[2.5rem] p-8 flex flex-col lg:flex-row gap-8 items-stretch hover:border-white/10 transition-colors shadow-2xl relative overflow-hidden group">
-                  
                   <div className={`absolute left-0 top-0 bottom-0 w-2 ${isWon ? 'bg-emerald-500' : isLost ? 'bg-red-500' : 'bg-slate-800'}`} />
 
                   <div className="min-w-[220px] flex flex-col justify-between py-2 border-r border-white/5 pr-8">
@@ -138,22 +136,21 @@ export default function SettlementPage() {
                         <Hash size={12}/> {ticket.ticket_serial}
                       </div>
                       <div className={`text-4xl font-black italic leading-none mb-2 ${isWon ? 'text-emerald-500' : 'text-white'}`}>
-                        KES {ticket.potential_payout}
+                        KES {Number(ticket.potential_payout).toLocaleString()}
                       </div>
-                      <div className="text-[10px] font-bold text-slate-500 uppercase">Stake: KES {ticket.stake}</div>
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Stake: KES {Number(ticket.stake).toLocaleString()}</div>
                     </div>
-                    <div className="text-[9px] font-black uppercase text-slate-500 bg-white/5 p-2 rounded-lg mt-4 text-center tracking-tighter">
-                      CASHIER: {ticket.paid_by?.substring(0,8) || 'AUTO'}
+                    <div className="text-[9px] font-black uppercase text-slate-400 bg-white/5 p-2 rounded-lg mt-4 text-center tracking-tighter border border-white/5">
+                      SHOP: {ticket.shop_name || 'LUCRA'}
                     </div>
                   </div>
 
                   <div className="flex-1 space-y-3">
                     {ticket.enrichedSelections.map((s, i) => (
-                      <div key={i} className="bg-[#0b0f1a] p-5 rounded-2xl border border-white/[0.03] flex justify-between items-center group/leg transition-all">
+                      <div key={i} className="bg-[#0b0f1a] p-5 rounded-2xl border border-white/[0.03] flex justify-between items-center transition-all">
                         <div className="flex-1">
                           <span className="text-[9px] font-black text-emerald-500/60 uppercase tracking-widest block mb-1">{s.marketName}</span>
                           <span className="text-base font-bold block text-slate-200">{s.matchName}</span>
-                          
                           <div className="flex gap-2 mt-3">
                             <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-3 py-1.5 rounded-lg font-black border border-emerald-500/10 uppercase">
                               Pick: {s.selection}
@@ -195,7 +192,7 @@ export default function SettlementPage() {
                     )}
                     
                     <div className="pt-4 border-t border-white/5 mt-2">
-                      <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest text-center mb-3">Overrides</p>
+                      <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest text-center mb-3">Manual Overrides</p>
                       <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => confirm("Force Win?") && handleSettle(ticket, 'won')} className="text-[9px] font-black bg-white/5 py-3 rounded-xl text-slate-600 hover:text-emerald-500 transition-all uppercase italic">Win</button>
                         <button onClick={() => confirm("Force Loss?") && handleSettle(ticket, 'lost')} className="text-[9px] font-black bg-white/5 py-3 rounded-xl text-slate-600 hover:text-red-500 transition-all uppercase italic">Loss</button>
