@@ -68,7 +68,7 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
-      const matchIds = selections.map(s => String(s.matchId || s.match_id));
+      const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
       const { data: eventData } = await supabase
         .from('api_events')
@@ -77,12 +77,12 @@ export default function CashierDashboard() {
 
       if (eventData) {
         selections = selections.map(sel => {
-          const event = eventData.find(e => String(e.id) === String(sel.matchId || sel.match_id));
+          const mid = String(sel.matchId || sel.match_id).trim();
+          const event = eventData.find(e => String(e.id).trim() === mid);
           return {
             ...sel,
             display_league: event?.display_league || sel.display_league || "League",
             startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
-            // FIX: Map these here so they are available in the cart state
             country: event?.country || "Unknown",
             sport_key: event?.sport_type || "Football"
           };
@@ -120,11 +120,11 @@ export default function CashierDashboard() {
       });
       if (rpcError) throw rpcError;
 
-      // Extract unique countries and sports from the enriched cart
-      const uniqueCountries = [...new Set(cart.map(s => s.country || "Unknown"))].join(', ');
-      const uniqueSports = [...new Set(cart.map(s => s.sport_key || "Football"))].join(', ');
+      // FIX: Use currentTicket.selections instead of cart to ensure we have the latest enriched data
+      const activeSelections = currentTicket.selections || cart;
+      const uniqueCountries = [...new Set(activeSelections.map(s => s.country || "Unknown"))].join(', ');
+      const uniqueSports = [...new Set(activeSelections.map(s => s.sport_key || "Football"))].join(', ');
 
-      // Update the print table with our identified metadata
       await supabase
         .from('print')
         .update({
@@ -137,11 +137,7 @@ export default function CashierDashboard() {
       const { data: official } = await supabase.from('print').select('*').eq('ticket_serial', newSerial).single();
 
       if (official) {
-        const enrichedTicket = {
-          ...official,
-          selections: currentTicket.selections 
-        };
-        
+        const enrichedTicket = { ...official, selections: activeSelections };
         shouldPrintRef.current = true; 
         setCurrentTicket(enrichedTicket);
         setCart([]);
