@@ -12,98 +12,82 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
     <div className="lucra-print-area" style={{ 
       width: '72mm', 
       margin: '0 auto',
-      padding: '8px', 
+      padding: '4px', 
       fontFamily: 'monospace', 
       color: '#000', 
       backgroundColor: '#fff',
-      lineHeight: '1.2'
+      lineHeight: '1.1'
     }}>
       {/* REPRINT LABEL */}
       {isReprint && (
-        <div style={{ 
-          textAlign: 'center', 
-          border: '2px solid #000', 
-          padding: '4px', 
-          marginBottom: '10px', 
-          fontWeight: '900', 
-          fontSize: '16px' 
-        }}>
+        <div style={{ textAlign: 'center', border: '1.5px solid #000', padding: '2px', marginBottom: '8px', fontWeight: '900', fontSize: '14px' }}>
           *** REPRINT COPY ***
         </div>
       )}
 
-      {/* HEADER WITH LOGO IMAGE */}
-      <div style={{ textAlign: 'center', borderBottom: '2px solid #000', marginBottom: '10px', paddingBottom: '10px' }}>
+      {/* HEADER */}
+      <div style={{ textAlign: 'center', marginBottom: '5px' }}>
         <img 
           src="https://i.ibb.co/67wb7Zm1/download.png" 
           alt="LUCRA" 
-          style={{ 
-            width: '150px', 
-            height: 'auto', 
-            margin: '0 auto 8px auto', 
-            display: 'block',
-            filter: 'grayscale(1) contrast(200%)' 
-          }} 
+          style={{ width: '130px', margin: '0 auto 5px auto', display: 'block', filter: 'grayscale(1) contrast(200%)' }} 
         />
-        <div style={{ fontSize: '12px', fontWeight: 'bold' }}>SHOP: {ticket.shop_name || "LUCRA"}</div>
-        <div style={{ fontSize: '10px' }}>DATE: {new Date(ticket.created_at).toLocaleString()}</div>
+        <div style={{ fontSize: '11px', fontWeight: 'bold' }}>SHOP: {ticket.shop_name || "LUCRA"}</div>
+        <div style={{ fontSize: '9px' }}>DATE: {new Date(ticket.created_at).toLocaleString()}</div>
       </div>
 
-      {/* SELECTIONS */}
+      <div style={{ borderTop: '1.5px solid #000', margin: '5px 0' }}></div>
+
+      {/* SELECTIONS - Professional Stacked List */}
       <div style={{ marginBottom: '10px' }}>
-        {selections.map((sel, idx) => (
-          <div key={idx} style={{ border: '1px solid #000', padding: '6px', marginBottom: '5px', fontSize: '11px' }}>
-            {/* LEAGUE HEADER */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 'bold', color: '#333', borderBottom: '0.5px solid #eee', paddingBottom: '2px', marginBottom: '4px' }}>
-              <span style={{ textTransform: 'uppercase' }}>
-                {sel.display_league || sel.league_name || "LEAGUE"}
-              </span>
-              <span>ID: {sel.matchId || sel.match_id}</span>
-            </div>
-
-            {/* MATCH NAME */}
-            <div style={{ fontWeight: 'bold', fontSize: '13px', margin: '2px 0' }}>
-              {sel.matchName || sel.match_name}
-            </div>
-            
-            {/* CLEAN START TIME */}
-            {(sel.startTime || sel.clean_start_time) && (
-              <div style={{ fontSize: '9px', marginBottom: '4px', fontStyle: 'italic' }}>
-                {(sel.clean_start_time || sel.startTime).replace('T', ' ').replace(/\+00:00$/, '')}
+        {selections.map((sel, idx) => {
+          const startTime = sel.startTime || sel.clean_start_time || "";
+          const formattedTime = startTime ? startTime.replace('T', ' ').slice(5, 16) : ""; // Formats to MM-DD HH:mm
+          
+          return (
+            <div key={idx} style={{ marginBottom: '8px', borderBottom: '0.5px solid #000', paddingBottom: '4px' }}>
+              {/* League and Time Row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                <span>{sel.display_league || sel.league_name || "SOCCER"}</span>
+                <span>{formattedTime}</span>
               </div>
-            )}
 
-            {/* PICK & ODDS */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '0.5px dashed #000', paddingTop: '3px', marginTop: '2px' }}>
-              <div style={{ fontSize: '10px' }}>
-                {sel.marketName || '1X2'}: <strong>{sel.selection}</strong>
+              {/* Match Name with Short ID */}
+              <div style={{ fontSize: '12px', fontWeight: 'bold', margin: '2px 0' }}>
+                [{String(sel.matchId || sel.match_id || "").slice(-4)}] {sel.matchName || sel.match_name}
               </div>
-              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>{sel.odds}</span>
+              
+              {/* Market Selection and Odds Row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                <span>{sel.marketName || '1X2'}: <strong>{sel.selection}</strong></span>
+                <span style={{ fontWeight: '900', fontSize: '12px' }}>{sel.odds}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* TOTALS WITH COMMA FORMATTING */}
-      <div style={{ borderTop: '2px dashed #000', paddingTop: '8px', marginTop: '5px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      {/* TOTALS */}
+      <div style={{ borderTop: '1.5px dashed #000', paddingTop: '6px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
           <span>Total Stake:</span>
           <span style={{ fontWeight: 'bold' }}>
             KSh {Number(ticket.stake).toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
           <span>Total Odds:</span>
           <span style={{ fontWeight: 'bold' }}>{ticket.total_odds}</span>
         </div>
+        
         <div style={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
-          fontSize: '20px', 
+          fontSize: '22px', 
           fontWeight: '900', 
-          marginTop: '8px', 
-          borderTop: '1px solid #000', 
-          paddingTop: '5px' 
+          marginTop: '6px', 
+          borderTop: '1.5px solid #000', 
+          paddingTop: '4px' 
         }}>
           <span>PAYOUT:</span>
           <span>
@@ -112,13 +96,18 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
         </div>
       </div>
 
-      {/* BARCODE */}
-      <div style={{ marginTop: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Barcode value={String(ticket.ticket_serial || ticket.booking_code)} width={1.5} height={50} displayValue={false} margin={0} />
-        <div style={{ fontSize: '14px', fontWeight: '900', marginTop: '5px' }}>
+      {/* BARCODE & SERIAL */}
+      <div style={{ marginTop: '15px', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <Barcode value={String(ticket.ticket_serial || ticket.booking_code)} width={1.2} height={40} displayValue={false} margin={0} />
+        </div>
+        <div style={{ fontSize: '13px', fontWeight: '900', marginTop: '4px' }}>
           #{ticket.ticket_serial || "BOOKING"}
         </div>
-        <div style={{ fontSize: '10px', marginTop: '5px' }}>Code: {ticket.booking_code}</div>
+        <div style={{ fontSize: '9px', marginTop: '2px' }}>Code: {ticket.booking_code}</div>
+        <div style={{ fontSize: '8px', marginTop: '8px', fontStyle: 'italic', opacity: 0.8 }}>
+          Valid for 30 days. No payout without a valid ticket.
+        </div>
       </div>
     </div>
   );
