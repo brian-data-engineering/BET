@@ -16,22 +16,34 @@ const sportMapping = {
 async function syncTargetedResults() {
   console.log("--- 🕵️ STEP 1: SCANNING PENDING TICKETS ---");
 
-  // Fetch only sports and countries that have 'pending' status
+  // Fetch sport_key and country from pending tickets
   const { data: pendingData, error: pendingError } = await supabase
     .from('print')
     .select('sport_key, country')
     .eq('status', 'pending');
 
-  if (pendingError || !pendingData.length) {
+  if (pendingError || !pendingData || !pendingData.length) {
     console.log("📭 No pending tickets found. Skipping sync.");
     return;
   }
 
-  // Gracefully extract unique sports and countries
-  const activeSports = [...new Set(pendingData.map(item => item.sport_key?.toLowerCase()).filter(s => sportMapping[s]))];
-  const activeCountries = [...new Set(pendingData.flatMap(item => item.country ? item.country.split(', ') : []).filter(c => c && c !== 'Unknown'))];
+  // --- NEW LOGIC: EXPLODE COMMA-SEPARATED STRINGS ---
+  
+  // 1. Extract and split all sport keys
+  const allSportsRaw = pendingData.flatMap(item => 
+    item.sport_key ? item.sport_key.split(',').map(s => s.trim().toLowerCase()) : []
+  );
+  // Filter for unique sports that exist in our mapping
+  const activeSports = [...new Set(allSportsRaw)].filter(s => sportMapping[s]);
 
-  console.log(`📊 TARGETS: ${activeSports.join(', ')} | ${activeCountries.length} Countries`);
+  // 2. Extract and split all countries
+  const activeCountries = [...new Set(
+    pendingData.flatMap(item => 
+      item.country ? item.country.split(',').map(c => c.trim()) : []
+    )
+  )].filter(c => c && c !== 'Unknown' && c !== '');
+
+  console.log(`📊 TARGETS: ${activeSports.join(', ')} | ${activeCountries.length} Unique Countries Found`);
 
   const now = Math.floor(Date.now() / 1000);
   const roundedTo = Math.floor(now / 3600) * 3600; 
@@ -48,7 +60,7 @@ async function syncTargetedResults() {
       const champData = await champRes.json();
       const allLeagues = champData.items || [];
 
-      // Filter leagues by countries found in the print table
+      // Filter leagues: Include if league name contains ANY of the target countries
       const targetLeagues = allLeagues.filter(league => 
         activeCountries.length === 0 || activeCountries.some(c => league.name.includes(c))
       );
@@ -62,10 +74,12 @@ async function syncTargetedResults() {
         const items = gamesData.items || [];
 
         const resultsToUpsert = items.filter(game => game.score).map(game => {
+          // Clean score logic (removes penalties/extra info)
           let cleanScore = game.score.replace(/\s\(\d+\).*/, '').split(';')[0].trim();
           const mainScorePart = cleanScore.split(' ')[0];
           const [h, a] = mainScorePart.split(':').map(n => parseInt(n) || 0);
 
+          // Extract period scores e.g., (1:0, 2:1)
           const periodMatch = cleanScore.match(/\(([^)]+)\)/);
           const periods = {};
           if (periodMatch) {
@@ -88,8 +102,15 @@ async function syncTargetedResults() {
         });
 
         if (resultsToUpsert.length > 0) {
-          await supabase.from('finalresults').upsert(resultsToUpsert, { onConflict: 'match_id' });
-          console.log(`   ✅ Synced ${resultsToUpsert.length} matches from ${league.name}`);
+          const { error: upsertError } = await supabase
+            .from('finalresults')
+            .upsert(resultsToUpsert, { onConflict: 'match_id' });
+          
+          if (upsertError) {
+            console.error(` ⚠️ Error upserting ${league.name}:`, upsertError.message);
+          } else {
+            console.log(`   ✅ Synced ${resultsToUpsert.length} matches from ${league.name}`);
+          }
         }
       }
     } catch (err) {
