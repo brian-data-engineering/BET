@@ -30,15 +30,12 @@ export default function CashierDashboard() {
       const timer = setTimeout(() => {
         const previewElement = document.getElementById('visible-preview');
         if (!previewElement) return;
-        
         const printContainer = document.createElement('div');
         printContainer.id = 'temp-print-portal';
         printContainer.innerHTML = `<div style="background:white;width:100%;">${previewElement.innerHTML}</div>`;
-
         document.body.appendChild(printContainer);
         window.focus();
         window.print();
-
         setTimeout(() => {
           if (document.getElementById('temp-print-portal')) {
             document.body.removeChild(printContainer);
@@ -56,13 +53,13 @@ export default function CashierDashboard() {
     const input = searchQuery.trim().toUpperCase();
     
     try {
-      const { data: booking, error } = await supabase
+      const { data: booking, error: bError } = await supabase
         .from('betsnow')
         .select('*')
         .eq('booking_code', input)
         .maybeSingle();
           
-      if (!booking || error) return alert("⚠️ BOOKING CODE NOT FOUND");
+      if (!booking || bError) return alert("⚠️ BOOKING CODE NOT FOUND");
 
       let selections = typeof booking.selections === 'string' 
         ? JSON.parse(booking.selections) 
@@ -70,21 +67,25 @@ export default function CashierDashboard() {
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
-      const { data: eventData } = await supabase
+      // FIXED QUERY: Using sport_key (the likely correct column)
+      const { data: eventData, error: eError } = await supabase
         .from('api_events')
-        .select('id, display_league, commence_time, country, sport_title') 
+        .select('id, display_league, commence_time, country, sport_key') 
         .in('id', matchIds);
 
-      if (eventData) {
+      if (eError) console.error("Database Lookup Error:", eError);
+
+      if (eventData && eventData.length > 0) {
         selections = selections.map(sel => {
           const mid = String(sel.matchId || sel.match_id).trim();
           const event = eventData.find(e => String(e.id).trim() === mid);
           
           return {
             ...sel,
-            sport_key: event?.sport_title || sel.sport_key || "Soccer",
+            // Prioritize API data, fallback to JSON data, then generic strings
+            sport_key: event?.sport_key || sel.sport_key || "Soccer",
             display_league: event?.display_league || sel.display_league || "League",
-            startTime: sel.startTime || sel.clean_start_time || event?.commence_time,
+            startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
             country: event?.country || sel.country || "Unknown"
           };
         });
@@ -98,7 +99,6 @@ export default function CashierDashboard() {
 
     } catch (err) { 
       console.error(err); 
-      alert("Error loading booking");
     } finally { 
       setIsSearching(false); 
     }
@@ -123,27 +123,22 @@ export default function CashierDashboard() {
 
       const activeSelections = currentTicket.selections || cart;
 
-      // STEP 3: Aggregate unique values for the ticket record
+      // Aggregating for the 'print' table columns
       const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
       const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
       const leaguesSet = [...new Set(activeSelections.map(s => s.display_league || "League"))];
 
       const combinedSports = sportsSet.join(', ');
       const combinedCountries = countriesSet.join(', ');
-      // Apply the requested Double Comma separation
-      const combinedLeagues = leaguesSet.join(',, ');
+      const combinedLeagues = leaguesSet.join(',, '); // YOUR REQ: Double Comma
 
-      // STEP 4: Update the 'print' table including the new display_league column
       await supabase
         .from('print')
         .update({
           country: combinedCountries,
           sport_key: combinedSports,
-          display_league: combinedLeagues, // UPDATED: Now writing to your new column
-          selections: JSON.stringify(activeSelections.map(s => ({
-            ...s,
-            ticket_leagues: combinedLeagues // Also bake it into JSON for the printer
-          }))) 
+          display_league: combinedLeagues, 
+          selections: JSON.stringify(activeSelections) 
         })
         .eq('ticket_serial', newSerial);
 
@@ -156,9 +151,8 @@ export default function CashierDashboard() {
         .single();
 
       if (official) {
-        const enrichedTicket = { ...official, selections: activeSelections };
+        setCurrentTicket({ ...official, selections: activeSelections });
         shouldPrintRef.current = true; 
-        setCurrentTicket(enrichedTicket);
         setCart([]);
         setStake("");
         initTerminal(); 
