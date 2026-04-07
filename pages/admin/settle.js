@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { Search, ChevronRight, Zap, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { 
+  Search, 
+  ChevronRight, 
+  Zap, 
+  AlertCircle, 
+  CheckCircle2, 
+  XCircle, 
+  Activity // Added missing icon import
+} from 'lucide-react';
 
 export default function SettlementPage() {
   const [tickets, setTickets] = useState([]);
@@ -21,10 +29,10 @@ export default function SettlementPage() {
       const { data: queueData } = await supabase
         .from('fuzzy_review_queue')
         .select('*')
-        .neq('status', 'approved'); // Only show pending reviews
+        .neq('status', 'approved'); 
       setReviewQueue(queueData || []);
 
-      // 2. Fetch Master Tickets (Status check is case-insensitive)
+      // 2. Fetch Master Tickets (Case-insensitive status check)
       const { data: ticketsData, error: tErr } = await supabase
         .from('print')
         .select('*')
@@ -33,16 +41,21 @@ export default function SettlementPage() {
 
       if (tErr) throw tErr;
 
-      // 3. Fetch All Selections for these tickets
+      // 3. Fetch All Selections for these tickets using ticket_serial
       const serials = (ticketsData || []).map(t => t.ticket_serial);
-      const { data: selectionsData, error: sErr } = await supabase
-        .from('newselections')
-        .select('*')
-        .in('ticket_serial', serials);
+      
+      let selectionsData = [];
+      if (serials.length > 0) {
+        const { data: sData, error: sErr } = await supabase
+          .from('newselections')
+          .select('*')
+          .in('ticket_serial', serials);
+        
+        if (sErr) throw sErr;
+        selectionsData = sData;
+      }
 
-      if (sErr) throw sErr;
-
-      // 4. Merge Data manually using ticket_serial
+      // 4. Manual Merge: Link selections to tickets via serial
       const merged = (ticketsData || []).map(ticket => ({
         ...ticket,
         selections: (selectionsData || []).filter(s => s.ticket_serial === ticket.ticket_serial)
@@ -58,7 +71,6 @@ export default function SettlementPage() {
 
   const handleApproveReview = async (item) => {
     try {
-      // Get the pick from the actual selection table
       const { data: sel } = await supabase
         .from('newselections')
         .select('pick')
@@ -68,15 +80,14 @@ export default function SettlementPage() {
 
       if (!sel) return;
 
-      const h = item.scraped_score.home;
-      const a = item.scraped_score.away;
+      const h = item.scraped_score?.home || 0;
+      const a = item.scraped_score?.away || 0;
       let status = 'lost';
       
       if (sel.pick === '1' && h > a) status = 'won';
       else if (sel.pick === '2' && a > h) status = 'won';
       else if (sel.pick === 'X' && h === a) status = 'won';
 
-      // Update selection and delete review item
       await Promise.all([
         supabase.from('newselections').update({ status }).eq('ticket_serial', item.ticket_serial).eq('match', item.betika_match),
         supabase.from('fuzzy_review_queue').delete().eq('id', item.id)
@@ -92,14 +103,19 @@ export default function SettlementPage() {
     setIsSettling(ticketSerial);
     const { error } = await supabase
       .from('print')
-      .update({ status: status.toUpperCase(), settled_at: new Date().toISOString() })
+      .update({ 
+        status: status.toUpperCase(), 
+        settled_at: new Date().toISOString() 
+      })
       .eq('ticket_serial', ticketSerial);
     
     if (!error) fetchData();
     setIsSettling(null);
   };
 
-  const filteredTickets = tickets.filter(t => t.ticket_serial?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredTickets = tickets.filter(t => 
+    t.ticket_serial?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <AdminLayout>
@@ -142,11 +158,23 @@ export default function SettlementPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right mr-4">
-                      <div className="text-xs font-black text-white">{item.scraped_score.home} - {item.scraped_score.away}</div>
+                      <div className="text-xs font-black text-white">
+                        {item.scraped_score?.home} - {item.scraped_score?.away}
+                      </div>
                       <div className="text-[9px] text-slate-500 uppercase">Score Found</div>
                     </div>
-                    <button onClick={() => handleApproveReview(item)} className="bg-emerald-500 text-black px-5 py-2 rounded-xl font-black text-[10px] uppercase hover:scale-105 transition-all">Approve</button>
-                    <button onClick={() => supabase.from('fuzzy_review_queue').delete().eq('id', item.id).then(fetchData)} className="text-slate-500 hover:text-red-500 transition-colors"><XCircle size={20}/></button>
+                    <button 
+                      onClick={() => handleApproveReview(item)} 
+                      className="bg-emerald-500 text-black px-5 py-2 rounded-xl font-black text-[10px] uppercase hover:scale-105 transition-all"
+                    >
+                      Approve
+                    </button>
+                    <button 
+                      onClick={() => supabase.from('fuzzy_review_queue').delete().eq('id', item.id).then(fetchData)} 
+                      className="text-slate-500 hover:text-red-500 transition-colors"
+                    >
+                      <XCircle size={20}/>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -161,7 +189,7 @@ export default function SettlementPage() {
             <div className="py-20 text-center font-black uppercase tracking-[1em] text-slate-800 animate-pulse">Scanning DB...</div>
           ) : (
             filteredTickets.map(ticket => {
-              const allWon = ticket.selections?.every(s => s.status === 'won');
+              const allWon = ticket.selections?.length > 0 && ticket.selections.every(s => s.status === 'won');
               const anyLost = ticket.selections?.some(s => s.status === 'lost');
 
               return (
@@ -169,39 +197,43 @@ export default function SettlementPage() {
                   <div className="flex justify-between items-center mb-8 pb-6 border-b border-white/5">
                     <div>
                       <span className="text-[10px] text-slate-600 font-black tracking-[0.2em]">#{ticket.ticket_serial}</span>
-                      <h3 className="text-3xl font-black italic text-white uppercase">KES {Number(ticket.potential_payout).toLocaleString()}</h3>
+                      <h3 className="text-3xl font-black italic text-white uppercase">KES {Number(ticket.potential_payout || 0).toLocaleString()}</h3>
                     </div>
                     
-                    {allWon && (
-                      <button 
-                        disabled={isSettling === ticket.ticket_serial}
-                        onClick={() => finalizeTicket(ticket.ticket_serial, 'won')}
-                        className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-emerald-400"
-                      >
-                        {isSettling === ticket.ticket_serial ? 'Processing...' : 'Authorize Payout'}
-                      </button>
-                    )}
-                    {anyLost && (
-                      <button 
-                         disabled={isSettling === ticket.ticket_serial}
-                         onClick={() => finalizeTicket(ticket.ticket_serial, 'lost')}
-                         className="bg-red-500/10 text-red-500 border border-red-500/20 px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-red-500 hover:text-white"
-                      >
-                        Settle as Lost
-                      </button>
-                    )}
+                    <div className="flex gap-3">
+                      {allWon && (
+                        <button 
+                          disabled={isSettling === ticket.ticket_serial}
+                          onClick={() => finalizeTicket(ticket.ticket_serial, 'won')}
+                          className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-emerald-400"
+                        >
+                          {isSettling === ticket.ticket_serial ? 'Processing...' : 'Authorize Payout'}
+                        </button>
+                      )}
+                      {anyLost && (
+                        <button 
+                           disabled={isSettling === ticket.ticket_serial}
+                           onClick={() => finalizeTicket(ticket.ticket_serial, 'lost')}
+                           className="bg-red-500/10 text-red-500 border border-red-500/20 px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-red-500 hover:text-white"
+                        >
+                          Settle as Lost
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {ticket.selections?.map((sel, i) => (
                       <div key={i} className="bg-black/30 border border-white/5 p-5 rounded-2xl relative overflow-hidden">
                         <div className={`absolute top-0 right-0 p-2 ${sel.status === 'won' ? 'text-emerald-500' : sel.status === 'lost' ? 'text-red-500' : 'text-slate-700'}`}>
-                          {sel.status === 'won' ? <CheckCircle2 size={16}/> : sel.status === 'lost' ? <XCircle size={16}/> : <Activity size={16} className="animate-pulse"/>}
+                          {sel.status === 'won' ? <CheckCircle2 size={16}/> : 
+                           sel.status === 'lost' ? <XCircle size={16}/> : 
+                           <Activity size={16} className="animate-pulse"/>}
                         </div>
                         <span className="text-[9px] font-black text-emerald-500/50 uppercase tracking-widest">{sel.sport}</span>
                         <p className="text-sm font-bold text-slate-200 mt-1 mb-3">{sel.match}</p>
                         <div className="flex justify-between items-end">
-                           <span className="text-[10px] bg-white/5 px-2 py-1 rounded font-black text-slate-400 italic">PICK: {sel.pick}</span>
+                           <span className="text-[10px] bg-white/5 px-2 py-1 rounded font-black text-slate-400 italic uppercase">PICK: {sel.pick}</span>
                            <span className="text-[10px] font-black uppercase italic text-slate-500">{sel.status || 'pending'}</span>
                         </div>
                       </div>
