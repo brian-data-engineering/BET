@@ -1,54 +1,40 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { Trophy, Search, Hash, Activity, CheckCircle2, XCircle, ChevronRight, Zap } from 'lucide-react';
+import { Trophy, Search, Hash, Activity, CheckCircle2, XCircle, ChevronRight, Zap, AlertCircle } from 'lucide-react';
 
 export default function SettlementPage() {
   const [tickets, setTickets] = useState([]);
+  const [reviewQueue, setReviewQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [processingId, setProcessingId] = useState(null);
 
-  useEffect(() => { fetchPendingTickets(); }, []);
+  useEffect(() => { 
+    fetchData(); 
+  }, []);
 
-  const fetchPendingTickets = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const [ticketsRes, resultsRes, mappingsRes] = await Promise.all([
-        supabase
-          .from('print') 
-          .select('*')
-          .eq('status', 'pending')
-          .not('ticket_serial', 'is', null)
-          .neq('ticket_serial', '')
-          .order('created_at', { ascending: false }),
-        supabase.from('soccer_results').select('*').order('created_at', { ascending: false }).limit(300),
-        supabase.from('team_mappings').select('*')
-      ]);
+      // 1. Fetch the Fuzzy Review Queue
+      const { data: queueData } = await supabase
+        .from('fuzzy_review_queue')
+        .select('*')
+        .eq('status', 'pending_review');
+      
+      setReviewQueue(queueData || []);
 
-      if (ticketsRes.error) throw ticketsRes.error;
+      // 2. Fetch Pending Tickets (The standard view)
+      const { data: ticketsData } = await supabase
+        .from('print')
+        .select(`
+          *,
+          newselections (*)
+        `)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
 
-      const allResults = resultsRes.data || [];
-      const mappings = mappingsRes.data || [];
-
-      const ticketsWithData = (ticketsRes.data || []).map(ticket => {
-        const enrichedSelections = (ticket.selections || []).map(sel => {
-          const [hBet, aBet] = sel.matchName.split(' vs ');
-          const officialH = mappings.find(m => m.bet_team_name === hBet)?.official_team_name || hBet;
-          const officialA = mappings.find(m => m.bet_team_name === aBet)?.official_team_name || aBet;
-
-          const res = allResults.find(r => 
-            String(r.event_id) === String(sel.matchId) || 
-            (r.home_team === officialH && r.away_team === officialA)
-          );
-
-          return { ...sel, res, status: checkLegStatus(sel, res) };
-        });
-
-        return { ...ticket, enrichedSelections };
-      });
-
-      setTickets(ticketsWithData);
+      setTickets(ticketsData || []);
     } catch (err) {
       console.error("Lucra Sync Error:", err);
     } finally {
@@ -56,47 +42,35 @@ export default function SettlementPage() {
     }
   };
 
-  const checkLegStatus = (sel, res) => {
-    if (!res) return 'PENDING';
-    const h = parseFloat(res.home_score), a = parseFloat(res.away_score);
-    const pick = sel.selection.toUpperCase(), mkt = sel.marketName.toUpperCase();
-
-    if (mkt.includes('WINNER') || mkt === '1X2') {
-      if (pick === '1' || pick.includes('HOME')) return h > a ? 'WON' : 'LOST';
-      if (pick === '2' || pick.includes('AWAY')) return a > h ? 'WON' : 'LOST';
-      if (pick === 'X' || pick === 'DRAW') return h === a ? 'WON' : 'LOST';
-    }
-    if (pick.includes('OVER') || pick.includes('UNDER')) {
-      const threshold = parseFloat(pick.replace(/[^\d.]/g, ''));
-      const total = mkt.includes('HOME') ? h : mkt.includes('AWAY') ? a : (h + a);
-      return pick.includes('OVER') ? (total > threshold ? 'WON' : 'LOST') : (total < threshold ? 'WON' : 'LOST');
-    }
-    return 'PENDING';
-  };
-
-  const handleSettle = async (ticket, status) => {
-    if (processingId) return;
-    setProcessingId(ticket.id);
-
-    // FIX: Convert to UPPERCASE so Cashier side "Collect" check passes
-    const formattedStatus = status.toUpperCase();
-
-    const updateData = { 
-        status: formattedStatus,
-        settled_at: new Date().toISOString()
-    };
-
-    const { error } = await supabase
-      .from('print') 
-      .update(updateData)
-      .eq('id', ticket.id);
+  const handleApproveReview = async (item) => {
+    // Determine win/loss based on user pick and scraped score
+    const h = item.scraped_score.home;
+    const a = item.scraped_score.away;
     
-    if (!error) {
-        setTickets(prev => prev.filter(t => t.id !== ticket.id));
-    } else {
-        alert(error.message);
-    }
-    setProcessingId(null);
+    // We need to fetch the pick from newselections first to be sure
+    const { data: sel } = await supabase
+      .from('newselections')
+      .select('pick')
+      .eq('ticket_serial', item.ticket_serial)
+      .eq('match', item.betika_match)
+      .single();
+
+    let finalStatus = 'lost';
+    if (sel.pick === '1' && h > a) finalStatus = 'won';
+    if (sel.pick === '2' && a > h) finalStatus = 'won';
+    if (sel.pick === 'X' && h === a) finalStatus = 'won';
+
+    // Update Selection
+    await supabase
+      .from('newselections')
+      .update({ status: finalStatus })
+      .eq('ticket_serial', item.ticket_serial)
+      .eq('match', item.betika_match);
+
+    // Remove from Review Queue
+    await supabase.from('fuzzy_review_queue').delete().eq('id', item.id);
+    
+    fetchData(); // Refresh
   };
 
   return (
@@ -108,102 +82,85 @@ export default function SettlementPage() {
               <Zap size={16} className="fill-current" />
               <span className="text-[10px] font-black uppercase tracking-[0.3em]">Lucra Settlement Engine</span>
             </div>
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter text-white">Pending Bets</h1>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-            <input 
-              className="bg-[#111926] border border-white/5 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold w-96 focus:border-emerald-500 transition-all outline-none" 
-              placeholder="FILTER BY SERIAL..." 
-              onChange={e => setSearchTerm(e.target.value)} 
-            />
+            <h1 className="text-5xl font-black italic uppercase tracking-tighter text-white">Settlement</h1>
           </div>
         </header>
 
-        <div className="space-y-6">
-          {loading ? (
-            <div className="py-40 text-center font-black uppercase tracking-[1em] text-slate-800 text-xl animate-pulse">Scanning Results...</div>
-          ) : (
-            tickets.filter(t => t.ticket_serial?.includes(searchTerm)).map(ticket => {
-              const isWon = ticket.enrichedSelections.every(s => s.status === 'WON');
-              const isLost = ticket.enrichedSelections.some(s => s.status === 'LOST');
-
-              return (
-                <div key={ticket.id} className="bg-[#111926] border border-white/5 rounded-[2.5rem] p-8 flex flex-col lg:flex-row gap-8 items-stretch hover:border-white/10 transition-colors shadow-2xl relative overflow-hidden group">
-                  <div className={`absolute left-0 top-0 bottom-0 w-2 ${isWon ? 'bg-emerald-500' : isLost ? 'bg-red-500' : 'bg-slate-800'}`} />
-
-                  <div className="min-w-[220px] flex flex-col justify-between py-2 border-r border-white/5 pr-8">
-                    <div>
-                      <div className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-2 tracking-widest uppercase">
-                        <Hash size={12}/> {ticket.ticket_serial}
-                      </div>
-                      <div className={`text-4xl font-black italic leading-none mb-2 ${isWon ? 'text-emerald-500' : 'text-white'}`}>
-                        KES {Number(ticket.potential_payout).toLocaleString()}
-                      </div>
-                      <div className="text-[10px] font-bold text-slate-500 uppercase">Stake: KES {Number(ticket.stake).toLocaleString()}</div>
+        {/* --- SECTION 1: FUZZY REVIEW QUEUE --- */}
+        {reviewQueue.length > 0 && (
+          <div className="mb-12">
+            <h2 className="flex items-center gap-3 text-orange-500 font-black uppercase tracking-widest text-sm mb-6">
+              <AlertCircle size={18} /> Needs Human Review ({reviewQueue.length})
+            </h2>
+            <div className="grid gap-4">
+              {reviewQueue.map(item => (
+                <div key={item.id} className="bg-[#1a1f2e] border border-orange-500/20 rounded-2xl p-6 flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 block">SERIAL: {item.ticket_serial}</span>
+                    <div className="flex items-center gap-4 mt-1">
+                      <span className="text-white font-bold">{item.betika_match}</span>
+                      <ChevronRight size={14} className="text-slate-600" />
+                      <span className="text-emerald-400 font-bold">{item.linebet_match}</span>
                     </div>
-                    <div className="text-[9px] font-black uppercase text-slate-400 bg-white/5 p-2 rounded-lg mt-4 text-center tracking-tighter border border-white/5">
-                      SHOP: {ticket.shop_name || 'LUCRA'}
+                    <div className="mt-2 text-[10px] bg-white/5 inline-block px-2 py-1 rounded">
+                      Confidence: {(item.confidence_score * 100).toFixed(1)}% | Score: {item.scraped_score.home}-{item.scraped_score.away}
                     </div>
                   </div>
-
-                  <div className="flex-1 space-y-3">
-                    {ticket.enrichedSelections.map((s, i) => (
-                      <div key={i} className="bg-[#0b0f1a] p-5 rounded-2xl border border-white/[0.03] flex justify-between items-center transition-all">
-                        <div className="flex-1">
-                          <span className="text-[9px] font-black text-emerald-500/60 uppercase tracking-widest block mb-1">{s.marketName}</span>
-                          <span className="text-base font-bold block text-slate-200">{s.matchName}</span>
-                          <div className="flex gap-2 mt-3">
-                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-3 py-1.5 rounded-lg font-black border border-emerald-500/10 uppercase">
-                              Pick: {s.selection}
-                            </span>
-                            {s.res ? (
-                              <span className="text-[10px] bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded-lg font-black border border-blue-500/10 uppercase">
-                                Score: {s.res.home_score}-{s.res.away_score}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] bg-orange-500/10 text-orange-500 px-3 py-1.5 rounded-lg font-black border border-orange-500/10 animate-pulse">
-                                LIVE / DATA MISSING
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className={`text-sm font-black uppercase italic tracking-tighter ${s.status === 'WON' ? 'text-emerald-500' : s.status === 'LOST' ? 'text-red-500' : 'text-slate-700'}`}>
-                          {s.status}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="min-w-[200px] flex flex-col gap-3 justify-center pl-4">
-                    {isWon && (
-                        <button 
-                            onClick={() => handleSettle(ticket, 'won')} 
-                            className="w-full bg-emerald-500 text-black py-5 rounded-2xl font-black uppercase italic text-xs hover:scale-105 transition-all shadow-[0_0_30px_rgba(16,185,129,0.2)]"
-                        >
-                            Authorize Win
-                        </button>
-                    )}
-                    {isLost && (
-                        <button 
-                            onClick={() => handleSettle(ticket, 'lost')} 
-                            className="w-full bg-red-600/20 text-red-500 border border-red-500/30 py-5 rounded-2xl font-black uppercase italic text-xs hover:bg-red-600 hover:text-white transition-all"
-                        >
-                            Settle Loss
-                        </button>
-                    )}
-                    
-                    <div className="pt-4 border-t border-white/5 mt-2">
-                      <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest text-center mb-3">Manual Overrides</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button onClick={() => confirm("Force Win?") && handleSettle(ticket, 'won')} className="text-[9px] font-black bg-white/5 py-3 rounded-xl text-slate-600 hover:text-emerald-500 transition-all uppercase italic">Win</button>
-                        <button onClick={() => confirm("Force Loss?") && handleSettle(ticket, 'lost')} className="text-[9px] font-black bg-white/5 py-3 rounded-xl text-slate-600 hover:text-red-500 transition-all uppercase italic">Loss</button>
-                      </div>
-                    </div>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => handleApproveReview(item)}
+                      className="bg-emerald-500 text-black px-6 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-400 transition-all"
+                    >
+                      Approve Match
+                    </button>
+                    <button 
+                      onClick={() => supabase.from('fuzzy_review_queue').delete().eq('id', item.id).then(fetchData)}
+                      className="bg-white/5 text-slate-400 px-6 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-red-500/20 hover:text-red-500"
+                    >
+                      Ignore
+                    </button>
                   </div>
                 </div>
-              );
-            })
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* --- SECTION 2: ALL PENDING TICKETS --- */}
+        <h2 className="text-slate-500 font-black uppercase tracking-widest text-sm mb-6">Master Ticket List</h2>
+        <div className="space-y-6">
+          {loading ? (
+            <div className="py-20 text-center font-black uppercase tracking-[1em] text-slate-800 animate-pulse">Syncing Lucra...</div>
+          ) : (
+            tickets.filter(t => t.ticket_serial?.includes(searchTerm)).map(ticket => (
+              <div key={ticket.id} className="bg-[#111926] border border-white/5 rounded-[2rem] p-6 hover:border-white/10 transition-all">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">#{ticket.ticket_serial}</span>
+                    <h3 className="text-2xl font-black italic text-white mt-1">KES {Number(ticket.potential_payout).toLocaleString()}</h3>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase block">Status</span>
+                    <span className="text-xs font-black text-orange-500 uppercase italic">Waiting for results</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {ticket.newselections?.map((sel, i) => (
+                    <div key={i} className="bg-black/20 border border-white/5 p-4 rounded-xl">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[9px] font-black text-emerald-500 uppercase">{sel.sport}</span>
+                        <span className={`text-[9px] font-black px-2 py-1 rounded ${sel.status === 'won' ? 'bg-emerald-500/10 text-emerald-500' : sel.status === 'lost' ? 'bg-red-500/10 text-red-500' : 'bg-slate-800 text-slate-500'}`}>
+                          {sel.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-300 mb-1">{sel.match}</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase italic">Pick: {sel.pick}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
