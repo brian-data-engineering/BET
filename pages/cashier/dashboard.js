@@ -70,7 +70,6 @@ export default function CashierDashboard() {
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
-      // FIXED: Using sport_key instead of sport_title
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time, country, sport_key') 
@@ -83,7 +82,7 @@ export default function CashierDashboard() {
           
           return {
             ...sel,
-            sport_key: event?.sport_key || sel.sport_key || "Soccer",
+            sport_key: event?.sport_key || sel.sport_key || "soccer",
             display_league: event?.display_league || sel.display_league || "League",
             startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
             country: event?.country || sel.country || "Unknown"
@@ -114,6 +113,7 @@ export default function CashierDashboard() {
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
       
+      // STEP 1: Process payment & initial print entry via RPC
       const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
@@ -124,17 +124,18 @@ export default function CashierDashboard() {
 
       const activeSelections = currentTicket.selections || cart;
 
-      // STEP 3: Aggregate unique values for the ticket record
-      const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
+      // STEP 2: Aggregate values for the Master Print Record
+      const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "soccer"))];
       const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
       const leaguesSet = [...new Set(activeSelections.map(s => s.display_league || "League"))];
 
       const combinedSports = sportsSet.join(', ');
       const combinedCountries = countriesSet.join(', ');
-      const combinedLeagues = leaguesSet.join(',, '); // Double Comma logic
+      const combinedLeagues = leaguesSet.join(',, '); 
 
-      // STEP 4: Final Update to the 'print' table
-      await supabase
+      // STEP 3: Update the 'print' table. 
+      // NOTE: Our Database Trigger will automatically populate 'ticket_selections' now.
+      const { error: updateError } = await supabase
         .from('print')
         .update({
           country: combinedCountries,
@@ -144,7 +145,10 @@ export default function CashierDashboard() {
         })
         .eq('ticket_serial', newSerial);
 
-      await new Promise(res => setTimeout(res, 1500));
+      if (updateError) throw updateError;
+
+      // Small delay to ensure DB triggers finish
+      await new Promise(res => setTimeout(res, 1000));
       
       const { data: official } = await supabase
         .from('print')
