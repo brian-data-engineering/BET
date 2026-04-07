@@ -42,13 +42,17 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
       <div style={{ marginBottom: '10px' }}>
         {selections.map((sel, idx) => {
           const startTime = sel.startTime || sel.clean_start_time || "";
-          const formattedTime = startTime ? startTime.replace('T', ' ').slice(5, 16) : ""; // Formats to MM-DD HH:mm
+          const formattedTime = startTime ? startTime.replace('T', ' ').slice(5, 16) : ""; 
+          
+          // FIX 1: Dynamic Sport Labeling
+          // We look for sport_key first, then display_league, then fallback to "EVENT"
+          const sportLabel = (sel.sport_key || sel.display_league || sel.league_name || "EVENT").toUpperCase();
           
           return (
             <div key={idx} style={{ marginBottom: '8px', borderBottom: '0.5px solid #000', paddingBottom: '4px' }}>
               {/* League and Time Row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                <span>{sel.display_league || sel.league_name || "SOCCER"}</span>
+                <span>{sportLabel}</span>
                 <span>{formattedTime}</span>
               </div>
 
