@@ -8,7 +8,7 @@ import {
   AlertCircle, 
   CheckCircle2, 
   XCircle, 
-  Activity // Added missing icon import
+  Activity 
 } from 'lucide-react';
 
 export default function SettlementPage() {
@@ -32,7 +32,7 @@ export default function SettlementPage() {
         .neq('status', 'approved'); 
       setReviewQueue(queueData || []);
 
-      // 2. Fetch Master Tickets (Case-insensitive status check)
+      // 2. Fetch Master Tickets
       const { data: ticketsData, error: tErr } = await supabase
         .from('print')
         .select('*')
@@ -41,27 +41,32 @@ export default function SettlementPage() {
 
       if (tErr) throw tErr;
 
-      // 3. Fetch All Selections for these tickets using ticket_serial
       const serials = (ticketsData || []).map(t => t.ticket_serial);
       
-      let selectionsData = [];
       if (serials.length > 0) {
-        const { data: sData, error: sErr } = await supabase
-          .from('newselections')
-          .select('*')
-          .in('ticket_serial', serials);
-        
-        if (sErr) throw sErr;
-        selectionsData = sData;
+        // 3. Fetch Selections AND Final Results in parallel
+        const [selRes, resultsRes] = await Promise.all([
+          supabase.from('newselections').select('*').in('ticket_serial', serials),
+          supabase.from('finalresults').select('*').order('created_at', { ascending: false }).limit(150)
+        ]);
+
+        if (selRes.error) throw selRes.error;
+
+        // 4. Manual Merge: Ticket -> Selection -> Result Info
+        const merged = (ticketsData || []).map(ticket => ({
+          ...ticket,
+          selections: (selRes.data || []).filter(s => s.ticket_serial === ticket.ticket_serial).map(sel => {
+            // Fuzzy match: Does the match name contain the home or away team from results?
+            const matchResult = (resultsRes.data || []).find(r => 
+              sel.match.toLowerCase().includes(r.home_team.toLowerCase()) || 
+              sel.match.toLowerCase().includes(r.away_team.toLowerCase())
+            );
+            return { ...sel, resultInfo: matchResult };
+          })
+        }));
+
+        setTickets(merged);
       }
-
-      // 4. Manual Merge: Link selections to tickets via serial
-      const merged = (ticketsData || []).map(ticket => ({
-        ...ticket,
-        selections: (selectionsData || []).filter(s => s.ticket_serial === ticket.ticket_serial)
-      }));
-
-      setTickets(merged);
     } catch (err) {
       console.error("Lucra Sync Error:", err.message);
     } finally {
@@ -103,23 +108,16 @@ export default function SettlementPage() {
     setIsSettling(ticketSerial);
     const { error } = await supabase
       .from('print')
-      .update({ 
-        status: status.toUpperCase(), 
-        settled_at: new Date().toISOString() 
-      })
+      .update({ status: status.toUpperCase(), settled_at: new Date().toISOString() })
       .eq('ticket_serial', ticketSerial);
     
     if (!error) fetchData();
     setIsSettling(null);
   };
 
-  const filteredTickets = tickets.filter(t => 
-    t.ticket_serial?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
     <AdminLayout>
-      <div className="p-8 bg-[#070a11] min-h-screen text-slate-200">
+      <div className="p-8 bg-[#070a11] min-h-screen text-slate-200 font-sans">
         <header className="flex justify-between items-end mb-10">
           <div>
             <div className="flex items-center gap-2 mb-2 text-emerald-500">
@@ -158,23 +156,11 @@ export default function SettlementPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right mr-4">
-                      <div className="text-xs font-black text-white">
-                        {item.scraped_score?.home} - {item.scraped_score?.away}
-                      </div>
+                      <div className="text-xs font-black text-white">{item.scraped_score?.home} - {item.scraped_score?.away}</div>
                       <div className="text-[9px] text-slate-500 uppercase">Score Found</div>
                     </div>
-                    <button 
-                      onClick={() => handleApproveReview(item)} 
-                      className="bg-emerald-500 text-black px-5 py-2 rounded-xl font-black text-[10px] uppercase hover:scale-105 transition-all"
-                    >
-                      Approve
-                    </button>
-                    <button 
-                      onClick={() => supabase.from('fuzzy_review_queue').delete().eq('id', item.id).then(fetchData)} 
-                      className="text-slate-500 hover:text-red-500 transition-colors"
-                    >
-                      <XCircle size={20}/>
-                    </button>
+                    <button onClick={() => handleApproveReview(item)} className="bg-emerald-500 text-black px-5 py-2 rounded-xl font-black text-[10px] uppercase hover:scale-105">Approve</button>
+                    <button onClick={() => supabase.from('fuzzy_review_queue').delete().eq('id', item.id).then(fetchData)} className="text-slate-500 hover:text-red-500"><XCircle size={20}/></button>
                   </div>
                 </div>
               ))}
@@ -186,9 +172,9 @@ export default function SettlementPage() {
         <h2 className="text-slate-500 font-black uppercase tracking-widest text-[10px] mb-6">Master Ticket List</h2>
         <div className="space-y-6">
           {loading ? (
-            <div className="py-20 text-center font-black uppercase tracking-[1em] text-slate-800 animate-pulse">Scanning DB...</div>
+            <div className="py-20 text-center font-black uppercase tracking-[1em] text-slate-800 animate-pulse">Syncing Lucra...</div>
           ) : (
-            filteredTickets.map(ticket => {
+            tickets.filter(t => t.ticket_serial?.toLowerCase().includes(searchTerm.toLowerCase())).map(ticket => {
               const allWon = ticket.selections?.length > 0 && ticket.selections.every(s => s.status === 'won');
               const anyLost = ticket.selections?.some(s => s.status === 'lost');
 
@@ -202,20 +188,12 @@ export default function SettlementPage() {
                     
                     <div className="flex gap-3">
                       {allWon && (
-                        <button 
-                          disabled={isSettling === ticket.ticket_serial}
-                          onClick={() => finalizeTicket(ticket.ticket_serial, 'won')}
-                          className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-emerald-400"
-                        >
-                          {isSettling === ticket.ticket_serial ? 'Processing...' : 'Authorize Payout'}
+                        <button disabled={isSettling === ticket.ticket_serial} onClick={() => finalizeTicket(ticket.ticket_serial, 'won')} className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-emerald-400">
+                          {isSettling === ticket.ticket_serial ? '...' : 'Authorize Payout'}
                         </button>
                       )}
                       {anyLost && (
-                        <button 
-                           disabled={isSettling === ticket.ticket_serial}
-                           onClick={() => finalizeTicket(ticket.ticket_serial, 'lost')}
-                           className="bg-red-500/10 text-red-500 border border-red-500/20 px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-red-500 hover:text-white"
-                        >
+                        <button disabled={isSettling === ticket.ticket_serial} onClick={() => finalizeTicket(ticket.ticket_serial, 'lost')} className="bg-red-500/10 text-red-500 border border-red-500/20 px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-red-500 hover:text-white">
                           Settle as Lost
                         </button>
                       )}
@@ -224,18 +202,44 @@ export default function SettlementPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {ticket.selections?.map((sel, i) => (
-                      <div key={i} className="bg-black/30 border border-white/5 p-5 rounded-2xl relative overflow-hidden">
-                        <div className={`absolute top-0 right-0 p-2 ${sel.status === 'won' ? 'text-emerald-500' : sel.status === 'lost' ? 'text-red-500' : 'text-slate-700'}`}>
-                          {sel.status === 'won' ? <CheckCircle2 size={16}/> : 
-                           sel.status === 'lost' ? <XCircle size={16}/> : 
-                           <Activity size={16} className="animate-pulse"/>}
+                      <div key={i} className="bg-black/30 border border-white/5 p-5 rounded-2xl flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-3">
+                            <span className="text-[9px] font-black text-emerald-500/50 uppercase tracking-widest">{sel.sport}</span>
+                            <div className={sel.status === 'won' ? 'text-emerald-500' : sel.status === 'lost' ? 'text-red-500' : 'text-slate-700'}>
+                              {sel.status === 'won' ? <CheckCircle2 size={16}/> : sel.status === 'lost' ? <XCircle size={16}/> : <Activity size={16} className="animate-pulse"/>}
+                            </div>
+                          </div>
+                          <p className="text-sm font-bold text-slate-200 mb-1">{sel.match}</p>
+                          <p className="text-[10px] font-black text-slate-500 uppercase italic mb-4">Pick: {sel.pick}</p>
                         </div>
-                        <span className="text-[9px] font-black text-emerald-500/50 uppercase tracking-widest">{sel.sport}</span>
-                        <p className="text-sm font-bold text-slate-200 mt-1 mb-3">{sel.match}</p>
-                        <div className="flex justify-between items-end">
-                           <span className="text-[10px] bg-white/5 px-2 py-1 rounded font-black text-slate-400 italic uppercase">PICK: {sel.pick}</span>
-                           <span className="text-[10px] font-black uppercase italic text-slate-500">{sel.status || 'pending'}</span>
-                        </div>
+
+                        {/* --- NEW: FINAL RESULTS DISPLAY --- */}
+                        {sel.resultInfo ? (
+                          <div className="mt-2 pt-4 border-t border-white/5 bg-emerald-500/5 -mx-5 -mb-5 p-4 rounded-b-2xl">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-[9px] font-black text-emerald-400 uppercase">Live Result</span>
+                              <span className="text-[11px] font-black text-white bg-emerald-500 px-2 py-0.5 rounded italic">
+                                {sel.resultInfo.raw_clean_score}
+                              </span>
+                            </div>
+                            
+                            {/* Period Breakdown (HT Scores, Set Scores, etc) */}
+                            {sel.resultInfo.period_scores && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {Object.entries(sel.resultInfo.period_scores).map(([period, score]) => (
+                                  <div key={period} className="text-[8px] bg-black/40 px-1.5 py-0.5 rounded text-slate-400 border border-white/10 uppercase">
+                                    <span className="font-bold text-emerald-500/70">{period}:</span> {score}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-2 pt-4 border-t border-white/5 text-[9px] text-slate-700 italic font-black uppercase">
+                            Awaiting Scraper Input...
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
