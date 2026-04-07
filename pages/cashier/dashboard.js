@@ -70,6 +70,7 @@ export default function CashierDashboard() {
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
+      // FIXED: Using sport_key instead of sport_title
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time, country, sport_key') 
@@ -113,7 +114,6 @@ export default function CashierDashboard() {
     try {
       const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
       
-      // STEP 1: Core payment processing via RPC
       const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
@@ -124,27 +124,27 @@ export default function CashierDashboard() {
 
       const activeSelections = currentTicket.selections || cart;
 
-      // STEP 2: Prepare aggregated metadata for the Print record
+      // STEP 3: Aggregate unique values for the ticket record
       const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
       const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
       const leaguesSet = [...new Set(activeSelections.map(s => s.display_league || "League"))];
 
-      // STEP 3: Final Update to the 'print' table
-      // This update will trigger the Database Trigger to populate ticket_selections
-      const { error: updateError } = await supabase
+      const combinedSports = sportsSet.join(', ');
+      const combinedCountries = countriesSet.join(', ');
+      const combinedLeagues = leaguesSet.join(',, '); // Double Comma logic
+
+      // STEP 4: Final Update to the 'print' table
+      await supabase
         .from('print')
         .update({
-          country: countriesSet.join(', '),
-          sport_key: sportsSet.join(', '),
-          display_league: leaguesSet.join(',, '), 
+          country: combinedCountries,
+          sport_key: combinedSports,
+          display_league: combinedLeagues, 
           selections: JSON.stringify(activeSelections) 
         })
         .eq('ticket_serial', newSerial);
 
-      if (updateError) throw updateError;
-
-      // Small pause to allow DB trigger to complete
-      await new Promise(res => setTimeout(res, 1000));
+      await new Promise(res => setTimeout(res, 1500));
       
       const { data: official } = await supabase
         .from('print')
