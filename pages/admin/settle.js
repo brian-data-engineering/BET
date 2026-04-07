@@ -56,7 +56,6 @@ export default function SettlementPage() {
         const merged = (ticketsData || []).map(ticket => ({
           ...ticket,
           selections: (selRes.data || []).filter(s => s.ticket_serial === ticket.ticket_serial).map(sel => {
-            // Fuzzy match: Does the match name contain the home or away team from results?
             const matchResult = (resultsRes.data || []).find(r => 
               sel.match.toLowerCase().includes(r.home_team.toLowerCase()) || 
               sel.match.toLowerCase().includes(r.away_team.toLowerCase())
@@ -147,7 +146,7 @@ export default function SettlementPage() {
               {reviewQueue.map(item => (
                 <div key={item.id} className="bg-[#1a1f2e] border border-orange-500/20 rounded-2xl p-5 flex justify-between items-center shadow-lg">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-500">SERIAL: {item.ticket_serial}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Serial: {item.ticket_serial}</span>
                     <div className="flex items-center gap-3 text-sm mt-1">
                       <span className="text-white font-bold">{item.betika_match}</span>
                       <ChevronRight size={14} className="text-slate-600" />
@@ -157,7 +156,7 @@ export default function SettlementPage() {
                   <div className="flex items-center gap-4">
                     <div className="text-right mr-4">
                       <div className="text-xs font-black text-white">{item.scraped_score?.home} - {item.scraped_score?.away}</div>
-                      <div className="text-[9px] text-slate-500 uppercase">Score Found</div>
+                      <div className="text-[9px] text-slate-500 uppercase">Fuzzy Result</div>
                     </div>
                     <button onClick={() => handleApproveReview(item)} className="bg-emerald-500 text-black px-5 py-2 rounded-xl font-black text-[10px] uppercase hover:scale-105">Approve</button>
                     <button onClick={() => supabase.from('fuzzy_review_queue').delete().eq('id', item.id).then(fetchData)} className="text-slate-500 hover:text-red-500"><XCircle size={20}/></button>
@@ -188,12 +187,12 @@ export default function SettlementPage() {
                     
                     <div className="flex gap-3">
                       {allWon && (
-                        <button disabled={isSettling === ticket.ticket_serial} onClick={() => finalizeTicket(ticket.ticket_serial, 'won')} className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-emerald-400">
+                        <button disabled={isSettling === ticket.ticket_serial} onClick={() => finalizeTicket(ticket.ticket_serial, 'won')} className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-emerald-400 transition-colors">
                           {isSettling === ticket.ticket_serial ? '...' : 'Authorize Payout'}
                         </button>
                       )}
                       {anyLost && (
-                        <button disabled={isSettling === ticket.ticket_serial} onClick={() => finalizeTicket(ticket.ticket_serial, 'lost')} className="bg-red-500/10 text-red-500 border border-red-500/20 px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-red-500 hover:text-white">
+                        <button disabled={isSettling === ticket.ticket_serial} onClick={() => finalizeTicket(ticket.ticket_serial, 'lost')} className="bg-red-500/10 text-red-500 border border-red-500/20 px-8 py-3 rounded-2xl font-black uppercase italic text-xs hover:bg-red-500 hover:text-white transition-colors">
                           Settle as Lost
                         </button>
                       )}
@@ -202,7 +201,7 @@ export default function SettlementPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {ticket.selections?.map((sel, i) => (
-                      <div key={i} className="bg-black/30 border border-white/5 p-5 rounded-2xl flex flex-col justify-between">
+                      <div key={i} className="bg-black/30 border border-white/5 p-5 rounded-2xl flex flex-col justify-between group">
                         <div>
                           <div className="flex justify-between items-start mb-3">
                             <span className="text-[9px] font-black text-emerald-500/50 uppercase tracking-widest">{sel.sport}</span>
@@ -210,34 +209,40 @@ export default function SettlementPage() {
                               {sel.status === 'won' ? <CheckCircle2 size={16}/> : sel.status === 'lost' ? <XCircle size={16}/> : <Activity size={16} className="animate-pulse"/>}
                             </div>
                           </div>
-                          <p className="text-sm font-bold text-slate-200 mb-1">{sel.match}</p>
-                          <p className="text-[10px] font-black text-slate-500 uppercase italic mb-4">Pick: {sel.pick}</p>
+                          <p className="text-sm font-bold text-slate-200 mb-1 leading-tight">{sel.match}</p>
+                          <p className="text-[10px] font-black text-slate-500 uppercase italic mb-4 tracking-tighter">Pick: {sel.pick}</p>
                         </div>
 
-                        {/* --- NEW: FINAL RESULTS DISPLAY --- */}
+                        {/* --- FINAL RESULTS + TEAM NAMES DISPLAY --- */}
                         {sel.resultInfo ? (
-                          <div className="mt-2 pt-4 border-t border-white/5 bg-emerald-500/5 -mx-5 -mb-5 p-4 rounded-b-2xl">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-[9px] font-black text-emerald-400 uppercase">Live Result</span>
-                              <span className="text-[11px] font-black text-white bg-emerald-500 px-2 py-0.5 rounded italic">
+                          <div className="mt-2 pt-4 border-t border-white/5 bg-emerald-500/5 -mx-5 -mb-5 p-4 rounded-b-2xl border-t-emerald-500/10">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex flex-col max-w-[70%]">
+                                <span className="text-[8px] font-black text-emerald-500/40 uppercase tracking-widest mb-0.5">Verified Scraper Name</span>
+                                <span className="text-[11px] font-black text-emerald-400 uppercase leading-none italic">
+                                  {sel.resultInfo.home_team} vs {sel.resultInfo.away_team}
+                                </span>
+                              </div>
+                              <span className="text-[12px] font-black text-white bg-emerald-600 px-2 py-1 rounded italic shadow-lg shrink-0">
                                 {sel.resultInfo.raw_clean_score}
                               </span>
                             </div>
                             
-                            {/* Period Breakdown (HT Scores, Set Scores, etc) */}
+                            {/* Period Breakdown */}
                             {sel.resultInfo.period_scores && (
-                              <div className="flex flex-wrap gap-1.5 mt-2">
+                              <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-white/5">
                                 {Object.entries(sel.resultInfo.period_scores).map(([period, score]) => (
-                                  <div key={period} className="text-[8px] bg-black/40 px-1.5 py-0.5 rounded text-slate-400 border border-white/10 uppercase">
-                                    <span className="font-bold text-emerald-500/70">{period}:</span> {score}
+                                  <div key={period} className="text-[8px] bg-black/60 px-2 py-1 rounded text-slate-400 border border-white/10 uppercase font-bold">
+                                    <span className="text-emerald-500/70 mr-1">{period}:</span>{score}
                                   </div>
                                 ))}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <div className="mt-2 pt-4 border-t border-white/5 text-[9px] text-slate-700 italic font-black uppercase">
-                            Awaiting Scraper Input...
+                          <div className="mt-2 pt-4 border-t border-white/5 text-[9px] text-slate-700 italic font-black uppercase flex items-center gap-2">
+                             <Activity size={10} className="animate-spin" />
+                             Scanning DB for results...
                           </div>
                         )}
                       </div>
