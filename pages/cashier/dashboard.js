@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import CashierLayout from '../../components/cashier/CashierLayout';
 import Betslip from '../../components/cashier/BetSlip'; 
@@ -68,9 +68,10 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
+      // STEP 1: Collect FULL Match IDs for lookup
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
-      // FIX 1: Added 'sport_title' to the selection to avoid hardcoding "Soccer"
+      // STEP 2: Fetch metadata from api_events using the full IDs
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time, country, sport_title') 
@@ -83,11 +84,11 @@ export default function CashierDashboard() {
           
           return {
             ...sel,
+            sport_key: event?.sport_title || sel.sport_key || "Soccer",
             display_league: event?.display_league || sel.display_league || "League",
-            startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
-            country: event?.country || "Unknown",
-            // FIX 2: Use sport_title from DB if available, else keep existing or default
-            sport_key: event?.sport_title || sel.sport_key || "Soccer" 
+            // Keep original startTime if available, else fallback to API
+            startTime: sel.startTime || sel.clean_start_time || event?.commence_time,
+            country: event?.country || sel.country || "Unknown"
           };
         });
       }
@@ -125,25 +126,38 @@ export default function CashierDashboard() {
 
       const activeSelections = currentTicket.selections || cart;
 
-      // FIX 3: Dynamic multi-sport and multi-country aggregation
-      // We collect all unique values and join them with commas
+      // STEP 3: Aggregate unique Sports, Countries, and Leagues
       const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
       const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
+      const leaguesSet = [...new Set(activeSelections.map(s => s.display_league || "League"))];
 
       const combinedSports = sportsSet.join(', ');
       const combinedCountries = countriesSet.join(', ');
+      // FIX: Double Comma Separation for Leagues
+      const combinedLeagues = leaguesSet.join(',, ');
 
-      // FIX 4: Explicitly update the 'print' table so metadata is correct for mixed tickets
+      // STEP 4: Finalize the 'print' record with enriched metadata
       await supabase
         .from('print')
         .update({
           country: combinedCountries,
-          sport_key: combinedSports
+          sport_key: combinedSports,
+          // We save the double-comma leagues into the display_league column (if it exists)
+          // and ensure the selections JSON is updated with all fetched details
+          selections: JSON.stringify(activeSelections.map(s => ({
+            ...s,
+            ticket_leagues: combinedLeagues
+          }))) 
         })
         .eq('ticket_serial', newSerial);
 
       await new Promise(res => setTimeout(res, 1500));
-      const { data: official } = await supabase.from('print').select('*').eq('ticket_serial', newSerial).single();
+      
+      const { data: official } = await supabase
+        .from('print')
+        .select('*')
+        .eq('ticket_serial', newSerial)
+        .single();
 
       if (official) {
         const enrichedTicket = { ...official, selections: activeSelections };
