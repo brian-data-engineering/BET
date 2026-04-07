@@ -80,8 +80,6 @@ export default function SettlementPage() {
         const merged = (ticketsData || []).map(ticket => ({
           ...ticket,
           selections: (selRes.data || []).filter(s => s.ticket_serial === ticket.ticket_serial).map(sel => {
-            
-            // Find the best possible match in the DB, even if weak
             let bestMatch = null;
             let highestConfidence = 0;
 
@@ -103,6 +101,8 @@ export default function SettlementPage() {
         }));
 
         setTickets(merged);
+      } else {
+        setTickets([]);
       }
     } catch (err) {
       console.error("Lucra Sync Error:", err.message);
@@ -112,20 +112,43 @@ export default function SettlementPage() {
   };
 
   const updateSelectionStatus = async (ticketSerial, matchName, newStatus) => {
+    const statusLower = newStatus.toLowerCase();
+    
+    // FIX: Using .match() object instead of chained .eq() 
+    // This is more robust against special characters like "II" or "+" 
     const { error } = await supabase
       .from('newselections')
-      .update({ status: newStatus })
-      .eq('ticket_serial', ticketSerial)
-      .eq('match', matchName);
+      .update({ status: statusLower })
+      .match({ 
+        ticket_serial: ticketSerial, 
+        match: matchName 
+      });
     
-    if (!error) fetchData();
+    if (error) {
+      console.error("Lucra Update Error:", error.message);
+      return;
+    }
+
+    // Delay refresh on 'lost' to allow the DB Trigger to delete related selections
+    if (statusLower === 'lost') {
+      setTimeout(() => fetchData(), 500);
+    } else {
+      fetchData();
+    }
   };
 
   const finalizeTicket = async (ticketSerial, status) => {
     setIsSettling(ticketSerial);
-    await supabase.from('print')
-      .update({ status: status.toUpperCase(), settled_at: new Date().toISOString() })
+    
+    // Ensure lowercase to satisfy DB check constraints
+    const { error } = await supabase.from('print')
+      .update({ 
+        status: status.toLowerCase(), 
+        settled_at: new Date().toISOString() 
+      })
       .eq('ticket_serial', ticketSerial);
+    
+    if (error) console.error("Finalization Error:", error.message);
     
     fetchData();
     setIsSettling(null);
@@ -153,9 +176,8 @@ export default function SettlementPage() {
           </div>
         </header>
 
-        {/* --- TICKETS LIST --- */}
         <div className="space-y-6">
-          {loading ? (
+          {loading && tickets.length === 0 ? (
             <div className="py-20 text-center font-black uppercase tracking-[1em] text-slate-800 animate-pulse">Syncing Lucra...</div>
           ) : (
             tickets.filter(t => t.ticket_serial?.toLowerCase().includes(searchTerm.toLowerCase())).map(ticket => {
@@ -191,7 +213,6 @@ export default function SettlementPage() {
                           <div className="flex justify-between items-start mb-3">
                             <span className="text-[9px] font-black text-emerald-500/50 uppercase tracking-widest">{sel.sport}</span>
                             
-                            {/* --- MANUAL STATUS TOGGLES --- */}
                             <div className="flex gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
                               <button onClick={() => updateSelectionStatus(ticket.ticket_serial, sel.match, 'won')} className="p-1 hover:text-emerald-500 transition-colors" title="Force Win"><CheckCircle2 size={14}/></button>
                               <button onClick={() => updateSelectionStatus(ticket.ticket_serial, sel.match, 'lost')} className="p-1 hover:text-red-500 transition-colors" title="Force Loss"><XCircle size={14}/></button>
@@ -202,7 +223,6 @@ export default function SettlementPage() {
                           <p className="text-[10px] font-black text-slate-500 uppercase italic mb-4 tracking-tighter">Pick: {sel.pick} • Status: <span className={sel.status === 'won' ? 'text-emerald-500' : sel.status === 'lost' ? 'text-red-500' : ''}>{sel.status}</span></p>
                         </div>
 
-                        {/* --- FUZZY MATCH DISPLAY --- */}
                         {sel.resultInfo ? (
                           <div className={`mt-2 pt-4 border-t -mx-5 -mb-5 p-4 rounded-b-2xl ${sel.confidence > 0.85 ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-orange-500/5 border-orange-500/10'}`}>
                             <div className="flex justify-between items-start mb-2">
