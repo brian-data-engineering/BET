@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { UserPlus, Briefcase, ShieldCheck, ArrowRightLeft, TrendingUp, Activity, Key, Database } from 'lucide-react';
+import { UserPlus, ShieldCheck, TrendingUp, Key, Database } from 'lucide-react';
 import { useRouter } from 'next/router';
 
 export default function ManageOperators() {
   const router = useRouter();
   const [operators, setOperators] = useState([]);
   const [adminId, setAdminId] = useState(null);
-  const [form, setForm] = useState({ password: '', username: '' }); // Email removed from form
+  const [form, setForm] = useState({ password: '', username: '' });
   const [loading, setLoading] = useState(false);
 
   const syncNetworkState = useCallback(async () => {
@@ -47,27 +47,36 @@ export default function ManageOperators() {
     // GHOST LOGIC: Auto-generate the internal administrative email
     const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
     
-    const { error } = await supabase.auth.signUp({ 
-      email: ghostEmail, 
-      password: form.password,
-      options: {
-        shouldCreateSession: false, // Prevent the admin from being logged out
-        data: { 
+    try {
+      // NEW SYSTEM: Call the internal Admin API route to prevent logout
+      const response = await fetch('/api/admin/create-operator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: ghostEmail,
+          password: form.password,
           username: form.username.trim(),
-          role: 'operator',      
-          parent_id: adminId 
-        }
+          adminId: adminId 
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to provision node');
       }
-    });
-    
-    if (error) {
-      alert("Registration Failure: " + error.message);
-    } else {
+
       alert(`NODE INITIALIZED: Operator ${form.username} provisioned with identity ${ghostEmail}`);
       setForm({ password: '', username: '' });
       syncNetworkState();
+
+    } catch (err) {
+      alert("Registration Failure: " + err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const totalFloat = operators.reduce((acc, op) => acc + (parseFloat(op.balance) || 0), 0);
