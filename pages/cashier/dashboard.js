@@ -70,7 +70,6 @@ export default function CashierDashboard() {
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
-      // FIXED: Using sport_key instead of sport_title
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time, country, sport_key') 
@@ -124,23 +123,23 @@ export default function CashierDashboard() {
 
       const activeSelections = currentTicket.selections || cart;
 
-      // STEP 3: Aggregate unique values for the ticket record
       const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
       const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
       const leaguesSet = [...new Set(activeSelections.map(s => s.display_league || "League"))];
 
       const combinedSports = sportsSet.join(', ');
       const combinedCountries = countriesSet.join(', ');
-      const combinedLeagues = leaguesSet.join(',, '); // Double Comma logic
+      const combinedLeagues = leaguesSet.join(',, ');
 
       // STEP 4: Final Update to the 'print' table
+      // FIX: Removed JSON.stringify() to handle JSONB type correctly
       await supabase
         .from('print')
         .update({
           country: combinedCountries,
           sport_key: combinedSports,
           display_league: combinedLeagues, 
-          selections: JSON.stringify(activeSelections) 
+          selections: activeSelections 
         })
         .eq('ticket_serial', newSerial);
 
