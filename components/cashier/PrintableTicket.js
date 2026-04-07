@@ -8,6 +8,9 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
     ? JSON.parse(ticket.selections) 
     : (Array.isArray(ticket.selections) ? ticket.selections : []);
 
+  // Get the aggregated leagues from the ticket record (using the new column or JSON fallback)
+  const ticketLeagues = ticket.display_league || (selections[0]?.ticket_leagues) || "";
+
   return (
     <div className="lucra-print-area" style={{ 
       width: '72mm', 
@@ -36,17 +39,23 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
         <div style={{ fontSize: '9px' }}>DATE: {new Date(ticket.created_at).toLocaleString()}</div>
       </div>
 
+      {/* AGGREGATED LEAGUES SUMMARY */}
+      {ticketLeagues && (
+        <div style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center', margin: '4px 0', textTransform: 'uppercase' }}>
+          {ticketLeagues}
+        </div>
+      )}
+
       <div style={{ borderTop: '1.5px solid #000', margin: '5px 0' }}></div>
 
-      {/* SELECTIONS - Professional Stacked List */}
+      {/* SELECTIONS */}
       <div style={{ marginBottom: '10px' }}>
         {selections.map((sel, idx) => {
           const startTime = sel.startTime || sel.clean_start_time || "";
           const formattedTime = startTime ? startTime.replace('T', ' ').slice(5, 16) : ""; 
           
-          // FIX 1: Dynamic Sport Labeling
-          // We look for sport_key first, then display_league, then fallback to "EVENT"
-          const sportLabel = (sel.sport_key || sel.display_league || sel.league_name || "EVENT").toUpperCase();
+          // Selection-specific sport label
+          const sportLabel = (sel.sport_key || sel.display_league || "EVENT").toUpperCase();
           
           return (
             <div key={idx} style={{ marginBottom: '8px', borderBottom: '0.5px solid #000', paddingBottom: '4px' }}>
@@ -103,7 +112,13 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
       {/* BARCODE & SERIAL */}
       <div style={{ marginTop: '15px', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Barcode value={String(ticket.ticket_serial || ticket.booking_code)} width={1.2} height={40} displayValue={false} margin={0} />
+          <Barcode 
+            value={String(ticket.ticket_serial || ticket.booking_code)} 
+            width={1.2} 
+            height={40} 
+            displayValue={false} 
+            margin={0} 
+          />
         </div>
         <div style={{ fontSize: '13px', fontWeight: '900', marginTop: '4px' }}>
           #{ticket.ticket_serial || "BOOKING"}
