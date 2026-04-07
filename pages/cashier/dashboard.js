@@ -68,13 +68,12 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
-      // 1. Keep IDs as clean Strings to match your 'text' column type
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
-      // 2. Removed 'sport_type' from query because it doesn't exist in your table
+      // FIX 1: Added 'sport_title' to the selection to avoid hardcoding "Soccer"
       const { data: eventData } = await supabase
         .from('api_events')
-        .select('id, display_league, commence_time, country') 
+        .select('id, display_league, commence_time, country, sport_title') 
         .in('id', matchIds);
 
       if (eventData) {
@@ -87,8 +86,8 @@ export default function CashierDashboard() {
             display_league: event?.display_league || sel.display_league || "League",
             startTime: event?.commence_time || sel.startTime || sel.clean_start_time,
             country: event?.country || "Unknown",
-            // 3. Since column is missing, we hardcode "Soccer" as requested
-            sport_key: "Soccer" 
+            // FIX 2: Use sport_title from DB if available, else keep existing or default
+            sport_key: event?.sport_title || sel.sport_key || "Soccer" 
           };
         });
       }
@@ -125,14 +124,21 @@ export default function CashierDashboard() {
       if (rpcError) throw rpcError;
 
       const activeSelections = currentTicket.selections || cart;
-      const uniqueCountries = [...new Set(activeSelections.map(s => s.country || "Unknown"))].join(', ');
-      const uniqueSports = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))].join(', ');
 
+      // FIX 3: Dynamic multi-sport and multi-country aggregation
+      // We collect all unique values and join them with commas
+      const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
+      const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
+
+      const combinedSports = sportsSet.join(', ');
+      const combinedCountries = countriesSet.join(', ');
+
+      // FIX 4: Explicitly update the 'print' table so metadata is correct for mixed tickets
       await supabase
         .from('print')
         .update({
-          country: uniqueCountries,
-          sport_key: uniqueSports
+          country: combinedCountries,
+          sport_key: combinedSports
         })
         .eq('ticket_serial', newSerial);
 
