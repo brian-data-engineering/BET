@@ -6,7 +6,7 @@ export default function Betslip({ items = [], setItems }) {
   const [bookingCode, setBookingCode] = useState(null);
   const [isBooking, setIsBooking] = useState(false);
   const [stake, setStake] = useState(100);
-  const MAX_GAMES = 20;
+  const MAX_GAMES = 13;
 
   // --- AUTO-CLEAR BOOKING CODE ON NEW INTERACTION ---
   useEffect(() => {
