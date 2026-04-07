@@ -8,7 +8,7 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
     ? JSON.parse(ticket.selections) 
     : (Array.isArray(ticket.selections) ? ticket.selections : []);
 
-  // Get the aggregated leagues from the ticket record (using the new column or JSON fallback)
+  // Aggregated summary for the header
   const ticketLeagues = ticket.display_league || (selections[0]?.ticket_leagues) || "";
 
   return (
@@ -39,13 +39,6 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
         <div style={{ fontSize: '9px' }}>DATE: {new Date(ticket.created_at).toLocaleString()}</div>
       </div>
 
-      {/* AGGREGATED LEAGUES SUMMARY */}
-      {ticketLeagues && (
-        <div style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center', margin: '4px 0', textTransform: 'uppercase' }}>
-          {ticketLeagues}
-        </div>
-      )}
-
       <div style={{ borderTop: '1.5px solid #000', margin: '5px 0' }}></div>
 
       {/* SELECTIONS */}
@@ -54,14 +47,14 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
           const startTime = sel.startTime || sel.clean_start_time || "";
           const formattedTime = startTime ? startTime.replace('T', ' ').slice(5, 16) : ""; 
           
-          // Selection-specific sport label
-          const sportLabel = (sel.sport_key || sel.display_league || "EVENT").toUpperCase();
+          // Selection-specific league/sport label
+          const leagueLabel = (sel.display_league || sel.sport_key || "EVENT").toUpperCase();
           
           return (
-            <div key={idx} style={{ marginBottom: '8px', borderBottom: '0.5px solid #000', paddingBottom: '4px' }}>
-              {/* League and Time Row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                <span>{sportLabel}</span>
+            <div key={idx} style={{ marginBottom: '10px', borderBottom: '0.5px solid #000', paddingBottom: '4px' }}>
+              {/* LEAGUE IS NOW ABOVE THE GAME */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.9 }}>
+                <span>{leagueLabel}</span>
                 <span>{formattedTime}</span>
               </div>
 
