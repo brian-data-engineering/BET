@@ -68,10 +68,8 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
-      // STEP 1: Collect FULL Match IDs for lookup
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       
-      // STEP 2: Fetch metadata from api_events using the full IDs
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time, country, sport_title') 
@@ -86,7 +84,6 @@ export default function CashierDashboard() {
             ...sel,
             sport_key: event?.sport_title || sel.sport_key || "Soccer",
             display_league: event?.display_league || sel.display_league || "League",
-            // Keep original startTime if available, else fallback to API
             startTime: sel.startTime || sel.clean_start_time || event?.commence_time,
             country: event?.country || sel.country || "Unknown"
           };
@@ -126,27 +123,26 @@ export default function CashierDashboard() {
 
       const activeSelections = currentTicket.selections || cart;
 
-      // STEP 3: Aggregate unique Sports, Countries, and Leagues
+      // STEP 3: Aggregate unique values for the ticket record
       const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
       const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
       const leaguesSet = [...new Set(activeSelections.map(s => s.display_league || "League"))];
 
       const combinedSports = sportsSet.join(', ');
       const combinedCountries = countriesSet.join(', ');
-      // FIX: Double Comma Separation for Leagues
+      // Apply the requested Double Comma separation
       const combinedLeagues = leaguesSet.join(',, ');
 
-      // STEP 4: Finalize the 'print' record with enriched metadata
+      // STEP 4: Update the 'print' table including the new display_league column
       await supabase
         .from('print')
         .update({
           country: combinedCountries,
           sport_key: combinedSports,
-          // We save the double-comma leagues into the display_league column (if it exists)
-          // and ensure the selections JSON is updated with all fetched details
+          display_league: combinedLeagues, // UPDATED: Now writing to your new column
           selections: JSON.stringify(activeSelections.map(s => ({
             ...s,
-            ticket_leagues: combinedLeagues
+            ticket_leagues: combinedLeagues // Also bake it into JSON for the printer
           }))) 
         })
         .eq('ticket_serial', newSerial);
