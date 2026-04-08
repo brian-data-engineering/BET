@@ -12,7 +12,7 @@ const Navbar = ({ onSearch }) => {
       <div className="bg-[#0b0f1a] px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-1 cursor-pointer">
           <div className="w-9 h-9 border-2 border-[#10b981] rounded-full flex items-center justify-center font-black text-[#10b981] text-lg">
-            L
+            P
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-2xl font-black tracking-tighter text-white uppercase italic">
