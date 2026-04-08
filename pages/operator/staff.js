@@ -9,7 +9,7 @@ export default function ManageStaff() {
   const [fetching, setFetching] = useState(true);
   const [processingId, setProcessingId] = useState(null);
 
-  // --- FORM STATE (Email removed from form) ---
+  // --- FORM STATE ---
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState({ username: '', password: '' });
   const [creating, setCreating] = useState(false);
@@ -51,28 +51,37 @@ export default function ManageStaff() {
     // GHOST LOGIC: Auto-generate the internal email address
     const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
 
-    const { error } = await supabase.auth.signUp({
-      email: ghostEmail,
-      password: form.password,
-      options: {
-        shouldCreateSession: false, 
-        data: { 
+    try {
+      // Calling your new dedicated API Route
+      const response = await fetch('/api/admin/create-cashier', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: ghostEmail,
+          password: form.password,
           username: form.username.trim(),
-          role: 'cashier',      
-          parent_id: operatorProfile.id 
-        }
-      }
-    });
+          operatorId: operatorProfile.id // Bridges the hierarchy
+        }),
+      });
 
-    if (error) {
-      alert(`NETWORK ERROR: ${error.message}`);
-    } else {
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to initialize terminal node');
+      }
+
       alert(`NODE INITIALIZED: Cashier ${form.username} is now active.`);
       setForm({ username: '', password: '' });
       setShowAddForm(false);
-      fetchData();
+      fetchData(); // Refresh the list
+
+    } catch (error) {
+      alert(`PROVISIONING ERROR: ${error.message}`);
+    } finally {
+      setCreating(false);
     }
-    setCreating(false);
   };
 
   const handleDispatch = async (id, name) => {
@@ -128,7 +137,7 @@ export default function ManageStaff() {
           </div>
         </div>
 
-        {/* UPDATED ADD CASHIER FORM */}
+        {/* ADD CASHIER FORM */}
         {showAddForm && (
           <form onSubmit={handleCreateCashier} className="bg-[#111926] p-8 rounded-[2.5rem] border border-blue-500/20 flex flex-wrap gap-4 items-end animate-in fade-in zoom-in duration-200">
             <div className="flex-[2] min-w-[240px]">
@@ -136,7 +145,7 @@ export default function ManageStaff() {
               <div className="relative">
                 <input 
                   required 
-                  placeholder="e.g. nairobi_west_01"
+                  placeholder="e.g. cashier_01"
                   className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" 
                   value={form.username} 
                   onChange={e => setForm({...form, username: e.target.value})} 
