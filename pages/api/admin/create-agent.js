@@ -8,9 +8,6 @@ export default async function handler(req, res) {
 
   const { email, password, username, displayName, operatorId, tenantId, logoUrl } = req.body;
 
-  // Debug: Log the incoming data to Vercel Logs
-  console.log("Provisioning Agent:", { username, tenantId, operatorId });
-
   try {
     // 1. Create the Auth User
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -22,8 +19,8 @@ export default async function handler(req, res) {
 
     if (authError) throw authError;
 
-    // 2. Use UPSERT to handle the profile
-    // This bypasses issues if a trigger already created a partial row
+    // 2. Provision the Profile using UPSERT
+    // This merges your API data with whatever the trigger created
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
@@ -31,22 +28,19 @@ export default async function handler(req, res) {
         username: username,
         role: 'agent',
         display_name: displayName || username,
-        tenant_id: tenantId,    // Must not be null
-        parent_id: operatorId,  // Must not be null
-        logo_url: logoUrl,
-        balance: 0,
-        created_at: new Date().toISOString()
-      }, { onConflict: 'id' }); // Ensures we target the right row
+        tenant_id: tenantId,    // Inherited from testoperator
+        parent_id: operatorId,  // Linked to testoperator
+        logo_url: logoUrl,      // Inherited brand
+        balance: 0
+      }, { onConflict: 'id' });
 
     if (profileError) {
-      // Rollback Auth user if profile setup fails
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw profileError;
     }
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error("API Error:", error.message);
     return res.status(400).json({ error: error.message });
   }
 }
