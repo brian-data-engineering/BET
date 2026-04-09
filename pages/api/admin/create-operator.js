@@ -1,18 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  // Initialize with Service Role Key to bypass RLS and Auth restrictions
+  // Initialize with Service Role Key to bypass RLS
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const { email, password, username, adminId, displayName } = req.body;
+  const { email, password, username, adminId, displayName, logoUrl } = req.body;
 
-  // 1. Force the role to 'operator' for this specific endpoint
+  // CRITICAL VALIDATION: Ensure the logo exists before proceeding
+  if (!logoUrl) {
+    return res.status(400).json({ error: "Operator Logo URL is mandatory for hierarchy branding." });
+  }
+
   const targetRole = 'operator';
 
-  // 2. Provision the User in Supabase Auth
+  // 1. Provision the User in Supabase Auth
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email: email,
     password: password,
@@ -20,8 +24,9 @@ export default async function handler(req, res) {
     user_metadata: { 
       username: username, 
       role: targetRole, 
-      parent_id: adminId, // The Super Admin's ID
-      display_name: displayName || username
+      parent_id: adminId,
+      display_name: displayName || username,
+      logo_url: logoUrl // Storing in metadata for frontend accessibility on session load
     }
   });
 
@@ -32,28 +37,25 @@ export default async function handler(req, res) {
   const newUser = data.user;
 
   /**
-   * 3. TENANT INITIALIZATION
-   * For Operators, the tenant_id IS their own user ID.
-   * This marks them as the 'Root' of their own brand/network.
+   * 2. TENANT INITIALIZATION
+   * For Operators, they are the Root. tenant_id = their own user ID.
    */
   const finalTenantId = newUser.id;
 
-  // 4. Update the profile with the Tenant ID
-  // We use a small delay or a retry if your DB trigger is slow, 
-  // but typically 'update' works immediately after createUser.
+  // 3. Update the profile with Tenant ID, Role, and the Crucial Logo
   const { error: profileError } = await supabaseAdmin
     .from('profiles')
     .update({ 
       tenant_id: finalTenantId,
-      role: targetRole // Ensuring the profile role matches the auth role
+      role: targetRole,
+      display_name: displayName || username,
+      logo_url: logoUrl // The pasted link
     })
     .eq('id', newUser.id);
 
   if (profileError) {
-    // If the profile update fails, we return a 201 because the user WAS created,
-    // but warn about the profile sync issue.
     return res.status(201).json({ 
-      warning: "Auth account created, but profile tenant linking failed.",
+      warning: "Auth account created, but profile data sync failed.",
       error: profileError.message,
       user: newUser 
     });
@@ -62,6 +64,7 @@ export default async function handler(req, res) {
   return res.status(200).json({ 
     message: 'OPERATOR NODE ACTIVATED', 
     user: newUser,
-    tenant_id: finalTenantId
+    tenant_id: finalTenantId,
+    logo_url: logoUrl
   });
 }
