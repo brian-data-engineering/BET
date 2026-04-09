@@ -1,228 +1,202 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import AgentLayout from '../../components/agent/AgentLayout';
+import ShopLayout from '../../components/shop/ShopLayout';
 import { 
-  Store, Loader2, Send, Database, PlusSquare, X, 
-  ShieldCheck, Search, ChevronLeft, ChevronRight, Monitor 
+  Users, 
+  Plus, 
+  Search, 
+  Terminal, 
+  ShieldCheck, 
+  Activity, 
+  X, 
+  Loader2, 
+  Wallet,
+  ArrowRight
 } from 'lucide-react';
 
-export default function ManageShops() {
-  const [shops, setShops] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [agentProfile, setAgentProfile] = useState(null);
-  const [fetching, setFetching] = useState(true);
-  const [processingId, setProcessingId] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+export default function ManageCashiers() {
+  const [cashiers, setCashiers] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
+  
+  // Form State
+  const [form, setForm] = useState({ username: '', displayName: '', password: '' });
+  const [processing, setProcessing] = useState(false);
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '', displayName: '' });
-  const [creating, setCreating] = useState(false);
-
-  const fetchData = useCallback(async () => {
+  const fetchCashiers = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Get Agent's own profile to get tenant_id and logo
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-    
-    if (profile) {
-      setAgentProfile(profile);
-      // 2. Get all Shops created by this Agent
-      const { data: shopData } = await supabase.from('profiles')
-        .select('*')
-        .eq('parent_id', user.id)
-        .eq('role', 'shop')
-        .order('username', { ascending: true });
+    // Fetch Shop Profile
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    setProfile(p);
 
-      if (shopData) setShops(shopData);
-    }
-    setFetching(false);
+    // Fetch only this shop's cashiers
+    const { data: c } = await supabase.from('profiles')
+      .select('*')
+      .eq('parent_id', user.id)
+      .eq('role', 'cashier')
+      .order('username', { ascending: true });
+
+    setCashiers(c || []);
+    setLoading(false);
   }, []);
 
-  useEffect(() => { 
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchCashiers(); }, [fetchCashiers]);
 
-  const handleCreateShop = async (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
-    setCreating(true);
-    // Logic: Shops get a @lucra.shop ghost email
+    setProcessing(true);
+    
+    // Ghost Logic: Mapping to internal domain
     const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
 
     try {
-      const response = await fetch('/api/admin/create-shop', {
+      const response = await fetch('/api/admin/create-cashier', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: ghostEmail,
           password: form.password,
-          username: form.username.trim(),
+          username: form.username.toLowerCase().trim(),
           displayName: form.displayName,
-          agentId: agentProfile.id,
-          tenantId: agentProfile.tenant_id,
-          logoUrl: agentProfile.logo_url // Pass the brand logo down
+          parentId: profile.id,
+          tenantId: profile.tenant_id
         }),
       });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Shop provisioning failed");
-      }
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
 
-      setForm({ username: '', password: '', displayName: '' });
-      setShowAddForm(false);
-      fetchData(); // Refresh list
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleDispatch = async (id, name) => {
-    if (processingId) return;
-    const val = prompt(`Enter KES amount to transfer to ${name.toUpperCase()}:`);
-    if (!val) return;
-    const amount = Math.trunc(Number(val));
-    if (!amount || amount <= 0) return;
-
-    setProcessingId(id);
-    try {
-      // Re-using your existing process_transfer RPC
-      const { error } = await supabase.rpc('process_transfer', {
-        p_sender_id: agentProfile.id,
-        p_receiver_id: id,
-        p_amount: amount
-      });
-      if (error) alert(`Transfer Failed: ${error.message}`);
-      else fetchData();
+      setForm({ username: '', displayName: '', password: '' });
+      setIsAdding(false);
+      fetchCashiers();
     } catch (err) {
-      console.error(err);
+      alert("PROVISIONING FAILED: " + err.message);
     } finally {
-      setProcessingId(null);
+      setProcessing(false);
     }
   };
-
-  // Search Logic
-  const filteredShops = shops.filter(s => 
-    s.username.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (s.display_name && s.display_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const totalPages = Math.ceil(filteredShops.length / itemsPerPage);
-  const currentShops = filteredShops.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  if (fetching) return <div className="min-h-screen bg-[#0b0f1a] flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div>;
 
   return (
-    <AgentLayout profile={agentProfile}>
+    <ShopLayout profile={profile}>
       <div className="p-8 space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* HEADER */}
-        <div className="flex justify-between items-end border-b border-white/5 pb-10">
+        {/* HEADER SECTION */}
+        <header className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
-            <div className="flex items-center gap-2 text-emerald-500 font-black uppercase text-[10px] italic mb-1 tracking-widest">
-              <Store size={12} /> Retail Network
+            <div className="flex items-center gap-2 text-emerald-500 font-black uppercase text-[10px] italic mb-1 tracking-[0.3em]">
+              <Terminal size={12} /> Edge Node Management
             </div>
-            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Manage Shops</h1>
+            <h1 className="text-6xl font-black uppercase italic tracking-tighter leading-none">Cashiers</h1>
+            <p className="text-slate-500 font-bold uppercase text-[10px] mt-4 tracking-widest">Active terminal operators in this branch</p>
           </div>
           
-          <div className="flex items-center gap-6">
-            <button 
-              onClick={() => setShowAddForm(!showAddForm)}
-              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-emerald-600 text-black'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border border-transparent`}
-            >
-              {showAddForm ? <X size={16} /> : <PlusSquare size={16} />}
-              {showAddForm ? 'Cancel' : 'Register New Shop'}
-            </button>
+          <button 
+            onClick={() => setIsAdding(!isAdding)}
+            className={`flex items-center gap-3 px-8 py-5 rounded-2xl font-black italic uppercase text-xs tracking-widest transition-all ${isAdding ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-emerald-600 text-black hover:bg-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.2)]'}`}
+          >
+            {isAdding ? <X size={18} /> : <Plus size={18} />}
+            {isAdding ? 'Abort Registration' : 'Register New Node'}
+          </button>
+        </header>
 
-            <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5">
-              <span className="text-[9px] font-black text-slate-500 uppercase block mb-1 tracking-widest">Total Shop Liquidity</span>
-              <span className="text-3xl font-black text-[#10b981] italic tracking-tighter">
-                KES {shops.reduce((acc, s) => acc + (parseFloat(s.balance) || 0), 0).toLocaleString()}
-              </span>
-            </div>
+        {/* REGISTRATION FORM (MODAL-ISH) */}
+        {isAdding && (
+          <div className="bg-[#111926] p-10 rounded-[3rem] border border-emerald-500/20 shadow-2xl animate-in fade-in slide-in-from-top-4">
+            <h3 className="text-emerald-500 font-black uppercase italic text-sm mb-8 tracking-widest">Provision New Cashier Terminal</h3>
+            <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Terminal Username</label>
+                <input 
+                  required
+                  placeholder="e.g. counter_01"
+                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-emerald-500 font-bold text-white transition-all"
+                  value={form.username}
+                  onChange={e => setForm({...form, username: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Operator Name</label>
+                <input 
+                  required
+                  placeholder="e.g. John Doe"
+                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-emerald-500 font-bold text-white transition-all"
+                  value={form.displayName}
+                  onChange={e => setForm({...form, displayName: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Access Passcode</label>
+                <input 
+                  required
+                  type="password"
+                  placeholder="••••••••"
+                  className="w-full bg-[#0b0f1a] border border-white/5 p-5 rounded-2xl outline-none focus:border-emerald-500 font-bold text-white transition-all"
+                  value={form.password}
+                  onChange={e => setForm({...form, password: e.target.value})}
+                />
+              </div>
+              <div className="md:col-span-3 pt-4">
+                <button 
+                  disabled={processing}
+                  className="w-full bg-emerald-600 text-black font-black py-6 rounded-2xl uppercase italic text-xs tracking-[0.4em] flex items-center justify-center gap-3"
+                >
+                  {processing ? <Loader2 className="animate-spin" /> : <ShieldCheck size={18} />}
+                  {processing ? 'SYNCHRONIZING WITH CORE...' : 'AUTHORIZE & ACTIVATE TERMINAL'}
+                </button>
+              </div>
+            </form>
           </div>
-        </div>
-
-        {/* ADD SHOP FORM */}
-        {showAddForm && (
-          <form onSubmit={handleCreateShop} className="bg-[#111926] p-8 rounded-[2.5rem] border border-emerald-500/20 flex flex-wrap gap-4 items-end animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Shop Username</label>
-              <input required placeholder="nairobi_cbd_01" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all" value={form.username} onChange={e => setForm({...form, username: e.target.value})} />
-            </div>
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Location Name</label>
-              <input required placeholder="CBD Branch Main" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all" value={form.displayName} onChange={e => setForm({...form, displayName: e.target.value})} />
-            </div>
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Access Password</label>
-              <input required type="password" placeholder="••••••••" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
-            </div>
-            <button disabled={creating} className="bg-[#10b981] text-black h-[56px] px-10 rounded-2xl font-black uppercase italic text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2">
-              {creating ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-              {creating ? 'CREATING...' : 'ACTIVATE SHOP'}
-            </button>
-          </form>
         )}
 
-        {/* TABLE SECTION */}
-        <div className="space-y-6">
-          <div className="relative group">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-500 transition-colors" size={18} />
-            <input 
-              type="text" 
-              placeholder="SEARCH SHOPS OR BRANCHES..." 
-              className="w-full bg-[#111926] border border-white/5 rounded-2xl py-5 pl-14 pr-6 text-xs font-black uppercase tracking-widest outline-none focus:border-emerald-500/50 transition-all"
-              value={searchTerm}
-              onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
-            />
-          </div>
+        {/* CASHIERS LIST */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {loading ? (
+            <div className="col-span-full py-20 text-center text-slate-700 animate-pulse uppercase font-black text-xs tracking-widest">Scanning Network...</div>
+          ) : cashiers.length > 0 ? cashiers.map(cashier => (
+            <div key={cashier.id} className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 hover:border-emerald-500/30 transition-all group relative overflow-hidden">
+               {/* Background Accent */}
+               <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Activity size={80} className="text-emerald-500" />
+               </div>
 
-          <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
-            <table className="w-full text-left">
-              <thead className="bg-[#0b0f1a]/50 text-slate-600 uppercase text-[9px] font-black tracking-[0.3em] italic">
-                <tr>
-                  <th className="p-8">Shop Location</th>
-                  <th className="p-8 text-center">Current Float</th>
-                  <th className="p-8 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {currentShops.map(s => (
-                  <tr key={s.id} className="hover:bg-white/[0.02] transition-all group">
-                    <td className="p-8">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-black border border-white/5 flex items-center justify-center overflow-hidden">
-                          {s.logo_url ? <img src={s.logo_url} className="w-full h-full object-cover" /> : <Store className="text-slate-700" size={20} />}
-                        </div>
-                        <div>
-                          <span className="font-black uppercase italic text-xl tracking-tight block text-white">{s.username}</span>
-                          <span className="text-[9px] text-emerald-500 font-black uppercase tracking-widest">{s.display_name}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-8 text-center">
-                      <span className="font-black text-[#10b981] italic tracking-tighter text-2xl">KES {parseFloat(s.balance || 0).toLocaleString()}</span>
-                    </td>
-                    <td className="p-8 text-right">
-                      <button 
-                        onClick={() => handleDispatch(s.id, s.username)}
-                        disabled={processingId !== null}
-                        className="bg-white/5 p-4 px-8 rounded-xl hover:bg-[#10b981] hover:text-black transition-all text-[10px] font-black uppercase italic group flex items-center gap-2 ml-auto"
-                      >
-                        {processingId === s.id ? <Loader2 className="animate-spin" size={14} /> : <>DISPATCH FLOAT <Send size={12} /></>}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+               <div className="relative z-10 space-y-6">
+                  <div className="flex justify-between items-start">
+                    <div className="bg-black/40 p-3 rounded-xl border border-white/5">
+                        <Users className="text-emerald-500" size={20} />
+                    </div>
+                    <span className="text-[9px] font-black uppercase text-[#10b981] bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/10 tracking-widest">Online</span>
+                  </div>
+
+                  <div>
+                    <h3 className="text-2xl font-black italic uppercase tracking-tight">{cashier.username}</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{cashier.display_name}</p>
+                  </div>
+
+                  <div className="pt-6 border-t border-white/5 flex justify-between items-end">
+                    <div>
+                      <span className="text-[9px] font-black text-slate-600 uppercase block mb-1">Current Float</span>
+                      <span className="text-2xl font-black italic text-white tracking-tighter">KES {parseFloat(cashier.balance || 0).toLocaleString()}</span>
+                    </div>
+                    <button 
+                      onClick={() => window.location.href='/shop/funding'}
+                      className="p-3 bg-white/5 rounded-xl hover:bg-emerald-600 hover:text-black transition-all"
+                    >
+                      <ArrowRight size={16} />
+                    </button>
+                  </div>
+               </div>
+            </div>
+          )) : (
+            <div className="col-span-full py-20 bg-[#111926] rounded-[3rem] border border-dashed border-white/10 text-center">
+                <Wallet className="mx-auto text-white/5 mb-4" size={48} />
+                <p className="text-slate-600 font-black uppercase text-[10px] tracking-[0.4em]">No active cashier nodes found in this branch</p>
+            </div>
+          )}
         </div>
       </div>
-    </AgentLayout>
+    </ShopLayout>
   );
 }
