@@ -11,24 +11,27 @@ export default function ManageStaff() {
 
   // --- FORM STATE ---
   const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ username: '', password: '', displayName: '' });
   const [creating, setCreating] = useState(false);
 
   const fetchData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // 1. Get current Operator's full profile (including their tenant_id and logo)
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    
     if (profile) {
       setOperatorProfile(profile);
       
-      const { data: cashiers } = await supabase.from('profiles')
+      // 2. Fetch only AGENTS that belong to this Operator
+      const { data: agents } = await supabase.from('profiles')
         .select('*')
         .eq('parent_id', user.id)
-        .eq('role', 'cashier')
+        .eq('role', 'agent') // Filter specifically for agents
         .order('username', { ascending: true });
 
-      if (cashiers) setStaff(cashiers);
+      if (agents) setStaff(agents);
     }
     setFetching(false);
   }, []);
@@ -44,38 +47,35 @@ export default function ManageStaff() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
 
-  const handleCreateCashier = async (e) => {
+  const handleCreateAgent = async (e) => {
     e.preventDefault();
     setCreating(true);
     
-    // GHOST LOGIC: Auto-generate the internal email address
     const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
 
     try {
-      // Calling your new dedicated API Route
-      const response = await fetch('/api/admin/create-cashier', {
+      // INHERITANCE: Passing down the Operator's brand DNA
+      const response = await fetch('/api/admin/create-agent', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: ghostEmail,
           password: form.password,
           username: form.username.trim(),
-          operatorId: operatorProfile.id // Bridges the hierarchy
+          displayName: form.displayName || form.username,
+          operatorId: operatorProfile.id,
+          tenantId: operatorProfile.tenant_id, // Inherited
+          logoUrl: operatorProfile.logo_url    // Inherited
         }),
       });
 
       const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to initialize Agent');
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to initialize terminal node');
-      }
-
-      alert(`NODE INITIALIZED: Cashier ${form.username} is now active.`);
-      setForm({ username: '', password: '' });
+      alert(`AGENT PROVISIONED: ${form.username} is now active under your brand.`);
+      setForm({ username: '', password: '', displayName: '' });
       setShowAddForm(false);
-      fetchData(); // Refresh the list
+      fetchData(); 
 
     } catch (error) {
       alert(`PROVISIONING ERROR: ${error.message}`);
@@ -114,86 +114,78 @@ export default function ManageStaff() {
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
             <div className="flex items-center gap-2 text-blue-500 font-black uppercase text-[10px] italic mb-1 tracking-widest">
-              <Database size={12} /> Network Integrity
+              <Database size={12} /> Network Infrastructure
             </div>
-            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Terminal Nodes</h1>
+            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Manage Agents</h1>
           </div>
           
           <div className="flex items-center gap-6">
             <button 
               onClick={() => setShowAddForm(!showAddForm)}
-              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border`}
+              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border border-transparent`}
             >
               {showAddForm ? <X size={16} /> : <UserPlus size={16} />}
-              {showAddForm ? 'Cancel' : 'Register Cashier'}
+              {showAddForm ? 'Cancel' : 'Register New Agent'}
             </button>
 
             <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5 shadow-2xl">
-              <span className="text-[9px] font-black text-slate-500 uppercase italic block mb-1">Active Network Float</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase italic block mb-1">Total Agent Float</span>
               <span className="text-3xl font-black text-[#10b981] italic tracking-tighter">
-                KES {parseFloat(staff.reduce((acc, s) => acc + (s.balance || 0), 0)).toLocaleString()}
+                KES {staff.reduce((acc, s) => acc + (parseFloat(s.balance) || 0), 0).toLocaleString()}
               </span>
             </div>
           </div>
         </div>
 
-        {/* ADD CASHIER FORM */}
+        {/* ADD AGENT FORM */}
         {showAddForm && (
-          <form onSubmit={handleCreateCashier} className="bg-[#111926] p-8 rounded-[2.5rem] border border-blue-500/20 flex flex-wrap gap-4 items-end animate-in fade-in zoom-in duration-200">
-            <div className="flex-[2] min-w-[240px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Operator Identity (Username)</label>
-              <div className="relative">
-                <input 
-                  required 
-                  placeholder="e.g. cashier_01"
-                  className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" 
-                  value={form.username} 
-                  onChange={e => setForm({...form, username: e.target.value})} 
-                />
-              </div>
+          <form onSubmit={handleCreateAgent} className="bg-[#111926] p-8 rounded-[2.5rem] border border-blue-500/20 flex flex-wrap gap-4 items-end animate-in fade-in zoom-in duration-200">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Agent Username</label>
+              <input required placeholder="agent_alpha" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" value={form.username} onChange={e => setForm({...form, username: e.target.value})} />
+            </div>
+
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Display Name (Optional)</label>
+              <input placeholder="City Center Hub" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" value={form.displayName} onChange={e => setForm({...form, displayName: e.target.value})} />
             </div>
             
             <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Access Key (Password)</label>
-              <input 
-                required 
-                type="password" 
-                placeholder="••••••••"
-                className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" 
-                value={form.password} 
-                onChange={e => setForm({...form, password: e.target.value})} 
-              />
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Login Password</label>
+              <input required type="password" placeholder="••••••••" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
             </div>
 
             <button disabled={creating} className="bg-[#10b981] text-black h-[54px] px-10 rounded-2xl font-black uppercase italic text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2">
               {creating ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-              {creating ? 'Initalizing...' : 'Activate Node'}
+              {creating ? 'Provising...' : 'Activate Agent'}
             </button>
           </form>
         )}
 
-        {/* DATA TABLE */}
+        {/* AGENT LIST */}
         <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
           <table className="w-full text-left">
             <thead className="bg-black/20 text-[9px] font-black uppercase text-slate-600 italic tracking-widest">
               <tr>
-                <th className="p-10">Node ID</th>
-                <th className="p-10 text-center">Current Liquidity</th>
-                <th className="p-10 text-right">Action</th>
+                <th className="p-10">Agent Identity</th>
+                <th className="p-10 text-center">Liquidity / Float</th>
+                <th className="p-10 text-right">Fund Management</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {staff.length === 0 ? (
-                <tr><td colSpan="3" className="p-20 text-center text-slate-500 italic uppercase font-black text-xs">No active terminal nodes found</td></tr>
+                <tr><td colSpan="3" className="p-20 text-center text-slate-500 italic uppercase font-black text-xs tracking-widest">No agents deployed in your network</td></tr>
               ) : (
                 staff.map((s) => (
                   <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="p-10">
                       <div className="flex items-center gap-4">
-                        <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500"><Monitor size={20} /></div>
+                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500">
+                          {s.logo_url ? <img src={s.logo_url} className="w-full h-full object-cover rounded-xl" alt="" /> : <Monitor size={20} />}
+                        </div>
                         <div>
                           <span className="font-black uppercase italic text-xl tracking-tight block">{s.username}</span>
-                          <span className="text-[9px] text-slate-600 font-bold uppercase tracking-tighter">ID: {s.id.slice(0, 8)}...</span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{s.display_name || 'Generic Agent'}</span>
                         </div>
                       </div>
                     </td>
@@ -204,15 +196,9 @@ export default function ManageStaff() {
                       <button 
                         onClick={() => handleDispatch(s.id, s.username)}
                         disabled={processingId !== null}
-                        className="bg-white/5 p-5 px-8 rounded-2xl hover:bg-[#10b981] hover:text-black transition-all text-xs font-black uppercase italic group"
+                        className="bg-white/5 p-5 px-8 rounded-2xl hover:bg-[#10b981] hover:text-black transition-all text-xs font-black uppercase italic group flex items-center gap-2 ml-auto"
                       >
-                        {processingId === s.id ? (
-                          <Loader2 className="animate-spin" />
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            DISPATCH <Send size={14} className="group-hover:translate-x-1 transition-transform" />
-                          </div>
-                        )}
+                        {processingId === s.id ? <Loader2 className="animate-spin" size={16} /> : <>DISPATCH <Send size={14} className="group-hover:translate-x-1 transition-transform" /></>}
                       </button>
                     </td>
                   </tr>
