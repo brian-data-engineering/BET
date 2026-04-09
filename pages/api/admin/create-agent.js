@@ -1,4 +1,3 @@
-// pages/api/admin/create-agent.js
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
@@ -9,8 +8,11 @@ export default async function handler(req, res) {
 
   const { email, password, username, displayName, operatorId, tenantId, logoUrl } = req.body;
 
+  // Debug: Log the incoming data to Vercel Logs
+  console.log("Provisioning Agent:", { username, tenantId, operatorId });
+
   try {
-    // 1. Create Auth Account
+    // 1. Create the Auth User
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -20,24 +22,31 @@ export default async function handler(req, res) {
 
     if (authError) throw authError;
 
-    // 2. Initialize Agent Profile with Inheritance
+    // 2. Use UPSERT to handle the profile
+    // This bypasses issues if a trigger already created a partial row
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({
-        role: 'agent',
+      .upsert({
+        id: authData.user.id,
         username: username,
-        display_name: displayName,
-        tenant_id: tenantId,    // Inherited from Operator
-        parent_id: operatorId,  // Linked to Operator
-        logo_url: logoUrl,      // Inherited from Operator
-        balance: 0
-      })
-      .eq('id', authData.user.id);
+        role: 'agent',
+        display_name: displayName || username,
+        tenant_id: tenantId,    // Must not be null
+        parent_id: operatorId,  // Must not be null
+        logo_url: logoUrl,
+        balance: 0,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'id' }); // Ensures we target the right row
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      // Rollback Auth user if profile setup fails
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      throw profileError;
+    }
 
     return res.status(200).json({ success: true });
   } catch (error) {
+    console.error("API Error:", error.message);
     return res.status(400).json({ error: error.message });
   }
 }
