@@ -48,7 +48,7 @@ export default function ManageShops() {
     e.preventDefault();
     setCreating(true);
     // Logic: Shops get a @lucra.shop ghost email
-    const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.shop`;
+    const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
 
     try {
       const response = await fetch('/api/admin/create-shop', {
