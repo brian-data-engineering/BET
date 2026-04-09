@@ -25,7 +25,7 @@ export default function AgentLayout({ children, profile }) {
   const navItems = [
     { name: 'Overview', href: '/agent/dashboard', icon: LayoutDashboard },
     { name: 'Dispatch Float', href: '/agent/funding', icon: Wallet },
-    { name: 'Manage Cashiers', href: '/agent/manage-shops', icon: Users },
+    { name: 'Manage Cashiers', href: '/agent/funding.js', icon: Users },
   ];
 
   return (
