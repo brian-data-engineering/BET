@@ -9,7 +9,8 @@ import {
   UserCircle,
   TrendingUp,
   Activity,
-  Database
+  Database,
+  Settings // Added for the new link
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -22,7 +23,6 @@ export default function OperatorSidebar() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Initial Fetch
       const { data, error } = await supabase
         .from('profiles')
         .select('id, username, balance, role')
@@ -31,7 +31,6 @@ export default function OperatorSidebar() {
 
       if (!error && data) setProfile(data);
 
-      // LIVE LEDGER SYNC
       const channel = supabase
         .channel(`sidebar-sync-${user.id}`)
         .on('postgres_changes', 
@@ -58,6 +57,8 @@ export default function OperatorSidebar() {
     { name: 'Staff Nodes', path: '/operator/staff', icon: <Monitor size={18} />, roles: ['operator'] },
     { name: 'Vault Ledger', path: '/operator/wallet', icon: <Wallet size={18} />, roles: ['operator'] },
     { name: 'Network Intel', path: '/operator/reports', icon: <TrendingUp size={18} />, roles: ['operator', 'cashier'] },
+    // ADDED SETTINGS LINK HERE
+    { name: 'Config Control', path: '/operator/settings', icon: <Settings size={18} />, roles: ['operator'] },
   ];
 
   const filteredMenu = allMenuItems.filter(item => item.roles.includes(profile.role));
