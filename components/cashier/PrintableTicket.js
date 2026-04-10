@@ -8,8 +8,7 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
     ? JSON.parse(ticket.selections) 
     : (Array.isArray(ticket.selections) ? ticket.selections : []);
 
-  // 1. Check if the ticket already has the logo joined
-  // 2. Fallback to the default Lucra logo if nothing is found
+  // UPDATED LOGO LOGIC: Priority to operator_logo, fallback to Lucra default
   const logoSource = ticket.operator_logo || "https://i.ibb.co/67wb7Zm1/download.png";
 
   return (
