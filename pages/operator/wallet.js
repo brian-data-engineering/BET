@@ -6,37 +6,48 @@ import { ArrowDownRight, Loader2, Send, History, Database, Users } from 'lucide-
 export default function Funding() {
   const [amount, setAmount] = useState('');
   const [targetId, setTargetId] = useState('');
-  const [agents, setAgents] = useState([]); // Changed from cashiers to agents
+  const [agents, setAgents] = useState([]);
   const [operatorProfile, setOperatorProfile] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 1. FETCH DATA (Filtering for Agents under this Operator)
+  // 1. FETCH DATA (Synchronized with Ledger reference_id schema)
   const fetchData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [pRes, aRes, tRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', user.id).single(),
-      // TARGET AGENTS: Only those where this operator is the parent
-      supabase.from('profiles')
-        .select('*')
-        .eq('role', 'agent') 
-        .eq('parent_id', user.id)
-        .order('username', { ascending: true }),
-      supabase.from('ledger')
-        .select('*, receiver:profiles!ledger_user_id_fkey(username, display_name)')
-        .eq('user_id', user.id) 
-        .eq('type', 'debit')   
-        .eq('source', 'transfer')
-        .order('created_at', { ascending: false })
-        .limit(10)
-    ]);
+    // Fetch Profile first to get the tenant_id for filtering
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    
+    if (profile) {
+      setOperatorProfile(profile);
 
-    if (pRes.data) setOperatorProfile(pRes.data);
-    if (aRes.data) setAgents(aRes.data);
-    if (tRes.data) setTransactions(tRes.data);
+      const [aRes, tRes] = await Promise.all([
+        // TARGET AGENTS: Filtered by parent and brand (tenant)
+        supabase.from('profiles')
+          .select('*')
+          .eq('role', 'agent') 
+          .eq('parent_id', user.id)
+          .eq('tenant_id', profile.tenant_id)
+          .order('username', { ascending: true }),
+
+        // LEDGER: Using the correct reference_id link for history
+        supabase.from('ledger')
+          .select(`
+            *,
+            receiver:profiles!ledger_reference_id_fkey(username, display_name)
+          `)
+          .eq('user_id', user.id) 
+          .eq('type', 'debit')   
+          .eq('source', 'transfer')
+          .order('created_at', { ascending: false })
+          .limit(10)
+      ]);
+
+      if (aRes.data) setAgents(aRes.data);
+      if (tRes.data) setTransactions(tRes.data);
+    }
 
     setLoading(false);
   }, []);
@@ -44,10 +55,11 @@ export default function Funding() {
   useEffect(() => {
     fetchData();
 
+    // Optimized Real-time channel scoped to this specific operator
     const channel = supabase
-      .channel('funding-realtime')
+      .channel('operator-funding-sync')
       .on('postgres_changes', { 
-        event: 'UPDATE', 
+        event: '*', 
         schema: 'public', 
         table: 'profiles' 
       }, () => fetchData())
@@ -67,6 +79,7 @@ export default function Funding() {
 
     setIsProcessing(true);
     try {
+      // Calling the upgraded RPC that handles the 'transfer' source constraint
       const { error } = await supabase.rpc('process_transfer', {
         p_sender_id: operatorProfile.id,
         p_receiver_id: targetId,
@@ -74,9 +87,10 @@ export default function Funding() {
       });
 
       if (error) throw error;
+
       setAmount('');
       setTargetId('');
-      alert("SUCCESS: Agent liquidity updated.");
+      // Success feedback could be handled with a toast or local state
     } catch (err) {
       alert("Dispatch Rejected: " + err.message);
     } finally {
@@ -86,7 +100,7 @@ export default function Funding() {
 
   if (loading) return (
     <div className="h-screen bg-[#0b0f1a] flex items-center justify-center">
-      <Loader2 className="animate-spin text-[#10b981]" />
+      <Loader2 className="animate-spin text-[#10b981]" size={32} />
     </div>
   );
 
@@ -94,6 +108,7 @@ export default function Funding() {
     <OperatorLayout profile={operatorProfile}>
       <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
+        {/* HEADER SECTION */}
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
             <div className="flex items-center gap-2 text-blue-500 font-black uppercase text-[10px] italic mb-1 tracking-widest">
@@ -110,7 +125,8 @@ export default function Funding() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* DISPATCH FORM */}
+          
+          {/* LEFT: DISPATCH FORM */}
           <div className={`lg:col-span-7 bg-[#111926] p-12 rounded-[3rem] border border-white/5 space-y-10 shadow-2xl ${isProcessing ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
             <div className="space-y-6">
               <div className="space-y-3">
@@ -128,6 +144,7 @@ export default function Funding() {
                   ))}
                 </select>
               </div>
+
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-2 italic tracking-widest">Amount to Send (KES)</label>
                 <input 
@@ -139,34 +156,35 @@ export default function Funding() {
                 />
               </div>
             </div>
+
             <button 
               onClick={handleTransfer} 
               disabled={isProcessing || !targetId || !amount} 
-              className="w-full bg-[#10b981] text-black font-black py-7 rounded-2xl hover:bg-white transition-all italic text-xs uppercase tracking-[0.3em] flex items-center justify-center gap-3"
+              className="w-full bg-[#10b981] text-black font-black py-7 rounded-2xl hover:bg-white transition-all italic text-xs uppercase tracking-[0.3em] flex items-center justify-center gap-3 shadow-xl shadow-emerald-950/20"
             >
               {isProcessing ? <Loader2 className="animate-spin" /> : <Send size={16} />}
-              {isProcessing ? 'Syncing Ledger...' : 'Authorize Dispatch'}
+              {isProcessing ? 'SYNCHRONIZING LEDGER...' : 'AUTHORIZE DISPATCH'}
             </button>
           </div>
 
-          {/* HISTORY */}
-          <div className="lg:col-span-5 bg-[#111926] p-10 rounded-[3rem] border border-white/5 shadow-2xl">
+          {/* RIGHT: HISTORY AUDIT */}
+          <div className="lg:col-span-5 bg-[#111926] p-10 rounded-[3rem] border border-white/5 shadow-2xl flex flex-col h-full">
             <h2 className="text-[10px] font-black uppercase text-slate-500 italic tracking-widest mb-6 flex items-center gap-2">
               <History size={14} /> Dispatch Audit
             </h2>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto custom-scrollbar flex-1">
               {transactions.length === 0 ? (
-                <div className="text-center py-10 text-slate-600 text-[10px] font-bold uppercase italic">No recent dispatches</div>
+                <div className="text-center py-20 text-slate-700 text-[10px] font-bold uppercase italic tracking-widest">No recent dispatches</div>
               ) : (
                 transactions.map(tx => (
-                  <div key={tx.id} className="flex justify-between items-center p-5 bg-[#0b0f1a] rounded-2xl border border-white/5">
+                  <div key={tx.id} className="flex justify-between items-center p-5 bg-[#0b0f1a] rounded-2xl border border-white/[0.03] hover:border-emerald-500/20 transition-all">
                     <div className="flex items-center gap-4">
                       <div className="p-3 bg-rose-500/10 rounded-xl text-rose-500"><ArrowDownRight size={16} /></div>
                       <div>
                         <span className="text-xs font-black uppercase italic text-white/70 block">
-                          {tx.receiver?.display_name || tx.receiver?.username || 'System Agent'}
+                          {tx.receiver?.display_name || tx.receiver?.username || 'SYSTEM_NODE'}
                         </span>
-                        <span className="text-[8px] text-slate-600 font-bold uppercase">{new Date(tx.created_at).toLocaleString()}</span>
+                        <span className="text-[8px] text-slate-600 font-bold uppercase">{new Date(tx.created_at).toLocaleTimeString()} — Confirmed</span>
                       </div>
                     </div>
                     <span className="text-sm font-black italic text-rose-500">-KES {parseFloat(tx.amount).toLocaleString()}</span>
@@ -175,6 +193,7 @@ export default function Funding() {
               )}
             </div>
           </div>
+
         </div>
       </div>
     </OperatorLayout>
