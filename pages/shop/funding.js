@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import ShopLayout from '../../components/shop/ShopLayout';
-import { Send, Loader2, Zap, UserCheck, ArrowRightLeft } from 'lucide-react';
+import { Send, Loader2, Zap, UserCheck, ArrowRightLeft, Wallet, ShieldCheck as LucideShield } from 'lucide-react';
 
 export default function ShopFunding() {
   const [amount, setAmount] = useState('');
@@ -14,7 +14,7 @@ export default function ShopFunding() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch current Shop profile to see available balance
+    // Fetch Shop Profile
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     
     // Fetch specifically the CASHIERS under this Shop
@@ -34,7 +34,6 @@ export default function ShopFunding() {
     const val = Math.trunc(Number(amount));
     if (!targetId || val <= 0) return;
 
-    // Guard: Shop cannot send more than its own balance
     if (val > (profile?.balance || 0)) {
       alert("INSUFFICIENT BRANCH FLOAT: Contact your Agent for a top-up.");
       return;
@@ -63,16 +62,16 @@ export default function ShopFunding() {
 
   return (
     <ShopLayout profile={profile}>
-      <div className="p-8 max-w-5xl mx-auto space-y-12 bg-[#0b0f1a] min-h-screen text-white">
+      <div className="p-8 max-w-5xl mx-auto space-y-12 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* HEADER */}
+        {/* RETAIL DISTRIBUTION HEADER */}
         <header className="flex justify-between items-end border-b border-white/5 pb-12">
           <div>
             <div className="flex items-center gap-2 text-emerald-500 font-black uppercase text-[10px] italic mb-1 tracking-[0.3em]">
-              <ArrowRightLeft size={14} /> Retail Distribution
+              <ArrowRightLeft size={14} /> Retail Liquidity Control
             </div>
-            <h1 className="text-7xl font-black uppercase italic tracking-tighter leading-none text-white">Dispatch</h1>
-            <p className="text-slate-500 font-bold uppercase text-xs mt-4 tracking-widest">Inject liquidity into cashier nodes</p>
+            <h1 className="text-7xl font-black uppercase italic tracking-tighter leading-none">Dispatch</h1>
+            <p className="text-slate-500 font-bold uppercase text-xs mt-4 tracking-widest">Inject float into cashier nodes</p>
           </div>
           
           <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-emerald-500/10 text-right min-w-[300px] shadow-2xl">
@@ -85,14 +84,14 @@ export default function ShopFunding() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           
-          {/* DISPATCH FORM */}
+          {/* INPUT FORM (Left Side) */}
           <div className="lg:col-span-3 bg-[#111926] p-10 rounded-[3.5rem] border border-white/5 shadow-2xl space-y-10">
             <div className="space-y-4">
               <label className="text-[10px] font-black text-slate-500 uppercase italic ml-4 tracking-[0.2em] flex items-center gap-2">
                 <UserCheck size={12} className="text-emerald-500" /> Target Cashier Node
               </label>
               <select 
-                className="w-full bg-[#0b0f1a] p-7 rounded-[2rem] border border-white/10 text-white font-black text-lg outline-none focus:border-emerald-500 transition-all cursor-pointer appearance-none"
+                className="w-full bg-[#0b0f1a] p-7 rounded-[2rem] border border-white/10 text-white font-black text-lg outline-none focus:border-emerald-500 transition-all appearance-none cursor-pointer"
                 value={targetId}
                 onChange={e => setTargetId(e.target.value)}
               >
@@ -107,14 +106,14 @@ export default function ShopFunding() {
 
             <div className="space-y-4">
               <label className="text-[10px] font-black text-slate-500 uppercase italic ml-4 tracking-[0.2em] flex items-center gap-2">
-                <Zap size={12} className="text-yellow-500" /> Amount to Transfer (KES)
+                <Zap size={12} className="text-yellow-500" /> Dispatch Amount (KES)
               </label>
               <div className="relative">
                 <span className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-700 font-black text-4xl italic">KES</span>
                 <input 
                   type="number"
                   placeholder="0.00"
-                  className="w-full bg-[#0b0f1a] p-10 pl-28 rounded-[2rem] border border-white/10 text-6xl font-black text-emerald-500 outline-none focus:border-emerald-500/50 transition-all"
+                  className="w-full bg-[#0b0f1a] p-10 pl-28 rounded-[2rem] border border-white/10 text-6xl font-black text-emerald-500 outline-none focus:border-emerald-500/50 transition-all placeholder:text-white/5"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
                 />
@@ -127,40 +126,40 @@ export default function ShopFunding() {
               className="w-full bg-emerald-600 text-black font-black py-8 rounded-[2rem] hover:bg-emerald-500 transition-all italic text-sm uppercase tracking-[0.4em] flex items-center justify-center gap-4 shadow-[0_0_30px_rgba(16,185,129,0.2)] disabled:opacity-20 disabled:grayscale"
             >
               {isProcessing ? <Loader2 className="animate-spin" /> : <Send size={20} />}
-              {isProcessing ? 'PROCESSING...' : 'CONFIRM DISPATCH'}
+              {isProcessing ? 'SYNCHRONIZING LEDGER...' : 'AUTHORIZE DISPATCH'}
             </button>
           </div>
 
-          {/* TARGET DASHBOARD (Right Sidebar) */}
+          {/* TARGET INFO CARD (Right Side) */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-emerald-500/5 border border-emerald-500/20 p-8 rounded-[3rem] h-full flex flex-col justify-center">
-              <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-6 italic">Target Profile</h3>
-              {targetId ? (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-                  <div>
-                    <span className="text-slate-500 text-[9px] uppercase font-black block">Staff Member</span>
-                    <span className="text-2xl font-black italic text-white uppercase tracking-tight">
-                      {cashiers.find(c => c.id === targetId)?.display_name}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 text-[9px] uppercase font-black block">Current Float Holding</span>
-                    <span className="text-3xl font-black italic text-emerald-500">
-                      KES {parseFloat(cashiers.find(c => c.id === targetId)?.balance || 0).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="pt-6 border-t border-white/5">
-                    <p className="text-[9px] text-slate-600 font-bold uppercase leading-relaxed">
-                      Liquidity will be deducted immediately from your branch float and credited to this cashier node.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-10 opacity-20">
-                  <UserCheck size={48} className="mx-auto mb-4" />
-                  <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed">Select a terminal staff member to view node status</p>
-                </div>
-              )}
+            <div className="bg-emerald-600/5 border border-emerald-500/20 p-8 rounded-[3rem] h-full flex flex-col justify-center">
+                <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-6 italic">Node Diagnostics</h3>
+                {targetId ? (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                        <div>
+                            <span className="text-slate-500 text-[9px] uppercase font-black block">Staff Member</span>
+                            <span className="text-2xl font-black italic text-white uppercase tracking-tight">
+                              {cashiers.find(c => c.id === targetId)?.display_name}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="text-slate-500 text-[9px] uppercase font-black block">Current Terminal Float</span>
+                            <span className="text-3xl font-black italic text-white">
+                                KES {parseFloat(cashiers.find(c => c.id === targetId)?.balance || 0).toLocaleString()}
+                            </span>
+                        </div>
+                        <div className="pt-6 border-t border-white/5">
+                             <div className="flex items-center gap-2 text-[#10b981] font-black text-[9px] uppercase tracking-widest">
+                                <ShieldCheck size={12} /> Ready for injection
+                             </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center py-10">
+                        <Wallet size={40} className="mx-auto text-white/5 mb-4" />
+                        <p className="text-slate-600 font-black text-[10px] uppercase tracking-widest">No target node selected</p>
+                    </div>
+                )}
             </div>
           </div>
 
@@ -168,4 +167,11 @@ export default function ShopFunding() {
       </div>
     </ShopLayout>
   );
+}
+
+// Internal SVG to keep it clean like your Agent version
+function ShieldCheck({ size }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+    );
 }
