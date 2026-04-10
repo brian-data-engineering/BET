@@ -56,15 +56,9 @@ export default function CashierDashboard() {
     const input = searchQuery.trim().toUpperCase();
     
     try {
-      // UPGRADED: Added join to profiles!tenant_id to get branding for loaded tickets
       const { data: booking, error } = await supabase
         .from('betsnow')
-        .select(`
-          *,
-          profiles!tenant_id (
-            logo_url
-          )
-        `)
+        .select('*')
         .eq('booking_code', input)
         .maybeSingle();
           
@@ -98,14 +92,7 @@ export default function CashierDashboard() {
 
       setCart(selections);
       setStake(booking.stake?.toString() || "100");
-      
-      // Pass the joined logo to the ticket state
-      setCurrentTicket({ 
-        ...booking, 
-        selections, 
-        operator_logo: booking.profiles?.logo_url 
-      }); 
-
+      setCurrentTicket({ ...booking, selections }); 
       shouldPrintRef.current = false; 
       setSearchQuery('');
 
@@ -144,6 +131,8 @@ export default function CashierDashboard() {
       const combinedCountries = countriesSet.join(', ');
       const combinedLeagues = leaguesSet.join(',, ');
 
+      // STEP 4: Final Update to the 'print' table
+      // FIX: Removed JSON.stringify() to handle JSONB type correctly
       await supabase
         .from('print')
         .update({
@@ -156,25 +145,14 @@ export default function CashierDashboard() {
 
       await new Promise(res => setTimeout(res, 1500));
       
-      // UPGRADED: Join with profiles!tenant_id to fetch the official Operator Logo
       const { data: official } = await supabase
         .from('print')
-        .select(`
-          *,
-          profiles!tenant_id (
-            logo_url
-          )
-        `)
+        .select('*')
         .eq('ticket_serial', newSerial)
         .single();
 
       if (official) {
-        const enrichedTicket = { 
-          ...official, 
-          selections: activeSelections,
-          operator_logo: official.profiles?.logo_url // Correctly inject the logo
-        };
-        
+        const enrichedTicket = { ...official, selections: activeSelections };
         shouldPrintRef.current = true; 
         setCurrentTicket(enrichedTicket);
         setCart([]);
