@@ -8,7 +8,8 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
     ? JSON.parse(ticket.selections) 
     : (Array.isArray(ticket.selections) ? ticket.selections : []);
 
-  // Use the operator's logo if available, otherwise fallback to the default Lucra logo
+  // 1. Check if the ticket already has the logo joined
+  // 2. Fallback to the default Lucra logo if nothing is found
   const logoSource = ticket.operator_logo || "https://i.ibb.co/67wb7Zm1/download.png";
 
   return (
@@ -28,18 +29,18 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
         </div>
       )}
 
-      {/* HEADER */}
+      {/* HEADER - LOGO FETCHED FROM OPERATOR */}
       <div style={{ textAlign: 'center', marginBottom: '5px' }}>
         <img 
           src={logoSource} 
-          alt="OPERATOR LOGO" 
+          alt="BRAND LOGO" 
           style={{ 
-            width: '130px', 
-            maxHeight: '80px', // Prevent huge logos from breaking layout
+            width: '140px', 
+            maxHeight: '70px',
             objectFit: 'contain',
             margin: '0 auto 5px auto', 
             display: 'block', 
-            filter: 'grayscale(1) contrast(200%)' // Keeps it thermal-printer friendly
+            filter: 'grayscale(1) contrast(150%)' 
           }} 
         />
         <div style={{ fontSize: '11px', fontWeight: 'bold' }}>SHOP: {ticket.shop_name || "LUCRA"}</div>
@@ -53,7 +54,6 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
         {selections.map((sel, idx) => {
           const startTime = sel.startTime || sel.clean_start_time || "";
           const formattedTime = startTime ? startTime.replace('T', ' ').slice(5, 16) : ""; 
-          
           const leagueLabel = (sel.display_league || sel.sport_key || "EVENT").toUpperCase();
           
           return (
@@ -62,11 +62,9 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
                 <span>{leagueLabel}</span>
                 <span>{formattedTime}</span>
               </div>
-
               <div style={{ fontSize: '12px', fontWeight: 'bold', margin: '2px 0' }}>
                 [{String(sel.matchId || sel.match_id || "").slice(-4)}] {sel.matchName || sel.match_name}
               </div>
-              
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                 <span>{sel.marketName || '1X2'}: <strong>{sel.selection}</strong></span>
                 <span style={{ fontWeight: '900', fontSize: '12px' }}>{sel.odds}</span>
