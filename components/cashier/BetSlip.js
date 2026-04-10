@@ -10,12 +10,13 @@ export default function Betslip({
   onClear, 
   onProcess, 
   isProcessing, 
-  user 
+  user,
+  maxGames // Received from CashierDashboard
 }) {
   
   // 1. DYNAMIC LIMIT CHECK
-  // Fetches the limit from the user profile (Operator's preference) or defaults to 20
-  const selectionLimit = user?.cashier_selection_limit || 20;
+  // Uses the prop from dashboard or falls back to user profile/default
+  const selectionLimit = maxGames || user?.cashier_selection_limit || 20;
   const isOverLimit = cart.length > selectionLimit;
 
   // Auto-Expiry Logic
@@ -41,7 +42,6 @@ export default function Betslip({
   [cart]);
 
   // 3. RECALCULATE PAYOUT ON STAKE OR ODDS CHANGE
-  // This ensures that if the cashier changes 100 to 50, the payout updates instantly
   const potentialPayout = useMemo(() => 
     (parseFloat(stake) || 0) * totalOdds, 
   [stake, totalOdds]);
