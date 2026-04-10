@@ -16,29 +16,30 @@ import {
 export default function AgentFunding() {
   const [amount, setAmount] = useState('');
   const [targetId, setTargetId] = useState('');
-  const [nodes, setNodes] = useState([]); // Combined list of shops and cashiers
+  const [nodes, setNodes] = useState([]); 
   const [profile, setProfile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // FETCH DATA: Profile and children (Shops + Cashiers)
   const fetchData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Get Agent Profile
+    // 1. Get Agent Profile to access their tenant_id
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     
     if (p) {
       setProfile(p);
 
-      // 2. Get both SHOPS and CASHIERS that report specifically to this Agent
+      // 2. Fetch all Shops and Cashiers within the same Brand (tenant_id)
+      // This solves the 'parent_id' issue where agents couldn't see cashiers created by shops.
       const { data: n } = await supabase.from('profiles')
-        .select('id, username, display_name, balance, role')
-        .eq('parent_id', user.id)
-        .in('role', ['shop', 'cashier']) // Include both roles
-        .order('role', { ascending: false }) // Shops first, then Cashiers
+        .select('id, username, display_name, balance, role, parent_id')
+        .eq('tenant_id', p.tenant_id) 
+        .in('role', ['shop', 'cashier']) 
+        .neq('id', user.id) // Don't show the agent themselves
+        .order('role', { ascending: false }) // Shops first
         .order('username', { ascending: true });
 
       setNodes(n || []);
@@ -56,7 +57,6 @@ export default function AgentFunding() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchData, profile?.id]);
 
-  // Grouping logic for the dropdown
   const groupedNodes = useMemo(() => {
     return {
       shops: nodes.filter(n => n.role === 'shop'),
@@ -114,7 +114,6 @@ export default function AgentFunding() {
     <AgentLayout profile={profile}>
       <div className="p-8 max-w-7xl mx-auto space-y-12 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* INFRASTRUCTURE HEADER */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-12 gap-6">
           <div>
             <div className="flex items-center gap-2 text-blue-500 font-black uppercase text-[10px] italic mb-1 tracking-[0.3em]">
@@ -134,7 +133,6 @@ export default function AgentFunding() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* INPUT FORM */}
           <div className="lg:col-span-8">
             {showSuccess ? (
               <div className="bg-[#111926] border border-blue-500/30 h-[500px] rounded-[3.5rem] flex flex-col items-center justify-center p-12 text-center animate-in zoom-in duration-300">
@@ -166,7 +164,7 @@ export default function AgentFunding() {
                     )}
 
                     {groupedNodes.cashiers.length > 0 && (
-                      <optgroup label="DIRECT CASHIERS" className="bg-[#111926] text-purple-400">
+                      <optgroup label="CASHIERS (ALL BRANCHES)" className="bg-[#111926] text-purple-400">
                         {groupedNodes.cashiers.map(c => (
                           <option key={c.id} value={c.id} className="text-white">
                             👤 {c.username.toUpperCase()}
@@ -205,7 +203,6 @@ export default function AgentFunding() {
             )}
           </div>
 
-          {/* TARGET INFO CARD */}
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-blue-600/5 border border-blue-500/20 p-10 rounded-[3rem] h-full flex flex-col justify-between min-h-[500px]">
                 <div>
@@ -255,7 +252,6 @@ export default function AgentFunding() {
                 )}
             </div>
           </div>
-
         </div>
       </div>
     </AgentLayout>
