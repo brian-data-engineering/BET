@@ -19,14 +19,12 @@ export default function CashierDashboard() {
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
-    // Fetch profile including the selection limit column
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
     if (profile) setUserProfile(profile);
   }, []);
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
-  // Printing logic
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
@@ -70,7 +68,6 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
-      // Enrichment logic for events
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       const { data: eventData } = await supabase
         .from('api_events')
@@ -114,42 +111,31 @@ export default function CashierDashboard() {
 
     setIsProcessing(true);
     try {
-      // THE FIX: Pass selections, stake, and odds to the RPC
-      // This ensures the database uses the EDITED values
+      // 1. CALL THE DATABASE FUNCTION
+      // We send 'pending' in lowercase to satisfy the database check constraint
       const { data, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
         p_stake: numStake,
-        p_selections: cart, // Sends the edited games (e.g. 13 instead of 14)
+        p_selections: cart, 
         p_total_odds: totalOdds,
-        p_status: 'pending'
+        p_status: 'pending' 
       });
 
       if (rpcError) throw rpcError;
 
-      // Extract metadata for the print table record
-      const sportsSet = [...new Set(cart.map(s => s.sport_key || "Soccer"))];
-      const countriesSet = [...new Set(cart.map(s => s.country || "Unknown"))];
-      const leaguesSet = [...new Set(cart.map(s => s.display_league || "League"))];
-
-      // Update the print record with metadata for reports
-      await supabase
-        .from('print')
-        .update({
-          country: countriesSet.join(', '),
-          sport_key: sportsSet.join(', '),
-          display_league: leaguesSet.join(', ')
-        })
-        .eq('id', data.ticket_id);
-
-      // Fetch the final official record for printing
-      const { data: official } = await supabase
+      // 2. FETCH THE CREATED TICKET IMMEDIATELY
+      // 'data.ticket_id' comes back from our custom SQL function
+      const { data: official, error: fetchError } = await supabase
         .from('print')
         .select('*')
         .eq('id', data.ticket_id)
         .single();
 
+      if (fetchError) throw fetchError;
+
       if (official) {
+        // Update local state to trigger the Print UI
         setCurrentTicket({ 
           ...official, 
           selections: cart, 
@@ -158,10 +144,10 @@ export default function CashierDashboard() {
         shouldPrintRef.current = true; 
         setCart([]);
         setStake("");
-        initTerminal(); // Refresh balance
+        initTerminal(); // Refresh the cashier's balance display
       }
     } catch (err) { 
-      alert(err.message || "Payment failed"); 
+      alert(`Transaction Failed: ${err.message}`); 
     } finally { 
       setIsProcessing(false); 
     }
