@@ -13,18 +13,13 @@ export default function Betslip({
   user 
 }) {
   
-  // 1. DYNAMIC LIMIT CHECK
-  // Fetches the limit from the user profile (Operator's preference) or defaults to 20
-  const selectionLimit = user?.cashier_selection_limit || 20;
-  const isOverLimit = cart.length > selectionLimit;
-
-  // Auto-Expiry Logic
+  // Auto-Expiry Logic: Keep the slip fresh
   useEffect(() => {
     if (isProcessing || !cart?.length) return;
     const checkInterval = setInterval(() => {
       const now = Date.now();
       const needsUpdate = cart.some(item => 
-        item.startTime && (new Date(item.startTime).getTime() - now) < 30000 
+        item.startTime && (new Date(item.startTime).getTime() - now) < 30000 // 30s buffer
       );
       if (needsUpdate) {
         setCart(prev => prev.filter(item => 
@@ -35,13 +30,11 @@ export default function Betslip({
     return () => clearInterval(checkInterval);
   }, [cart, isProcessing, setCart]);
 
-  // 2. RECALCULATE ODDS ON EVERY CART CHANGE
+  // Calculations
   const totalOdds = useMemo(() => 
     cart.reduce((acc, item) => acc * parseFloat(item?.odds || 1), 1), 
   [cart]);
 
-  // 3. RECALCULATE PAYOUT ON STAKE OR ODDS CHANGE
-  // This ensures that if the cashier changes 100 to 50, the payout updates instantly
   const potentialPayout = useMemo(() => 
     (parseFloat(stake) || 0) * totalOdds, 
   [stake, totalOdds]);
@@ -61,20 +54,14 @@ export default function Betslip({
           </div>
           <h3 className="text-white font-black italic uppercase text-lg tracking-tighter">Current Slip</h3>
         </div>
-        <div className="flex items-center gap-3">
-           {/* Limit Indicator */}
-           <span className={`text-[10px] font-bold px-2 py-1 rounded border ${isOverLimit ? 'border-red-500 text-red-500 bg-red-500/10' : 'border-white/10 text-slate-400'}`}>
-            {cart.length}/{selectionLimit} GAMES
-          </span>
-          {cart.length > 0 && !isProcessing && (
-            <button 
-              onClick={onClear} 
-              className="text-white/20 hover:text-red-500 transition-all p-2 hover:bg-red-500/10 rounded-xl"
-            >
-              <Trash2 size={20} />
-            </button>
-          )}
-        </div>
+        {cart.length > 0 && !isProcessing && (
+          <button 
+            onClick={onClear} 
+            className="text-white/20 hover:text-red-500 transition-all p-2 hover:bg-red-500/10 rounded-xl"
+          >
+            <Trash2 size={20} />
+          </button>
+        )}
       </div>
 
       {/* Cart Items */}
@@ -120,11 +107,13 @@ export default function Betslip({
       {/* Footer / Controls */}
       <div className="bg-[#0b0f1a] rounded-[2.5rem] p-6 border border-white/10 shadow-inner space-y-4">
         
+        {/* Odds Summary */}
         <div className="flex justify-between items-center px-2">
           <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Combined Odds</span>
           <span className="text-xl font-black italic text-white tabular-nums">{totalOdds.toFixed(2)}</span>
         </div>
 
+        {/* Stake Input */}
         <div className="relative">
           <span className="absolute left-5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">KSh</span>
           <input 
@@ -139,6 +128,7 @@ export default function Betslip({
           />
         </div>
 
+        {/* Potential Payout */}
         <div className="flex justify-between items-center pt-2 px-2 border-t border-white/5 mt-2">
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Est. Return</span>
           <span className="text-3xl font-black italic text-white tabular-nums">
@@ -146,22 +136,18 @@ export default function Betslip({
           </span>
         </div>
 
+        {/* Action Button */}
         <button 
           onClick={onProcess} 
-          disabled={isProcessing || !cart.length || !stake || isInsufficientFloat || isOverLimit} 
+          disabled={isProcessing || !cart.length || !stake || isInsufficientFloat} 
           className={`w-full py-5 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl
             ${isProcessing ? 'bg-zinc-800 text-zinc-500 cursor-wait' : 'bg-yellow-500 hover:bg-yellow-400 text-black font-black'}
-            ${(isInsufficientFloat || isOverLimit) && !isProcessing ? 'bg-red-500/20 text-red-500 border border-red-500/50' : ''}`}
+            ${isInsufficientFloat && !isProcessing ? 'bg-red-500/20 text-red-500 border border-red-500/50' : ''}`}
         >
           {isProcessing ? (
             <>
               <Zap size={22} className="animate-spin text-yellow-500 fill-yellow-500" />
               <span className="uppercase tracking-tighter">Syncing Ledger...</span>
-            </>
-          ) : isOverLimit ? (
-            <>
-              <AlertCircle size={20} />
-              <span className="uppercase tracking-tighter">Too many games</span>
             </>
           ) : isInsufficientFloat ? (
             <>
