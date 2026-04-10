@@ -1,161 +1,197 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase'; // Adjust path based on your structure
-import { Settings, Save, ShieldAlert, Sliders, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabaseClient';
+import OperatorLayout from '../../components/operator/OperatorLayout';
+import { 
+  Settings, 
+  Save, 
+  ShieldCheck, 
+  Sliders, 
+  CheckCircle2, 
+  AlertTriangle,
+  Zap,
+  Lock,
+  Unlock
+} from 'lucide-react';
 
-export default function OperatorSettings({ user }) {
+export default function OperatorSettings() {
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [settings, setSettings] = useState({
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [user, setUser] = useState(null);
+  const [config, setConfig] = useState({
     cashier_selection_limit: 20,
     lock_stake: true,
     min_stake: 10,
     max_payout: 500000
   });
 
-  // Load current settings from the Operator's profile
+  // Fetch initial operator profile data
   useEffect(() => {
-    if (user) {
-      setSettings({
-        cashier_selection_limit: user.cashier_selection_limit || 20,
-        lock_stake: user.lock_stake ?? true,
-        min_stake: user.min_stake || 10,
-        max_payout: user.max_payout || 500000
-      });
+    async function loadProfile() {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .single();
+        
+        if (profile) {
+          setUser(profile);
+          setConfig({
+            cashier_selection_limit: profile.cashier_selection_limit || 20,
+            lock_stake: profile.lock_stake ?? true,
+            min_stake: profile.min_stake || 10,
+            max_payout: profile.max_payout || 500000
+          });
+        }
+      }
     }
-  }, [user]);
+    loadProfile();
+  }, []);
 
   const handleSave = async () => {
     setLoading(true);
-    setSuccess(false);
+    try {
+      // Apply these settings to all profiles belonging to this Operator's tenant
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          cashier_selection_limit: config.cashier_selection_limit,
+          lock_stake: config.lock_stake,
+          min_stake: config.min_stake,
+          max_payout: config.max_payout
+        })
+        .eq('tenant_id', user.tenant_id);
 
-    // Update the profile of the Operator AND all their Cashiers
-    // This ensures the limit applies across the whole shop/tenant
-    const { error } = await supabase
-      .from('profiles')
-      .update({ 
-        cashier_selection_limit: settings.cashier_selection_limit,
-        lock_stake: settings.lock_stake,
-        min_stake: settings.min_stake,
-        max_payout: settings.max_payout
-      })
-      .eq('tenant_id', user.tenant_id);
+      if (error) throw error;
 
-    if (error) {
-      alert("Error updating settings: " + error.message);
-    } else {
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error("Save Error:", err.message);
+      alert("Failed to sync settings.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 bg-yellow-500/10 rounded-2xl">
-          <Settings className="text-yellow-500" size={28} />
-        </div>
-        <div>
-          <h1 className="text-2xl font-black text-white uppercase tracking-tight">Shop Settings</h1>
-          <p className="text-slate-500 text-sm">Configure limits and rules for your cashiers</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <OperatorLayout>
+      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* Betting Limits Section */}
-        <div className="bg-[#1c2636] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-          <div className="flex items-center gap-2 text-yellow-500 mb-2">
-            <Sliders size={20} />
-            <h2 className="font-bold uppercase text-sm tracking-wider">Betting Constraints</h2>
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3">
+              <Settings className="text-[#10b981]" size={32} />
+              Terminal <span className="text-slate-700">Control</span>
+            </h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em] italic">Shop Policy & Risk Configuration</p>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">
-                Max Selections (Games per Ticket)
-              </label>
-              <select 
-                value={settings.cashier_selection_limit}
-                onChange={(e) => setSettings({...settings, cashier_selection_limit: parseInt(e.target.value)})}
-                className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-yellow-500 transition-all"
-              >
-                <option value={10}>10 Games</option>
-                <option value={13}>13 Games</option>
-                <option value={15}>15 Games</option>
-                <option value={20}>20 Games (Standard)</option>
-                <option value={30}>30 Games (Max)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">
-                Minimum Stake (KSh)
-              </label>
-              <input 
-                type="number"
-                value={settings.min_stake}
-                onChange={(e) => setSettings({...settings, min_stake: e.target.value})}
-                className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-yellow-500 transition-all"
-              />
-            </div>
-          </div>
+          <button 
+            onClick={handleSave}
+            disabled={loading}
+            className={`px-8 py-4 rounded-xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center gap-2 shadow-2xl
+              ${saveSuccess ? 'bg-[#10b981] text-black' : 'bg-[#111926] border border-white/5 hover:bg-white/5 text-white'}`}
+          >
+            {loading ? <Zap size={14} className="animate-spin" /> : saveSuccess ? <CheckCircle2 size={14} /> : <Save size={14} />}
+            {saveSuccess ? "Settings Applied" : "Save Configuration"}
+          </button>
         </div>
 
-        {/* Security / Risk Section */}
-        <div className="bg-[#1c2636] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-          <div className="flex items-center gap-2 text-red-500 mb-2">
-            <ShieldAlert size={20} />
-            <h2 className="font-bold uppercase text-sm tracking-wider">Risk Management</h2>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* Slip Restrictions */}
+          <section className="bg-[#111926] rounded-[2.5rem] border border-white/5 p-10 space-y-8 shadow-2xl">
+            <div className="flex items-center gap-4 border-b border-white/5 pb-6">
+              <Sliders className="text-[#10b981]" size={20} />
+              <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Betting Logic</h2>
+            </div>
 
-          <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
+            <div className="space-y-6">
               <div>
-                <p className="text-white font-bold text-sm">Lock Booking Stake</p>
-                <p className="text-[10px] text-slate-500 uppercase">Prevent cashiers from editing customer stake</p>
+                <label className="text-[9px] font-black text-slate-500 uppercase italic tracking-widest block mb-4">Max Selections Per Ticket</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[10, 13, 20].map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => setConfig({...config, cashier_selection_limit: num})}
+                      className={`py-4 rounded-2xl font-black italic transition-all border ${config.cashier_selection_limit === num ? 'bg-[#10b981] text-black border-[#10b981]' : 'bg-black/20 text-white border-white/5 hover:border-white/20'}`}
+                    >
+                      {num} <span className="text-[8px] uppercase not-italic opacity-60">Games</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <button 
-                onClick={() => setSettings({...settings, lock_stake: !settings.lock_stake})}
-                className={`w-12 h-6 rounded-full transition-all relative ${settings.lock_stake ? 'bg-yellow-500' : 'bg-slate-700'}`}
-              >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.lock_stake ? 'right-1' : 'left-1'}`} />
-              </button>
+
+              <div className="pt-4">
+                <label className="text-[9px] font-black text-slate-500 uppercase italic tracking-widest block mb-4">Minimum Entry Stake</label>
+                <div className="relative">
+                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-600">KSH</span>
+                  <input 
+                    type="number"
+                    value={config.min_stake}
+                    onChange={(e) => setConfig({...config, min_stake: e.target.value})}
+                    className="w-full bg-black/40 border border-white/5 rounded-2xl py-5 pl-14 pr-6 text-2xl font-black italic text-white outline-none focus:border-[#10b981] transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Security & Payouts */}
+          <section className="bg-[#111926] rounded-[2.5rem] border border-white/5 p-10 space-y-8 shadow-2xl">
+            <div className="flex items-center gap-4 border-b border-white/5 pb-6">
+              <ShieldCheck className="text-rose-500" size={20} />
+              <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Liability & Security</h2>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">
-                Max Potential Payout (KSh)
-              </label>
-              <input 
-                type="number"
-                value={settings.max_payout}
-                onChange={(e) => setSettings({...settings, max_payout: e.target.value})}
-                className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-yellow-500 transition-all"
-              />
+            <div className="space-y-6">
+              <div 
+                onClick={() => setConfig({...config, lock_stake: !config.lock_stake})}
+                className={`flex items-center justify-between p-6 rounded-3xl border cursor-pointer transition-all ${config.lock_stake ? 'bg-[#10b981]/5 border-[#10b981]/20' : 'bg-black/20 border-white/5'}`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl ${config.lock_stake ? 'bg-[#10b981] text-black' : 'bg-slate-800 text-slate-500'}`}>
+                    {config.lock_stake ? <Lock size={18} /> : <Unlock size={18} />}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black uppercase italic">Stake Lock</h4>
+                    <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">Enforce customer-originated stakes</p>
+                  </div>
+                </div>
+                <div className={`w-12 h-6 rounded-full relative transition-all ${config.lock_stake ? 'bg-[#10b981]' : 'bg-slate-700'}`}>
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${config.lock_stake ? 'right-1' : 'left-1'}`} />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase italic tracking-widest block mb-4">Maximum Liability Per Ticket</label>
+                <div className="relative">
+                   <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-600">KSH</span>
+                   <input 
+                    type="number"
+                    value={config.max_payout}
+                    onChange={(e) => setConfig({...config, max_payout: e.target.value})}
+                    className="w-full bg-black/40 border border-white/5 rounded-2xl py-5 pl-14 pr-6 text-2xl font-black italic text-rose-500 outline-none focus:border-rose-500 transition-all"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
+
+        </div>
+
+        {/* Warning Footer */}
+        <div className="bg-[#10b981]/5 border border-[#10b981]/10 p-6 rounded-3xl flex items-center gap-4">
+          <AlertTriangle className="text-[#10b981]" size={20} />
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#10b981]/80">
+            Note: Changes will propagate to all cashier terminals connected to your operator ID immediately.
+          </p>
         </div>
 
       </div>
-
-      {/* Save Button */}
-      <div className="mt-8 flex justify-end">
-        <button 
-          onClick={handleSave}
-          disabled={loading}
-          className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black uppercase tracking-tighter transition-all active:scale-95
-            ${success ? 'bg-green-500 text-white' : 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-xl shadow-yellow-500/10'}`}
-        >
-          {loading ? (
-            <span className="animate-pulse">Saving...</span>
-          ) : success ? (
-            <><CheckCircle2 size={20} /> Updated Successfully</>
-          ) : (
-            <><Save size={20} /> Save Configuration</>
-          )}
-        </button>
-      </div>
-    </div>
+    </OperatorLayout>
   );
 }
