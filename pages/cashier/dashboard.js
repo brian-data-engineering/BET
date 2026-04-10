@@ -68,6 +68,15 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
+      // --- SELECTION LIMIT GATEKEEPER ---
+      const maxLimit = userProfile?.cashier_selection_limit || 20;
+      if (selections.length > maxLimit) {
+        alert(`⚠️ LIMIT EXCEEDED: This ticket has ${selections.length} games, but your shop limit is ${maxLimit}.`);
+        setIsSearching(false);
+        return; 
+      }
+      // ----------------------------------
+
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       const { data: eventData } = await supabase
         .from('api_events')
@@ -111,8 +120,6 @@ export default function CashierDashboard() {
 
     setIsProcessing(true);
     try {
-      // 1. CALL THE DATABASE FUNCTION
-      // We send 'pending' in lowercase to satisfy the database check constraint
       const { data, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
@@ -124,8 +131,6 @@ export default function CashierDashboard() {
 
       if (rpcError) throw rpcError;
 
-      // 2. FETCH THE CREATED TICKET IMMEDIATELY
-      // 'data.ticket_id' comes back from our custom SQL function
       const { data: official, error: fetchError } = await supabase
         .from('print')
         .select('*')
@@ -135,7 +140,6 @@ export default function CashierDashboard() {
       if (fetchError) throw fetchError;
 
       if (official) {
-        // Update local state to trigger the Print UI
         setCurrentTicket({ 
           ...official, 
           selections: cart, 
@@ -144,7 +148,7 @@ export default function CashierDashboard() {
         shouldPrintRef.current = true; 
         setCart([]);
         setStake("");
-        initTerminal(); // Refresh the cashier's balance display
+        initTerminal(); 
       }
     } catch (err) { 
       alert(`Transaction Failed: ${err.message}`); 
@@ -196,6 +200,8 @@ export default function CashierDashboard() {
             setCart={setCart} 
             stake={stake} 
             onStakeChange={setStake} 
+            // Pass the dynamic limit from profile
+            maxGames={userProfile?.cashier_selection_limit || 20}
             onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} 
             onClear={() => {setCart([]); setCurrentTicket(null);}} 
             onProcess={handleProcessPayment} 
