@@ -9,33 +9,38 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { email, password, username, agentId, displayName, tenantId, logoUrl } = req.body;
+  const cleanUsername = username.toLowerCase().trim();
 
   try {
-    // 1. Create the Shop Auth User
+    // 1. PRE-FLIGHT
+    const { data: existing } = await supabaseAdmin
+      .from('profiles')
+      .select('username')
+      .eq('username', cleanUsername)
+      .maybeSingle();
+
+    if (existing) return res.status(400).json({ error: "Shop username already in use." });
+
+    // 2. Auth Creation
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { 
-        role: 'shop',
-        username: username 
-      }
+      user_metadata: { role: 'shop', username: cleanUsername }
     });
 
     if (authError) throw authError;
     const newShop = authData.user;
 
-    // 2. Provision Shop Profile
-    // tenant_id = the Agent's tenant_id (linking them to the same brand)
-    // parent_id = the Agent's specific ID
+    // 3. Provision via UPDATE (Inheriting Agent's Tenant ID)
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({ 
         role: 'shop',
-        username: username,
+        username: cleanUsername,
         display_name: displayName,
-        tenant_id: tenantId, 
-        parent_id: agentId,  
+        tenant_id: tenantId, // The Operator's ID inherited from Agent
+        parent_id: agentId,  // The Agent's ID
         logo_url: logoUrl,
         balance: 0 
       })
@@ -46,7 +51,7 @@ export default async function handler(req, res) {
       throw profileError;
     }
 
-    return res.status(200).json({ success: true, message: 'SHOP PROVISIONED', id: newShop.id });
+    return res.status(200).json({ success: true, message: 'SHOP PROVISIONED' });
 
   } catch (error) {
     return res.status(400).json({ error: error.message });
