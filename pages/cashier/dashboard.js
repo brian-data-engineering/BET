@@ -68,14 +68,14 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
-      // --- SELECTION LIMIT GATEKEEPER ---
+      // --- SELECTION LIMIT WARNING ---
+      // We no longer 'return' here. We load the ticket so the cashier 
+      // can see it and manually remove games to meet the shop limit.
       const maxLimit = userProfile?.cashier_selection_limit || 20;
       if (selections.length > maxLimit) {
-        alert(`⚠️ LIMIT EXCEEDED: This ticket has ${selections.length} games, but your shop limit is ${maxLimit}.`);
-        setIsSearching(false);
-        return; 
+        console.warn("Loaded ticket exceeds current selection limit.");
       }
-      // ----------------------------------
+      // -------------------------------
 
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
       const { data: eventData } = await supabase
@@ -200,7 +200,6 @@ export default function CashierDashboard() {
             setCart={setCart} 
             stake={stake} 
             onStakeChange={setStake} 
-            // Pass the dynamic limit from profile
             maxGames={userProfile?.cashier_selection_limit || 20}
             onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))} 
             onClear={() => {setCart([]); setCurrentTicket(null);}} 
