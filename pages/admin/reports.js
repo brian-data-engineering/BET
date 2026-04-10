@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { 
-  BarChart3, TrendingUp, TrendingDown, Globe, Calendar, RefreshCcw, Briefcase,
+  BarChart3, TrendingUp, TrendingDown, Calendar, RefreshCcw, Briefcase,
   ChevronLeft, ChevronRight, Percent, Users, Store, UserCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
@@ -12,9 +12,8 @@ export default function AdminReports() {
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [stats, setStats] = useState({ totalSales: 0, totalPayouts: 0, netProfit: 0 });
   
-  // DRILL-DOWN STATE
-  const [expandedId, setExpandedId] = useState(null); // ID of operator being inspected
-  const [chainData, setChainData] = useState([]); // Holds the Agents/Shops/Cashiers
+  const [expandedId, setExpandedId] = useState(null); 
+  const [chainData, setChainData] = useState([]); 
   const [isExpanding, setIsExpanding] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,7 +41,6 @@ export default function AdminReports() {
     finally { setLoading(false); }
   }, [selectedDate]);
 
-  // DRILL-DOWN LOGIC: Fetch the chain for a specific operator
   const toggleOperatorChain = async (operatorId, tenantId) => {
     if (expandedId === operatorId) {
       setExpandedId(null);
@@ -53,12 +51,11 @@ export default function AdminReports() {
     setIsExpanding(true);
     
     try {
-      // Get all profiles linked to this brand/tenant
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, display_name, role, balance, parent_id')
+        .select('id, username, role, balance, parent_id')
         .eq('tenant_id', tenantId)
-        .neq('role', 'operator') // We already know the operator
+        .neq('role', 'operator')
         .order('role', { ascending: true });
 
       if (error) throw error;
@@ -81,23 +78,36 @@ export default function AdminReports() {
 
   return (
     <AdminLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
+      <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white">
         
-        {/* HEADER & STATS (Simplified for brevity, keep your existing StatCards here) */}
+        {/* HEADER */}
         <div className="flex justify-between items-end">
-            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Global <span className="text-slate-700 text-4xl">Audit</span></h1>
-            <div className="bg-[#111926] border border-white/5 p-4 rounded-2xl flex items-center gap-3">
-               <Calendar size={14} className="text-[#10b981]" />
-               <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-[10px] font-black uppercase [color-scheme:dark] outline-none"/>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 size={16} className="text-[#10b981]" />
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Live Network Audit</span>
             </div>
+            <h1 className="text-5xl font-black uppercase italic tracking-tighter">Global <span className="text-slate-700">Ledger</span></h1>
+          </div>
+          <div className="bg-[#111926] border border-white/5 p-4 rounded-2xl flex items-center gap-3">
+             <Calendar size={14} className="text-[#10b981]" />
+             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-[10px] font-black uppercase [color-scheme:dark] outline-none"/>
+          </div>
         </div>
 
-        {/* MAIN TABLE */}
+        {/* STATS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard label="Network Sales" value={stats.totalSales} color="text-[#10b981]" icon={<TrendingUp size={18}/>} />
+          <StatCard label="Network Payouts" value={stats.totalPayouts} color="text-rose-500" icon={<TrendingDown size={18}/>} />
+          <StatCard label="System Profit" value={stats.netProfit} color="text-blue-400" icon={<Percent size={18}/>} />
+        </div>
+
+        {/* TABLE */}
         <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
           <table className="w-full text-left border-collapse">
             <thead className="bg-[#0b0f1a]/50 text-slate-600 uppercase text-[9px] font-black tracking-widest italic">
               <tr>
-                <th className="p-8 text-center w-16">Chain</th>
+                <th className="p-8 w-16"></th>
                 <th className="p-8">Operator</th>
                 <th className="p-8 text-center">Efficiency</th>
                 <th className="p-8">Sales</th>
@@ -106,25 +116,24 @@ export default function AdminReports() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {paginatedLogs.map((row) => (
-                <>
+                <Fragment key={row.operator_id}>
                   <tr 
-                    key={row.operator_id} 
                     onClick={() => toggleOperatorChain(row.operator_id, row.tenant_id)}
-                    className={`cursor-pointer transition-all ${expandedId === row.operator_id ? 'bg-blue-500/10' : 'hover:bg-white/[0.02]'}`}
+                    className={`cursor-pointer transition-all group ${expandedId === row.operator_id ? 'bg-blue-600/10' : 'hover:bg-white/[0.02]'}`}
                   >
                     <td className="p-8 text-center">
-                        {expandedId === row.operator_id ? <ChevronUp className="text-blue-500" /> : <ChevronDown className="text-slate-600" />}
+                      {expandedId === row.operator_id ? <ChevronUp className="text-blue-500" /> : <ChevronDown className="text-slate-600 group-hover:text-white" />}
                     </td>
                     <td className="p-8">
                       <div className="flex flex-col">
                         <span className="text-sm font-black uppercase italic">{row.operator_name}</span>
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{row.total_cashiers} Terminals</span>
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{row.total_cashiers} Active Nodes</span>
                       </div>
                     </td>
                     <td className="p-8 text-center">
-                        <div className={`px-3 py-1 rounded-full text-[9px] font-black border ${row.margin >= 20 ? 'border-emerald-500/30 text-emerald-500' : 'border-rose-500/30 text-rose-500'}`}>
-                            {row.margin.toFixed(1)}%
-                        </div>
+                      <div className={`inline-block px-3 py-1 rounded-full text-[9px] font-black border ${row.margin >= 20 ? 'border-emerald-500/30 text-emerald-500' : 'border-rose-500/30 text-rose-500'}`}>
+                        {row.margin.toFixed(1)}%
+                      </div>
                     </td>
                     <td className="p-8 text-xs font-black">KES {Number(row.total_sales).toLocaleString()}</td>
                     <td className={`p-8 text-right font-black italic text-lg ${row.net_profit >= 0 ? 'text-[#10b981]' : 'text-rose-500'}`}>
@@ -132,34 +141,33 @@ export default function AdminReports() {
                     </td>
                   </tr>
 
-                  {/* EXPANDED CHAIN VIEW */}
                   {expandedId === row.operator_id && (
-                    <tr className="bg-[#0b0f1a]/50">
-                      <td colSpan="5" className="p-8">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <tr className="bg-[#05070a]">
+                      <td colSpan="5" className="p-12">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                           {isExpanding ? (
                             <div className="col-span-3 py-10 text-center"><RefreshCcw className="animate-spin mx-auto text-blue-500" /></div>
                           ) : (
                             ['agent', 'shop', 'cashier'].map(role => (
-                              <div key={role} className="bg-[#111926] border border-white/5 rounded-3xl p-6">
-                                <div className="flex items-center gap-2 mb-6 border-b border-white/5 pb-4">
-                                  {role === 'agent' && <Users size={16} className="text-blue-400" />}
-                                  {role === 'shop' && <Store size={16} className="text-purple-400" />}
-                                  {role === 'cashier' && <UserCircle size={16} className="text-orange-400" />}
-                                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em]">{role}s</h4>
+                              <div key={role} className="space-y-4">
+                                <div className="flex items-center gap-2 mb-4 border-b border-white/5 pb-2">
+                                  {role === 'agent' && <Users size={14} className="text-blue-400" />}
+                                  {role === 'shop' && <Store size={14} className="text-purple-400" />}
+                                  {role === 'cashier' && <UserCircle size={14} className="text-orange-400" />}
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{role}s</h4>
                                 </div>
-                                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
                                   {chainData.filter(u => u.role === role).map(user => (
-                                    <div key={user.id} className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <div key={user.id} className="p-4 bg-[#111926] rounded-2xl border border-white/5 flex justify-between items-center">
                                       <div className="flex flex-col">
-                                        <span className="text-[11px] font-black uppercase tracking-tighter">{user.username}</span>
-                                        <span className="text-[8px] font-bold text-slate-500 uppercase">Bal: {Number(user.balance).toLocaleString()}</span>
+                                        <span className="text-[11px] font-black uppercase tracking-tight">{user.username}</span>
+                                        <span className="text-[9px] text-emerald-500 font-bold">KES {Number(user.balance).toLocaleString()}</span>
                                       </div>
-                                      <div className="text-[8px] font-black text-slate-600">ID: {user.id.slice(0,5)}</div>
+                                      <div className="text-[8px] font-black text-slate-700">...{user.id.slice(-5)}</div>
                                     </div>
                                   ))}
                                   {chainData.filter(u => u.role === role).length === 0 && (
-                                    <p className="text-[9px] text-slate-600 italic">No {role}s registered</p>
+                                    <p className="text-[9px] text-slate-700 italic">No {role}s linked.</p>
                                   )}
                                 </div>
                               </div>
@@ -169,13 +177,29 @@ export default function AdminReports() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
-          {/* ... PAGINATION CONTROLS ... */}
+          
+          {/* PAGINATION */}
+          <div className="p-6 border-t border-white/5 flex justify-center items-center gap-8 bg-[#0b0f1a]/30">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-3 rounded-xl border border-white/5 hover:bg-white/5 disabled:opacity-10 transition-all"><ChevronLeft size={20} /></button>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Page <span className="text-white">{currentPage}</span> of {totalPages || 1}</span>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-3 rounded-xl border border-white/5 hover:bg-white/5 disabled:opacity-10 transition-all"><ChevronRight size={20} /></button>
+          </div>
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function StatCard({ label, value, color, icon }) {
+  return (
+    <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 shadow-xl relative overflow-hidden group">
+      <div className="absolute -right-2 -top-2 opacity-5 scale-150 group-hover:scale-125 transition-transform">{icon}</div>
+      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic mb-2">{label}</p>
+      <p className={`text-4xl font-black italic tracking-tighter ${color}`}>KES {value.toLocaleString()}</p>
+    </div>
   );
 }
