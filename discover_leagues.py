@@ -18,26 +18,38 @@ SPORT_MAPPING = {
 def discover_leagues():
     print("--- 🔍 STARTING LEAGUE DISCOVERY (PYTHON) ---")
 
-    # 1. Fetch unique leagues from api_events
-    # We select more than we need to ensure we have context for the mapping
+    # 1. FETCH EVERYTHING FROM API_EVENTS
+    # We pull every row, but we will "flatten" duplicates in Python memory
     response = supabase.table("api_events").select("sport_key, country, display_league").execute()
-    api_data = response.data
+    raw_api_data = response.data
 
-    if not api_data:
-        print("No API leagues found to map.")
+    if not raw_api_data:
+        print("❌ CRITICAL: No data found in api_events table.")
         return
 
-    # De-duplicate the list based on display_league and sport_key
-    unique_api = { (l['sport_key'], l['display_league']): l for l in api_data }.values()
+    print(f"📊 Total rows pulled from api_events: {len(raw_api_data)}")
 
+    # 2. GRACEFUL DE-DUPLICATION
+    # We use a tuple of (sport_key, display_league) as a unique key
+    # This ensures we only process each unique league ONCE.
+    unique_leagues = {}
+    for entry in raw_api_data:
+        key_pair = (entry.get('sport_key'), entry.get('display_league'))
+        if key_pair not in unique_leagues:
+            unique_leagues[key_pair] = entry
+
+    print(f"💎 Unique League-Sport pairs to map: {len(unique_leagues)}")
+
+    # 3. JUMP TO LINEBET
     for sport_name, linebet_id in SPORT_MAPPING.items():
-        # Filter API leagues by sport
-        relevant_leagues = [l for l in unique_api if sport_name in l['sport_key'].lower()]
+        # Filter our unique list for the current sport
+        relevant_targets = [val for key, val in unique_leagues.items() if sport_name in key[0].lower()]
         
-        if not relevant_leagues:
+        if not relevant_targets:
+            print(f"⏩ Skipping {sport_name.upper()}: No unique leagues found in source.")
             continue
 
-        print(f"\n📡 Fetching Linebet data for {sport_name.upper()}...")
+        print(f"\n📡 Fetching Linebet Champ List for {sport_name.upper()}...")
         
         try:
             linebet_url = f"https://linebet.com/service-api/result/web/api/v2/champs?lng=en&ref=189&sportIds={linebet_id}"
@@ -45,42 +57,44 @@ def discover_leagues():
             lb_items = lb_response.get('items', [])
 
             if not lb_items:
+                print(f"⚠️ Linebet returned 0 leagues for sport ID {linebet_id}")
                 continue
 
-            # Create a list of Linebet league names for fuzzy matching
             lb_names = [item['name'] for item in lb_items]
 
-            for api_l in relevant_leagues:
-                # Fuzzy Match: compare api_display_league against all linebet names
-                # extractOne returns (name, score, index)
-                match = process.extractOne(api_l['display_league'], lb_names, scorer=fuzz.WRatio)
+            # 4. PERFORM FUZZY MAPPING
+            for target in relevant_targets:
+                source_league = target['display_league']
+                
+                # Fuzzy Match
+                match = process.extractOne(source_league, lb_names, scorer=fuzz.WRatio)
                 
                 if match:
                     best_name, confidence, idx = match
                     best_lb_item = lb_items[idx]
 
-                    # Prepare data for Supabase
-                    mapping_data = {
-                        "api_sport_key": api_l['sport_key'],
-                        "api_display_league": api_l['display_league'],
-                        "api_country": api_l['country'],
+                    mapping_payload = {
+                        "api_sport_key": target['sport_key'],
+                        "api_display_league": source_league,
+                        "api_country": target['country'],
                         "linebet_sport_id": linebet_id,
                         "linebet_league_id": str(best_lb_item['id']),
                         "linebet_league_name": best_lb_item['name'],
                         "confidence_score": int(confidence),
-                        "is_verified": confidence > 95 # Auto-verify high confidence
+                        "is_verified": confidence >= 98  # Auto-verify only near-perfect matches
                     }
 
-                    # Upsert into league_mappings
+                    # UPSERT into Supabase
+                    # This handles duplicates gracefully: if it exists, it updates; if not, it inserts.
                     supabase.table("league_mappings").upsert(
-                        mapping_data, 
+                        mapping_payload, 
                         on_conflict="api_sport_key, api_display_league"
                     ).execute()
 
-                    print(f"Mapped: [{api_l['display_league']}] -> [{best_lb_item['name']}] ({int(confidence)}%)")
+                    print(f"✅ [{int(confidence)}%] '{source_league}' -> '{best_lb_item['name']}'")
 
         except Exception as e:
-            print(f"Error processing {sport_name}: {e}")
+            print(f"❌ Error processing {sport_name}: {e}")
 
 if __name__ == "__main__":
     discover_leagues()
