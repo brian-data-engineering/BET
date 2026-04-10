@@ -92,7 +92,8 @@ export default function CashierDashboard() {
 
       setCart(selections);
       setStake(booking.stake?.toString() || "100");
-      setCurrentTicket({ ...booking, selections }); 
+      // ADDED: Pass logo from userProfile
+      setCurrentTicket({ ...booking, selections, operator_logo: userProfile?.logo_url }); 
       shouldPrintRef.current = false; 
       setSearchQuery('');
 
@@ -131,8 +132,6 @@ export default function CashierDashboard() {
       const combinedCountries = countriesSet.join(', ');
       const combinedLeagues = leaguesSet.join(',, ');
 
-      // STEP 4: Final Update to the 'print' table
-      // FIX: Removed JSON.stringify() to handle JSONB type correctly
       await supabase
         .from('print')
         .update({
@@ -152,7 +151,8 @@ export default function CashierDashboard() {
         .single();
 
       if (official) {
-        const enrichedTicket = { ...official, selections: activeSelections };
+        // ADDED: Pass logo from userProfile
+        const enrichedTicket = { ...official, selections: activeSelections, operator_logo: userProfile?.logo_url };
         shouldPrintRef.current = true; 
         setCurrentTicket(enrichedTicket);
         setCart([]);
