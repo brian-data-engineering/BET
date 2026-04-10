@@ -19,12 +19,14 @@ export default function CashierDashboard() {
   const initTerminal = useCallback(async () => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
+    // Fetch profile including the selection limit column
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
     if (profile) setUserProfile(profile);
   }, []);
 
   useEffect(() => { initTerminal(); }, [initTerminal]);
 
+  // Printing logic
   useEffect(() => {
     if (currentTicket && shouldPrintRef.current && currentTicket.ticket_serial) {
       const timer = setTimeout(() => {
@@ -68,8 +70,8 @@ export default function CashierDashboard() {
         ? JSON.parse(booking.selections) 
         : (booking.selections || []);
 
+      // Enrichment logic for events
       const matchIds = selections.map(s => String(s.matchId || s.match_id).trim());
-      
       const { data: eventData } = await supabase
         .from('api_events')
         .select('id, display_league, commence_time, country, sport_key') 
@@ -79,7 +81,6 @@ export default function CashierDashboard() {
         selections = selections.map(sel => {
           const mid = String(sel.matchId || sel.match_id).trim();
           const event = eventData.find(e => String(e.id).trim() === mid);
-          
           return {
             ...sel,
             sport_key: event?.sport_key || sel.sport_key || "Soccer",
@@ -92,7 +93,6 @@ export default function CashierDashboard() {
 
       setCart(selections);
       setStake(booking.stake?.toString() || "100");
-      // ADDED: Pass logo from userProfile
       setCurrentTicket({ ...booking, selections, operator_logo: userProfile?.logo_url }); 
       shouldPrintRef.current = false; 
       setSearchQuery('');
@@ -107,60 +107,61 @@ export default function CashierDashboard() {
 
   const handleProcessPayment = async () => {
     const numStake = parseFloat(stake);
+    const totalOdds = cart.reduce((acc, item) => acc * parseFloat(item?.odds || 1), 1);
+    
     if (!numStake || numStake <= 0 || numStake > (userProfile?.balance || 0)) return alert("Check Stake/Balance");
     if (!currentTicket?.booking_code) return alert("No active booking loaded");
 
     setIsProcessing(true);
     try {
-      const newSerial = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-      
-      const { error: rpcError } = await supabase.rpc('process_lucra_payment', {
+      // THE FIX: Pass selections, stake, and odds to the RPC
+      // This ensures the database uses the EDITED values
+      const { data, error: rpcError } = await supabase.rpc('process_lucra_payment', {
         p_booking_code: currentTicket.booking_code.toString(),
         p_cashier_id: userProfile.id,
-        p_generated_serial: newSerial,
-        p_stake: numStake
+        p_stake: numStake,
+        p_selections: cart, // Sends the edited games (e.g. 13 instead of 14)
+        p_total_odds: totalOdds,
+        p_status: 'pending'
       });
+
       if (rpcError) throw rpcError;
 
-      const activeSelections = currentTicket.selections || cart;
+      // Extract metadata for the print table record
+      const sportsSet = [...new Set(cart.map(s => s.sport_key || "Soccer"))];
+      const countriesSet = [...new Set(cart.map(s => s.country || "Unknown"))];
+      const leaguesSet = [...new Set(cart.map(s => s.display_league || "League"))];
 
-      const sportsSet = [...new Set(activeSelections.map(s => s.sport_key || "Soccer"))];
-      const countriesSet = [...new Set(activeSelections.map(s => s.country || "Unknown"))];
-      const leaguesSet = [...new Set(activeSelections.map(s => s.display_league || "League"))];
-
-      const combinedSports = sportsSet.join(', ');
-      const combinedCountries = countriesSet.join(', ');
-      const combinedLeagues = leaguesSet.join(',, ');
-
+      // Update the print record with metadata for reports
       await supabase
         .from('print')
         .update({
-          country: combinedCountries,
-          sport_key: combinedSports,
-          display_league: combinedLeagues, 
-          selections: activeSelections 
+          country: countriesSet.join(', '),
+          sport_key: sportsSet.join(', '),
+          display_league: leaguesSet.join(', ')
         })
-        .eq('ticket_serial', newSerial);
+        .eq('id', data.ticket_id);
 
-      await new Promise(res => setTimeout(res, 1500));
-      
+      // Fetch the final official record for printing
       const { data: official } = await supabase
         .from('print')
         .select('*')
-        .eq('ticket_serial', newSerial)
+        .eq('id', data.ticket_id)
         .single();
 
       if (official) {
-        // ADDED: Pass logo from userProfile
-        const enrichedTicket = { ...official, selections: activeSelections, operator_logo: userProfile?.logo_url };
+        setCurrentTicket({ 
+          ...official, 
+          selections: cart, 
+          operator_logo: userProfile?.logo_url 
+        });
         shouldPrintRef.current = true; 
-        setCurrentTicket(enrichedTicket);
         setCart([]);
         setStake("");
-        initTerminal(); 
+        initTerminal(); // Refresh balance
       }
     } catch (err) { 
-      alert(err.message); 
+      alert(err.message || "Payment failed"); 
     } finally { 
       setIsProcessing(false); 
     }
@@ -202,6 +203,7 @@ export default function CashierDashboard() {
               </div>
           </div>
         </div>
+
         <div className="lg:col-span-1">
           <Betslip 
             cart={cart} 
