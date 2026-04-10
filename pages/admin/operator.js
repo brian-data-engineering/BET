@@ -1,30 +1,56 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { UserPlus, ShieldCheck, Database, Edit3, X, ChevronLeft, ChevronRight, ImageIcon, Search } from 'lucide-react';
+import { 
+  UserPlus, 
+  ShieldCheck, 
+  Database, 
+  Edit3, 
+  X, 
+  ChevronLeft, 
+  ChevronRight, 
+  ImageIcon, 
+  Search,
+  Network,
+  Store,
+  Monitor
+} from 'lucide-react';
 
 export default function ManageOperators() {
   const [operators, setOperators] = useState([]);
-  const [searchTerm, setSearchTerm] = useState(''); // New State for Search
+  const [agents, setAgents] = useState([]); // Context for dropdowns
+  const [shops, setShops] = useState([]);   // Context for dropdowns
+  const [searchTerm, setSearchTerm] = useState('');
   const [adminId, setAdminId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
   const [editingNode, setEditingNode] = useState(null);
-  const [form, setForm] = useState({ password: '', username: '', displayName: '', logoUrl: '' });
+  const [provisionType, setProvisionType] = useState('operator'); // operator | agent | shop | cashier
+  
+  const [form, setForm] = useState({ 
+    password: '', 
+    username: '', 
+    displayName: '', 
+    logoUrl: '',
+    selectedOperatorId: '',
+    selectedAgentId: '',
+    selectedShopId: ''
+  });
 
-  const isFormValid = form.username && form.displayName && form.logoUrl && (editingNode ? true : form.password);
-
+  // SYNC: Fetch the entire network for assignment dropdowns
   const syncNetworkState = useCallback(async () => {
     const { data: profiles, error } = await supabase
       .from('profiles')
-      .select('id, username, display_name, balance, role, logo_url, created_at')
-      .eq('role', 'operator')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error) return console.error("Sync Error:", error.message);
-    setOperators(profiles || []);
+    
+    setOperators(profiles.filter(p => p.role === 'operator') || []);
+    setAgents(profiles.filter(p => p.role === 'agent') || []);
+    setShops(profiles.filter(p => p.role === 'shop') || []);
   }, []);
 
   useEffect(() => {
@@ -38,185 +64,234 @@ export default function ManageOperators() {
     init();
   }, [syncNetworkState]);
 
-  // FILTER LOGIC: Real-time search across multiple fields
-  const filteredOperators = operators.filter(op => 
-    op.username.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (op.display_name && op.display_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentOperators = filteredOperators.slice(indexOfFirstItem, indexOfLastItem);
-
   const handleCreateOrUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     if (editingNode) {
+      // Update existing
       const { error } = await supabase
         .from('profiles')
         .update({ display_name: form.displayName, logo_url: form.logoUrl })
         .eq('id', editingNode.id);
-
       if (error) alert(error.message);
-      else {
-        setEditingNode(null);
-        setForm({ password: '', username: '', displayName: '', logoUrl: '' });
-      }
     } else {
+      // PROVISIONING LOGIC: Determine parent and tenant based on role
       const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
+      
+      // Determine IDs based on the "Lucra Chain"
+      let finalParentId = adminId;
+      let finalTenantId = null; // Will be set by API for Operators, or inherited for others
+
+      if (provisionType === 'agent') finalParentId = form.selectedOperatorId;
+      if (provisionType === 'shop') finalParentId = form.selectedAgentId;
+      if (provisionType === 'cashier') finalParentId = form.selectedShopId;
+
       try {
-        const response = await fetch('/api/admin/create-operator', {
+        const response = await fetch(`/api/admin/create-${provisionType}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: ghostEmail,
             password: form.password,
             username: form.username.trim(),
-            adminId: adminId,
             displayName: form.displayName,
-            logoUrl: form.logoUrl
+            logoUrl: form.logoUrl,
+            parentId: finalParentId,
+            // If creating anything below Operator, we must pass the tenantId of that branch
+            tenantId: provisionType === 'operator' ? null : form.selectedOperatorId 
           }),
         });
         if (!response.ok) throw new Error("Provisioning failed");
-        setForm({ password: '', username: '', displayName: '', logoUrl: '' });
       } catch (err) { alert(err.message); }
     }
+
+    setEditingNode(null);
+    setForm({ password: '', username: '', displayName: '', logoUrl: '', selectedOperatorId: '', selectedAgentId: '', selectedShopId: '' });
     syncNetworkState();
     setLoading(false);
   };
 
-  const startEdit = (op) => {
-    setEditingNode(op);
-    setForm({
-      username: op.username,
-      displayName: op.display_name || '',
-      logoUrl: op.logo_url || '',
-      password: '****' 
-    });
-  };
-
   return (
     <AdminLayout>
-      <div className="p-8 space-y-10 bg-[#06080f] min-h-screen text-white">
+      <div className="p-8 space-y-10 bg-[#06080f] min-h-screen text-white font-sans">
         
         {/* HEADER */}
-        <div className="flex flex-col xl:flex-row justify-between gap-8">
+        <div className="flex flex-col xl:flex-row justify-between gap-8 border-b border-white/5 pb-10">
           <div>
-            <h1 className="text-5xl font-black uppercase italic tracking-tighter text-white">Operator Control</h1>
-            <p className="text-blue-500 font-bold text-xs mt-2 uppercase tracking-widest italic">Hierarchy & Branding Master</p>
+            <h1 className="text-6xl font-black uppercase italic tracking-tighter leading-none">Lucra Core</h1>
+            <p className="text-blue-500 font-bold text-xs mt-4 uppercase tracking-[0.3em] italic">System Root & Network Architect</p>
           </div>
-          <div className="bg-[#111926] p-6 rounded-[2rem] border border-white/5 text-right">
-            <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest block mb-1">Network Float</span>
-            <span className="text-2xl font-black italic tracking-tighter">KES {operators.reduce((a, b) => a + (parseFloat(b.balance) || 0), 0).toLocaleString()}</span>
+          <div className="bg-[#111926] p-8 rounded-[2rem] border border-white/5 shadow-2xl">
+            <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-2">Global Liquidity Pool</span>
+            <span className="text-4xl font-black italic tracking-tighter">KES {operators.reduce((a, b) => a + (parseFloat(b.balance) || 0), 0).toLocaleString()}</span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* FORM PANEL */}
-          <div className="lg:col-span-4">
-            <div className={`p-10 rounded-[3rem] border transition-all ${editingNode ? 'border-blue-500 bg-blue-500/5' : 'border-white/5 bg-[#111926]'}`}>
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${editingNode ? 'bg-white text-blue-600' : 'bg-blue-600 text-white'}`}>
-                    <ShieldCheck size={24} />
-                  </div>
-                  <h2 className="font-black uppercase text-xs italic tracking-widest">{editingNode ? 'Modify Brand' : 'Provision Brand'}</h2>
+          {/* PROVISIONING PANEL */}
+          <div className="lg:col-span-5">
+            <div className={`p-10 rounded-[3rem] border transition-all ${editingNode ? 'border-blue-500 bg-blue-500/5' : 'border-white/5 bg-[#111926] shadow-2xl'}`}>
+              
+              {/* ROLE PICKER */}
+              {!editingNode && (
+                <div className="flex bg-black/40 p-1 rounded-2xl mb-8 border border-white/5">
+                  {[
+                    { id: 'operator', icon: ShieldCheck, label: 'Owner' },
+                    { id: 'agent', icon: Network, label: 'Agent' },
+                    { id: 'shop', icon: Store, label: 'Shop' },
+                    { id: 'cashier', icon: Monitor, label: 'Node' }
+                  ].map(role => (
+                    <button 
+                      key={role.id}
+                      onClick={() => setProvisionType(role.id)}
+                      className={`flex-1 flex flex-col items-center py-3 rounded-xl transition-all ${provisionType === role.id ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}
+                    >
+                      <role.icon size={16} />
+                      <span className="text-[8px] font-black uppercase mt-1">{role.label}</span>
+                    </button>
+                  ))}
                 </div>
-                {editingNode && <button onClick={() => {setEditingNode(null); setForm({ password: '', username: '', displayName: '', logoUrl: '' });}}><X className="text-slate-500" /></button>}
-              </div>
+              )}
 
-              <form onSubmit={handleCreateOrUpdate} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[8px] font-black text-slate-500 uppercase ml-2 tracking-widest">Username</label>
-                  <input value={form.username} disabled={!!editingNode} className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-white/5 text-sm font-bold" placeholder="nairobi_hub" onChange={e => setForm({...form, username: e.target.value})} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[8px] font-black text-slate-500 uppercase ml-2 tracking-widest">Display/Brand Name</label>
-                  <input value={form.displayName} className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-white/5 text-sm font-bold" placeholder="e.g. Lucra Nairobi" onChange={e => setForm({...form, displayName: e.target.value})} />
-                </div>
-                <div className="space-y-1">
-                  <label className={`text-[8px] font-black uppercase ml-2 tracking-widest ${!form.logoUrl ? 'text-red-500' : 'text-slate-500'}`}>Logo URL {!form.logoUrl && '(REQUIRED)'}</label>
-                  <input value={form.logoUrl} className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-white/5 text-sm font-bold" placeholder="https://..." onChange={e => setForm({...form, logoUrl: e.target.value})} />
-                </div>
+              <h2 className="font-black uppercase text-sm italic tracking-widest mb-6 flex items-center gap-3 text-blue-500">
+                <UserPlus size={18}/> {editingNode ? 'Modify Identity' : `Register ${provisionType}`}
+              </h2>
+
+              <form onSubmit={handleCreateOrUpdate} className="space-y-6">
+                
+                {/* HIERARCHY DROPDOWNS (THE CASCADING LOGIC) */}
                 {!editingNode && (
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-500 uppercase ml-2 tracking-widest">Master Key</label>
-                    <input type="password" value={form.password} className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-white/5 text-sm font-bold" onChange={e => setForm({...form, password: e.target.value})} />
+                  <div className="space-y-4 animate-in fade-in duration-500">
+                    {['agent', 'shop', 'cashier'].includes(provisionType) && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Select Parent Operator</label>
+                        <select 
+                          required
+                          className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-white/5 text-xs font-bold appearance-none"
+                          value={form.selectedOperatorId}
+                          onChange={e => setForm({...form, selectedOperatorId: e.target.value})}
+                        >
+                          <option value="">Choose Brand...</option>
+                          {operators.map(op => <option key={op.id} value={op.id}>{op.display_name} ({op.username})</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {['shop', 'cashier'].includes(provisionType) && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Select Parent Agent</label>
+                        <select 
+                          required
+                          className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-white/5 text-xs font-bold appearance-none"
+                          value={form.selectedAgentId}
+                          onChange={e => setForm({...form, selectedAgentId: e.target.value})}
+                        >
+                          <option value="">Choose Agent...</option>
+                          {agents.filter(a => a.parent_id === form.selectedOperatorId).map(ag => (
+                            <option key={ag.id} value={ag.id}>{ag.display_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {provisionType === 'cashier' && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Select Shop Branch</label>
+                        <select 
+                          required
+                          className="w-full bg-[#0b0f1a] p-4 rounded-xl border border-white/5 text-xs font-bold appearance-none"
+                          value={form.selectedShopId}
+                          onChange={e => setForm({...form, selectedShopId: e.target.value})}
+                        >
+                          <option value="">Choose Shop...</option>
+                          {shops.filter(s => s.parent_id === form.selectedAgentId).map(sh => (
+                            <option key={sh.id} value={sh.id}>{sh.display_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 )}
-                <button disabled={!isFormValid || loading} className={`w-full font-black py-5 rounded-xl transition-all italic text-xs uppercase tracking-widest ${!isFormValid ? 'bg-white/5 text-slate-600' : editingNode ? 'bg-white text-black' : 'bg-blue-600 text-white shadow-lg'}`}>
-                  {loading ? 'SYNCING...' : editingNode ? 'UPDATE BRAND' : 'ACTIVATE OPERATOR'}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Username</label>
+                    <input value={form.username} disabled={!!editingNode} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold" placeholder="nairobi_hub" onChange={e => setForm({...form, username: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Password</label>
+                    <input type="password" disabled={!!editingNode} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold" placeholder="••••••••" onChange={e => setForm({...form, password: e.target.value})} />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic">Display / Brand Name</label>
+                  <input value={form.displayName} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold focus:border-blue-600 transition-all outline-none" placeholder="e.g. Lucra Nairobi" onChange={e => setForm({...form, displayName: e.target.value})} />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase ml-2 italic tracking-widest flex justify-between">
+                    Logo URL <span>{form.logoUrl ? '✅' : '❌'}</span>
+                  </label>
+                  <input value={form.logoUrl} className="w-full bg-[#0b0f1a] p-5 rounded-2xl border border-white/5 text-sm font-bold" placeholder="https://..." onChange={e => setForm({...form, logoUrl: e.target.value})} />
+                </div>
+
+                <button disabled={loading} className={`w-full font-black py-6 rounded-2xl transition-all italic text-xs uppercase tracking-[0.4em] ${editingNode ? 'bg-white text-black' : 'bg-blue-600 text-white shadow-[0_0_30px_rgba(37,99,235,0.3)]'}`}>
+                  {loading ? 'SYNCHRONIZING CORE...' : editingNode ? 'COMMIT UPDATES' : `AUTHORIZE ${provisionType}`}
                 </button>
               </form>
             </div>
           </div>
 
-          {/* TABLE PANEL + SEARCH */}
-          <div className="lg:col-span-8 space-y-4">
-            {/* FAST LOOKUP SEARCH BAR */}
-            <div className="relative group">
+          {/* LIST PANEL */}
+          <div className="lg:col-span-7 space-y-6">
+             <div className="relative group">
               <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
                 <Search size={18} className="text-slate-500 group-focus-within:text-blue-500 transition-colors" />
               </div>
               <input 
                 type="text"
-                placeholder="FAST LOOKUP: SEARCH BY USERNAME OR BRAND..."
-                className="w-full bg-[#111926] border border-white/5 rounded-2xl py-5 pl-14 pr-6 text-xs font-black uppercase tracking-widest outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-700"
+                placeholder="GLOBAL SEARCH: USERNAME, BRAND, OR ROLE..."
+                className="w-full bg-[#111926] border border-white/5 rounded-[2rem] py-6 pl-16 pr-6 text-[10px] font-black uppercase tracking-[0.2em] outline-none focus:border-blue-500/50 transition-all"
                 value={searchTerm}
-                onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
 
-            <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden">
-              <div className="p-8 border-b border-white/5 bg-white/[0.01] flex justify-between items-center">
-                   <div className="flex items-center gap-3">
-                    <Database size={20} className="text-blue-500" />
-                    <h2 className="text-xs font-black uppercase italic tracking-[0.2em]">Active Operator Ledger</h2>
-                   </div>
-                   <div className="flex items-center gap-2">
-                      <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} className="p-2 hover:bg-white/5 rounded-lg text-slate-500"><ChevronLeft size={16}/></button>
-                      <span className="text-[10px] font-black px-2 text-blue-500">PAGE {currentPage}</span>
-                      <button onClick={() => setCurrentPage(p => p+1)} className="p-2 hover:bg-white/5 rounded-lg text-slate-500"><ChevronRight size={16}/></button>
-                   </div>
+            <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+              <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                <div className="flex items-center gap-3">
+                  <Database size={20} className="text-blue-500" />
+                  <h2 className="text-[10px] font-black uppercase italic tracking-widest text-slate-400">Master Identity Ledger</h2>
+                </div>
               </div>
 
-              <table className="w-full text-left">
-                <thead className="bg-[#0b0f1a]/50 text-slate-600 uppercase text-[9px] font-black tracking-[0.3em] italic">
-                  <tr>
-                    <th className="p-6">Brand Identity</th>
-                    <th className="p-6 text-center">Liquidity</th>
-                    <th className="p-6 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {currentOperators.length > 0 ? currentOperators.map(op => (
-                    <tr key={op.id} className="hover:bg-white/[0.02] transition-all group">
-                      <td className="p-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-black border border-white/5 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                            {op.logo_url ? <img src={op.logo_url} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-800" size={16} />}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-black text-white uppercase italic text-lg tracking-tighter">{op.username}</span>
-                            <span className="text-[9px] text-blue-500 font-black uppercase tracking-widest">{op.display_name}</span>
-                          </div>
+              <div className="divide-y divide-white/5 max-h-[600px] overflow-y-auto">
+                {operators.filter(op => op.username.includes(searchTerm.toLowerCase())).map(op => (
+                  <div key={op.id} className="p-8 flex items-center justify-between hover:bg-white/[0.02] transition-all group">
+                    <div className="flex items-center gap-6">
+                      <div className="w-16 h-16 rounded-2xl bg-black border border-white/5 overflow-hidden flex items-center justify-center">
+                        {op.logo_url ? <img src={op.logo_url} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-800" size={20} />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-white uppercase italic text-2xl tracking-tighter">{op.username}</span>
+                          <span className="bg-blue-500/10 text-blue-500 text-[8px] font-black px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-widest">Operator</span>
                         </div>
-                      </td>
-                      <td className="p-6 text-center">
-                        <span className="font-black text-white italic tracking-tighter text-xl">KES {parseFloat(op.balance || 0).toLocaleString()}</span>
-                      </td>
-                      <td className="p-6 text-right">
-                        <button onClick={() => startEdit(op)} className="text-[10px] font-black text-white border border-white/10 px-5 py-2.5 rounded-xl hover:bg-blue-600 transition-all uppercase italic">Edit</button>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan="3" className="p-20 text-center text-slate-700 font-black uppercase tracking-[0.5em] text-xs">No Operators Found Matching "{searchTerm}"</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{op.display_name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[10px] font-black text-slate-600 uppercase mb-1">Vault Balance</span>
+                      <span className="text-2xl font-black italic tracking-tighter text-white">KES {parseFloat(op.balance || 0).toLocaleString()}</span>
+                      <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button onClick={() => setEditingNode(op)} className="text-[9px] font-black text-blue-500 hover:text-white transition-colors uppercase italic tracking-widest">Configure Node</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
