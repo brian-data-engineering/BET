@@ -10,25 +10,26 @@ export default async function handler(req, res) {
 
   const { email, password, username, displayName, parentId, tenantId } = req.body;
 
-  // CRITICAL: Ensure we don't proceed if the hierarchy link is missing
-  if (!parentId) {
-    return res.status(400).json({ error: "PROVISIONING ERROR: Parent Node ID is missing." });
+  // 1. HIERARCHY GUARD: Stop immediately if the chain is broken
+  if (!parentId || !tenantId) {
+    return res.status(400).json({ error: "PROVISIONING FAILED: Parent Node or Tenant context missing." });
   }
 
+  const cleanUsername = username.toLowerCase().trim();
+
   try {
-    // 1. PRE-FLIGHT CHECK: Check if username already exists in profiles
-    // This prevents the "Half-Created" state where Auth succeeds but Profile fails
+    // 2. PRE-FLIGHT CHECK: Check Profiles first to avoid 'profiles_pkey' violation later
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('username')
-      .eq('username', username.toLowerCase().trim())
+      .eq('username', cleanUsername)
       .single();
 
     if (existingProfile) {
-      return res.status(400).json({ error: `CONFLICT: Username "${username}" is already taken.` });
+      return res.status(400).json({ error: `TERMINAL ID "${cleanUsername}" ALREADY IN USE.` });
     }
 
-    // 2. AUTH CREATION
+    // 3. AUTH CREATION
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -38,20 +39,20 @@ export default async function handler(req, res) {
 
     if (authError) throw authError;
 
-    // 3. PROFILE CREATION
+    // 4. PROFILE CREATION
     const { error: profileError } = await supabaseAdmin.from('profiles').insert([
       {
         id: authUser.user.id,
-        username: username.toLowerCase().trim(),
+        username: cleanUsername,
         display_name: displayName,
         role: 'cashier',
-        parent_id: parentId, // The essential link in the Lucra chain
+        parent_id: parentId, // Links to Shop
         tenant_id: tenantId,
         balance: 0
       }
     ]);
 
-    // 4. ATOMIC CLEANUP: If Profile fails, delete the Auth user so they aren't stuck in limbo
+    // 5. ATOMIC CLEANUP: If Profile fails (e.g. DB constraint), kill the Auth user
     if (profileError) {
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
       throw profileError;
