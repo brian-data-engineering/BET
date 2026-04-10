@@ -8,8 +8,8 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
     ? JSON.parse(ticket.selections) 
     : (Array.isArray(ticket.selections) ? ticket.selections : []);
 
-  // Aggregated summary for the header
-  const ticketLeagues = ticket.display_league || (selections[0]?.ticket_leagues) || "";
+  // Use the operator's logo if available, otherwise fallback to the default Lucra logo
+  const logoSource = ticket.operator_logo || "https://i.ibb.co/67wb7Zm1/download.png";
 
   return (
     <div className="lucra-print-area" style={{ 
@@ -31,9 +31,16 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
       {/* HEADER */}
       <div style={{ textAlign: 'center', marginBottom: '5px' }}>
         <img 
-          src="https://i.ibb.co/67wb7Zm1/download.png" 
-          alt="LUCRA" 
-          style={{ width: '130px', margin: '0 auto 5px auto', display: 'block', filter: 'grayscale(1) contrast(200%)' }} 
+          src={logoSource} 
+          alt="OPERATOR LOGO" 
+          style={{ 
+            width: '130px', 
+            maxHeight: '80px', // Prevent huge logos from breaking layout
+            objectFit: 'contain',
+            margin: '0 auto 5px auto', 
+            display: 'block', 
+            filter: 'grayscale(1) contrast(200%)' // Keeps it thermal-printer friendly
+          }} 
         />
         <div style={{ fontSize: '11px', fontWeight: 'bold' }}>SHOP: {ticket.shop_name || "LUCRA"}</div>
         <div style={{ fontSize: '9px' }}>DATE: {new Date(ticket.created_at).toLocaleString()}</div>
@@ -47,23 +54,19 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
           const startTime = sel.startTime || sel.clean_start_time || "";
           const formattedTime = startTime ? startTime.replace('T', ' ').slice(5, 16) : ""; 
           
-          // Selection-specific league/sport label
           const leagueLabel = (sel.display_league || sel.sport_key || "EVENT").toUpperCase();
           
           return (
             <div key={idx} style={{ marginBottom: '10px', borderBottom: '0.5px solid #000', paddingBottom: '4px' }}>
-              {/* LEAGUE IS NOW ABOVE THE GAME */}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.9 }}>
                 <span>{leagueLabel}</span>
                 <span>{formattedTime}</span>
               </div>
 
-              {/* Match Name with Short ID */}
               <div style={{ fontSize: '12px', fontWeight: 'bold', margin: '2px 0' }}>
                 [{String(sel.matchId || sel.match_id || "").slice(-4)}] {sel.matchName || sel.match_name}
               </div>
               
-              {/* Market Selection and Odds Row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                 <span>{sel.marketName || '1X2'}: <strong>{sel.selection}</strong></span>
                 <span style={{ fontWeight: '900', fontSize: '12px' }}>{sel.odds}</span>
@@ -74,7 +77,7 @@ export default function PrintableTicket({ ticket, isReprint = false }) {
       </div>
 
       {/* TOTALS */}
-      <div style={{ borderTop: '1.5px dashed #000', paddingTop: '6px' }}>
+      <div style={{ borderTop: '1.5 dashed #000', paddingTop: '6px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
           <span>Total Stake:</span>
           <span style={{ fontWeight: 'bold' }}>
