@@ -4,7 +4,6 @@ import ShopLayout from '../../components/shop/ShopLayout';
 import { 
   Users, 
   Plus, 
-  Search, 
   Terminal, 
   ShieldCheck, 
   Activity, 
@@ -28,12 +27,18 @@ export default function ManageCashiers() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch Shop Profile
-    const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    // 1. Fetch Shop Profile to get the correct parentId and tenantId
+    const { data: p } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+    
     setProfile(p);
 
-    // Fetch only this shop's cashiers
-    const { data: c } = await supabase.from('profiles')
+    // 2. Fetch only cashiers belonging to this shop
+    const { data: c } = await supabase
+      .from('profiles')
       .select('*')
       .eq('parent_id', user.id)
       .eq('role', 'cashier')
@@ -43,14 +48,23 @@ export default function ManageCashiers() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchCashiers(); }, [fetchCashiers]);
+  useEffect(() => { 
+    fetchCashiers(); 
+  }, [fetchCashiers]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
+
+    // CRITICAL GUARD: Prevent "Orphan" creation if the shop profile isn't ready
+    if (!profile?.id || !profile?.tenant_id) {
+      alert("SYSTEM ERROR: Shop Node not synchronized. Please refresh the page.");
+      return;
+    }
+
     setProcessing(true);
     
-    // Ghost Logic: Mapping to internal domain
-    const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
+    const cleanUsername = form.username.toLowerCase().trim();
+    const ghostEmail = `${cleanUsername}@lucra.internal`;
 
     try {
       const response = await fetch('/api/admin/create-cashier', {
@@ -59,21 +73,31 @@ export default function ManageCashiers() {
         body: JSON.stringify({
           email: ghostEmail,
           password: form.password,
-          username: form.username.toLowerCase().trim(),
+          username: cleanUsername,
           displayName: form.displayName,
-          parentId: profile.id,
-          tenantId: profile.tenant_id
+          parentId: profile.id,       // Explicitly linking to this shop
+          tenantId: profile.tenant_id  // Ensuring multi-tenancy consistency
         }),
       });
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
+      
+      if (!response.ok) {
+        throw new Error(result.error || "Provisioning failed");
+      }
 
+      // Success Logic
       setForm({ username: '', displayName: '', password: '' });
       setIsAdding(false);
-      fetchCashiers();
+      fetchCashiers(); // Refresh the list immediately
+      
     } catch (err) {
-      alert("PROVISIONING FAILED: " + err.message);
+      // Direct feedback for common "Ghost User" or duplicate issues
+      const errorMsg = err.message.toLowerCase().includes("duplicate") 
+        ? "CONFLICT: This terminal username is already taken. Try a different one."
+        : `PROVISIONING FAILED: ${err.message}`;
+      
+      alert(errorMsg);
     } finally {
       setProcessing(false);
     }
@@ -102,7 +126,7 @@ export default function ManageCashiers() {
           </button>
         </header>
 
-        {/* REGISTRATION FORM (MODAL-ISH) */}
+        {/* REGISTRATION FORM */}
         {isAdding && (
           <div className="bg-[#111926] p-10 rounded-[3rem] border border-emerald-500/20 shadow-2xl animate-in fade-in slide-in-from-top-4">
             <h3 className="text-emerald-500 font-black uppercase italic text-sm mb-8 tracking-widest">Provision New Cashier Terminal</h3>
@@ -141,7 +165,7 @@ export default function ManageCashiers() {
               <div className="md:col-span-3 pt-4">
                 <button 
                   disabled={processing}
-                  className="w-full bg-emerald-600 text-black font-black py-6 rounded-2xl uppercase italic text-xs tracking-[0.4em] flex items-center justify-center gap-3"
+                  className="w-full bg-emerald-600 text-black font-black py-6 rounded-2xl uppercase italic text-xs tracking-[0.4em] flex items-center justify-center gap-3 disabled:opacity-50"
                 >
                   {processing ? <Loader2 className="animate-spin" /> : <ShieldCheck size={18} />}
                   {processing ? 'SYNCHRONIZING WITH CORE...' : 'AUTHORIZE & ACTIVATE TERMINAL'}
@@ -157,7 +181,6 @@ export default function ManageCashiers() {
             <div className="col-span-full py-20 text-center text-slate-700 animate-pulse uppercase font-black text-xs tracking-widest">Scanning Network...</div>
           ) : cashiers.length > 0 ? cashiers.map(cashier => (
             <div key={cashier.id} className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 hover:border-emerald-500/30 transition-all group relative overflow-hidden">
-               {/* Background Accent */}
                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
                   <Activity size={80} className="text-emerald-500" />
                </div>
@@ -172,7 +195,7 @@ export default function ManageCashiers() {
 
                   <div>
                     <h3 className="text-2xl font-black italic uppercase tracking-tight">{cashier.username}</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{cashier.display_name}</p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{cashier.display_name || 'No Name Assigned'}</p>
                   </div>
 
                   <div className="pt-6 border-t border-white/5 flex justify-between items-end">
