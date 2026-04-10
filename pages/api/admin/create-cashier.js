@@ -10,8 +10,25 @@ export default async function handler(req, res) {
 
   const { email, password, username, displayName, parentId, tenantId } = req.body;
 
+  // CRITICAL: Ensure we don't proceed if the hierarchy link is missing
+  if (!parentId) {
+    return res.status(400).json({ error: "PROVISIONING ERROR: Parent Node ID is missing." });
+  }
+
   try {
-    // 1. Auth Creation (Internal domain)
+    // 1. PRE-FLIGHT CHECK: Check if username already exists in profiles
+    // This prevents the "Half-Created" state where Auth succeeds but Profile fails
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('username')
+      .eq('username', username.toLowerCase().trim())
+      .single();
+
+    if (existingProfile) {
+      return res.status(400).json({ error: `CONFLICT: Username "${username}" is already taken.` });
+    }
+
+    // 2. AUTH CREATION
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -21,20 +38,24 @@ export default async function handler(req, res) {
 
     if (authError) throw authError;
 
-    // 2. Profile Creation
+    // 3. PROFILE CREATION
     const { error: profileError } = await supabaseAdmin.from('profiles').insert([
       {
         id: authUser.user.id,
-        username: username,
+        username: username.toLowerCase().trim(),
         display_name: displayName,
         role: 'cashier',
-        parent_id: parentId,
+        parent_id: parentId, // The essential link in the Lucra chain
         tenant_id: tenantId,
         balance: 0
       }
     ]);
 
-    if (profileError) throw profileError;
+    // 4. ATOMIC CLEANUP: If Profile fails, delete the Auth user so they aren't stuck in limbo
+    if (profileError) {
+      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+      throw profileError;
+    }
 
     return res.status(200).json({ success: true });
   } catch (error) {
