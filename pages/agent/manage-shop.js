@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AgentLayout from '../../components/agent/AgentLayout';
 import { 
-  Store, Loader2, Send, Database, PlusSquare, X, 
-  ShieldCheck, Search, ChevronLeft, ChevronRight, Monitor 
+  Store, Loader2, Send, PlusSquare, X, 
+  ShieldCheck, Search, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 
 export default function ManageShops() {
@@ -20,24 +20,38 @@ export default function ManageShops() {
   const [creating, setCreating] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // 1. Get Agent's own profile to get tenant_id and logo
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-    
-    if (profile) {
-      setAgentProfile(profile);
-      // 2. Get all Shops created by this Agent
-      const { data: shopData } = await supabase.from('profiles')
+      // 1. SAFE FETCH: Use maybeSingle() to prevent desync crashes (Error 406)
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
         .select('*')
-        .eq('parent_id', user.id)
-        .eq('role', 'shop')
-        .order('username', { ascending: true });
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      if (profileError) throw profileError;
 
-      if (shopData) setShops(shopData);
+      if (profile) {
+        setAgentProfile(profile);
+        
+        // 2. FETCH HIERARCHY: Get all Shops where THIS Agent is the parent
+        const { data: shopData, error: shopsError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('parent_id', user.id)
+          .eq('role', 'shop')
+          .order('username', { ascending: true });
+
+        if (shopsError) throw shopsError;
+        setShops(shopData || []);
+      }
+    } catch (err) {
+      console.error("Lucra Data Fetch Error:", err.message);
+    } finally {
+      setFetching(false);
     }
-    setFetching(false);
   }, []);
 
   useEffect(() => { 
@@ -46,9 +60,16 @@ export default function ManageShops() {
 
   const handleCreateShop = async (e) => {
     e.preventDefault();
+    
+    // 3. INHERITANCE GUARD: Ensure Agent context exists before provisioning
+    if (!agentProfile?.tenant_id) {
+      alert("BRAND ERROR: Your Agent profile is not synchronized. Please refresh.");
+      return;
+    }
+
     setCreating(true);
-    // Logic: Shops get a @lucra.shop ghost email
-    const ghostEmail = `${form.username.toLowerCase().trim()}@lucra.internal`;
+    const cleanUsername = form.username.toLowerCase().trim();
+    const ghostEmail = `${cleanUsername}@lucra.internal`;
 
     try {
       const response = await fetch('/api/admin/create-shop', {
@@ -57,22 +78,23 @@ export default function ManageShops() {
         body: JSON.stringify({
           email: ghostEmail,
           password: form.password,
-          username: form.username.trim(),
+          username: cleanUsername,
           displayName: form.displayName,
-          agentId: agentProfile.id,
-          tenantId: agentProfile.tenant_id,
-          logoUrl: agentProfile.logo_url // Pass the brand logo down
+          agentId: agentProfile.id,        // Becomes Shop's parent_id
+          tenantId: agentProfile.tenant_id, // INHERITED Brand Identity (The Operator)
+          logoUrl: agentProfile.logo_url   // Pass brand assets down the chain
         }),
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Shop provisioning failed");
+        throw new Error(result.error || "Provisioning failed");
       }
 
       setForm({ username: '', password: '', displayName: '' });
       setShowAddForm(false);
-      fetchData(); // Refresh list
+      fetchData(); // Refresh list to see the new node
     } catch (error) {
       alert(error.message);
     } finally {
@@ -89,7 +111,6 @@ export default function ManageShops() {
 
     setProcessingId(id);
     try {
-      // Re-using your existing process_transfer RPC
       const { error } = await supabase.rpc('process_transfer', {
         p_sender_id: agentProfile.id,
         p_receiver_id: id,
@@ -98,13 +119,13 @@ export default function ManageShops() {
       if (error) alert(`Transfer Failed: ${error.message}`);
       else fetchData();
     } catch (err) {
-      console.error(err);
+      console.error("Transfer error:", err);
     } finally {
       setProcessingId(null);
     }
   };
 
-  // Search Logic
+  // Search & Pagination Logic
   const filteredShops = shops.filter(s => 
     s.username.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (s.display_name && s.display_name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -113,13 +134,17 @@ export default function ManageShops() {
   const totalPages = Math.ceil(filteredShops.length / itemsPerPage);
   const currentShops = filteredShops.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  if (fetching) return <div className="min-h-screen bg-[#0b0f1a] flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div>;
+  if (fetching) return (
+    <div className="min-h-screen bg-[#0b0f1a] flex items-center justify-center">
+      <Loader2 className="animate-spin text-emerald-500" size={32} />
+    </div>
+  );
 
   return (
     <AgentLayout profile={agentProfile}>
       <div className="p-8 space-y-10 bg-[#0b0f1a] min-h-screen text-white font-sans">
         
-        {/* HEADER */}
+        {/* HEADER SECTION */}
         <div className="flex justify-between items-end border-b border-white/5 pb-10">
           <div>
             <div className="flex items-center gap-2 text-emerald-500 font-black uppercase text-[10px] italic mb-1 tracking-widest">
@@ -131,13 +156,13 @@ export default function ManageShops() {
           <div className="flex items-center gap-6">
             <button 
               onClick={() => setShowAddForm(!showAddForm)}
-              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-emerald-600 text-black'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border border-transparent`}
+              className={`${showAddForm ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-emerald-600 text-black'} px-8 py-4 rounded-2xl font-black italic uppercase text-xs transition-all flex items-center gap-2 border border-transparent hover:scale-105`}
             >
               {showAddForm ? <X size={16} /> : <PlusSquare size={16} />}
               {showAddForm ? 'Cancel' : 'Register New Shop'}
             </button>
 
-            <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5">
+            <div className="bg-[#111926] px-10 py-6 rounded-[2.5rem] border border-white/5 shadow-xl">
               <span className="text-[9px] font-black text-slate-500 uppercase block mb-1 tracking-widest">Total Shop Liquidity</span>
               <span className="text-3xl font-black text-[#10b981] italic tracking-tighter">
                 KES {shops.reduce((acc, s) => acc + (parseFloat(s.balance) || 0), 0).toLocaleString()}
@@ -148,22 +173,22 @@ export default function ManageShops() {
 
         {/* ADD SHOP FORM */}
         {showAddForm && (
-          <form onSubmit={handleCreateShop} className="bg-[#111926] p-8 rounded-[2.5rem] border border-emerald-500/20 flex flex-wrap gap-4 items-end animate-in fade-in slide-in-from-top-4 duration-300">
+          <form onSubmit={handleCreateShop} className="bg-[#111926] p-8 rounded-[2.5rem] border border-emerald-500/20 flex flex-wrap gap-4 items-end animate-in fade-in slide-in-from-top-4 duration-300 shadow-2xl">
             <div className="flex-1 min-w-[200px]">
               <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Shop Username</label>
-              <input required placeholder="nairobi_cbd_01" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all" value={form.username} onChange={e => setForm({...form, username: e.target.value})} />
+              <input required placeholder="nairobi_cbd_01" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all text-white" value={form.username} onChange={e => setForm({...form, username: e.target.value})} />
             </div>
             <div className="flex-1 min-w-[200px]">
               <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Location Name</label>
-              <input required placeholder="CBD Branch Main" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all" value={form.displayName} onChange={e => setForm({...form, displayName: e.target.value})} />
+              <input required placeholder="CBD Branch Main" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all text-white" value={form.displayName} onChange={e => setForm({...form, displayName: e.target.value})} />
             </div>
             <div className="flex-1 min-w-[200px]">
               <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block ml-2">Access Password</label>
-              <input required type="password" placeholder="••••••••" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+              <input required type="password" placeholder="••••••••" className="w-full bg-black/40 border border-white/5 p-4 rounded-2xl text-sm font-bold outline-none focus:border-emerald-500 transition-all text-white" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
             </div>
             <button disabled={creating} className="bg-[#10b981] text-black h-[56px] px-10 rounded-2xl font-black uppercase italic text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2">
               {creating ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-              {creating ? 'CREATING...' : 'ACTIVATE SHOP'}
+              {creating ? 'PROVISIONING...' : 'ACTIVATE SHOP'}
             </button>
           </form>
         )}
@@ -175,14 +200,14 @@ export default function ManageShops() {
             <input 
               type="text" 
               placeholder="SEARCH SHOPS OR BRANCHES..." 
-              className="w-full bg-[#111926] border border-white/5 rounded-2xl py-5 pl-14 pr-6 text-xs font-black uppercase tracking-widest outline-none focus:border-emerald-500/50 transition-all"
+              className="w-full bg-[#111926] border border-white/5 rounded-2xl py-5 pl-14 pr-6 text-xs font-black uppercase tracking-widest outline-none focus:border-emerald-500/50 transition-all text-white"
               value={searchTerm}
               onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
             />
           </div>
 
           <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
-            <table className="w-full text-left">
+            <table className="w-full text-left border-collapse">
               <thead className="bg-[#0b0f1a]/50 text-slate-600 uppercase text-[9px] font-black tracking-[0.3em] italic">
                 <tr>
                   <th className="p-8">Shop Location</th>
@@ -191,12 +216,12 @@ export default function ManageShops() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {currentShops.map(s => (
+                {currentShops.length > 0 ? currentShops.map(s => (
                   <tr key={s.id} className="hover:bg-white/[0.02] transition-all group">
                     <td className="p-8">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-black border border-white/5 flex items-center justify-center overflow-hidden">
-                          {s.logo_url ? <img src={s.logo_url} className="w-full h-full object-cover" /> : <Store className="text-slate-700" size={20} />}
+                        <div className="w-12 h-12 rounded-xl bg-black border border-white/5 flex items-center justify-center overflow-hidden shrink-0">
+                          {s.logo_url ? <img src={s.logo_url} className="w-full h-full object-cover" alt="Shop logo" /> : <Store className="text-slate-700" size={20} />}
                         </div>
                         <div>
                           <span className="font-black uppercase italic text-xl tracking-tight block text-white">{s.username}</span>
@@ -217,10 +242,37 @@ export default function ManageShops() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={3} className="p-20 text-center text-slate-500 font-black uppercase text-xs italic tracking-widest">
+                      No Shops Found in this branch.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* PAGINATION */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-4 mt-8">
+              <button 
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="p-4 rounded-xl bg-[#111926] border border-white/5 disabled:opacity-30 hover:bg-emerald-600 hover:text-black transition-all"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <span className="text-xs font-black italic uppercase">Page {currentPage} of {totalPages}</span>
+              <button 
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="p-4 rounded-xl bg-[#111926] border border-white/5 disabled:opacity-30 hover:bg-emerald-600 hover:text-black transition-all"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </AgentLayout>
