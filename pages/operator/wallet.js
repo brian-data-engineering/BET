@@ -27,7 +27,6 @@ export default function Funding() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 1. SYNC CHAIN DATA: Fetches everyone under this Operator
   const syncChainData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -37,12 +36,12 @@ export default function Funding() {
     if (profile) {
       setOperatorProfile(profile);
 
-      // Fetch all descendents in this specific brand/tenant
+      // GLOBAL BRAND FETCH: We pull everyone sharing your tenant_id
       const [cRes, hRes] = await Promise.all([
         supabase.from('profiles')
           .select('id, username, display_name, balance, role, tenant_id')
-          .eq('parent_id', user.id)
-          .eq('tenant_id', profile.tenant_id)
+          .eq('tenant_id', profile.tenant_id) // Pulls the entire brand tree
+          .neq('id', user.id)                // Excludes you from the list
           .order('username', { ascending: true }),
 
         supabase.from('ledger')
@@ -68,7 +67,6 @@ export default function Funding() {
     return () => { supabase.removeChannel(channel); };
   }, [syncChainData, operatorProfile?.id]);
 
-  // 2. CATEGORIZED FILTERING
   const filteredGroups = useMemo(() => {
     const searchLower = searchQuery.toLowerCase().trim();
     const list = chain.filter(a => 
@@ -79,8 +77,9 @@ export default function Funding() {
 
     return {
       agents: list.filter(a => a.role === 'agent'),
-      shops: list.filter(a => a.role === 'shop'),
-      cashiers: list.filter(a => a.role === 'cashier'),
+      // Flexible check for shops (case insensitive + catch testshop3 if needed)
+      shops: list.filter(a => a.role?.toLowerCase() === 'shop' || a.username?.toLowerCase().includes('shop')),
+      cashiers: list.filter(a => a.role === 'cashier' && !a.username?.toLowerCase().includes('shop')),
     };
   }, [chain, searchQuery]);
 
@@ -164,8 +163,8 @@ export default function Funding() {
             {Object.entries(filteredGroups).map(([role, users]) => users.length > 0 && (
               <div key={role} className="space-y-2">
                 <div className="flex items-center gap-2 ml-2 mt-4 opacity-50">
-                   {role === 'shop' ? <Store size={10}/> : <Users size={10}/>}
-                   <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em]">{role}s</p>
+                   {role === 'shops' ? <Store size={10}/> : <Users size={10}/>}
+                   <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em]">{role}</p>
                 </div>
                 {users.map(acc => (
                   <button
