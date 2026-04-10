@@ -15,7 +15,6 @@ export default function Betslip({
 }) {
   
   // 1. DYNAMIC LIMIT CHECK
-  // Uses the prop from dashboard or falls back to user profile/default
   const selectionLimit = maxGames || user?.cashier_selection_limit || 20;
   const isOverLimit = cart.length > selectionLimit;
 
@@ -62,7 +61,6 @@ export default function Betslip({
           <h3 className="text-white font-black italic uppercase text-lg tracking-tighter">Current Slip</h3>
         </div>
         <div className="flex items-center gap-3">
-           {/* Limit Indicator */}
            <span className={`text-[10px] font-bold px-2 py-1 rounded border ${isOverLimit ? 'border-red-500 text-red-500 bg-red-500/10' : 'border-white/10 text-slate-400'}`}>
             {cart.length}/{selectionLimit} GAMES
           </span>
@@ -146,6 +144,16 @@ export default function Betslip({
           </span>
         </div>
 
+        {/* Selection Limit Warning Message */}
+        {isOverLimit && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+            <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
+            <p className="text-[10px] font-bold text-red-500 uppercase leading-tight">
+              Maximum allowed is {selectionLimit} games. Please remove {cart.length - selectionLimit} selection(s) to proceed.
+            </p>
+          </div>
+        )}
+
         <button 
           onClick={onProcess} 
           disabled={isProcessing || !cart.length || !stake || isInsufficientFloat || isOverLimit} 
@@ -161,7 +169,7 @@ export default function Betslip({
           ) : isOverLimit ? (
             <>
               <AlertCircle size={20} />
-              <span className="uppercase tracking-tighter">Too many games</span>
+              <span className="uppercase tracking-tighter">Limit Exceeded</span>
             </>
           ) : isInsufficientFloat ? (
             <>
