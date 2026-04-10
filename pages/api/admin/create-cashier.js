@@ -9,34 +9,42 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { email, password, username, displayName, parentId, tenantId } = req.body;
+  const cleanUsername = username.toLowerCase().trim();
 
-  // 1. Guard the Chain
   if (!parentId || !tenantId) {
     return res.status(400).json({ error: "Context Missing (Parent/Tenant)" });
   }
 
   try {
-    // 2. Auth Creation (Same as your working Operator script)
+    // 1. PRE-FLIGHT: Check if username is taken in Profiles
+    const { data: existing } = await supabaseAdmin
+      .from('profiles')
+      .select('username')
+      .eq('username', cleanUsername)
+      .maybeSingle();
+
+    if (existing) return res.status(400).json({ error: "Terminal ID already in use." });
+
+    // 2. Auth Creation
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { role: 'cashier', username }
+      user_metadata: { role: 'cashier', username: cleanUsername }
     });
 
     if (authError) throw authError;
     const newUser = authData.user;
 
-    // 3. Provision via UPDATE (Matching your Operator script logic)
-    // This works whether or not a trigger created the row already.
+    // 3. Provision via UPDATE (Cue from Operator script)
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({
-        username: username.toLowerCase().trim(),
+        username: cleanUsername,
         display_name: displayName,
         role: 'cashier',
-        parent_id: parentId, // Linked to the Shop Manager
-        tenant_id: tenantId, // Linked to the Agent's brand
+        parent_id: parentId, 
+        tenant_id: tenantId, 
         balance: 0
       })
       .eq('id', newUser.id);
@@ -49,7 +57,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, message: 'CASHIER NODE ACTIVE' });
 
   } catch (error) {
-    console.error("Provisioning Fatal Error:", error.message);
     return res.status(400).json({ error: error.message });
   }
 }
