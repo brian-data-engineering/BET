@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { 
-  BarChart3, TrendingUp, TrendingDown, Calendar, RefreshCcw, Briefcase,
+  BarChart3, TrendingUp, TrendingDown, Calendar, RefreshCcw, 
   ChevronLeft, ChevronRight, Percent, Users, Store, UserCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
@@ -21,6 +21,10 @@ export default function AdminReports() {
 
   const fetchGlobalReports = useCallback(async () => {
     setLoading(true);
+    // Reset expansion on date change to keep data consistent
+    setExpandedId(null);
+    setChainData([]);
+
     try {
       const { data, error } = await supabase.rpc('get_superadmin_operator_report', {
         p_date: selectedDate
@@ -32,13 +36,19 @@ export default function AdminReports() {
         const s = Number(row.total_sales || 0);
         const p = Number(row.total_payouts || 0);
         sales += s; payouts += p;
-        return { ...row, margin: s > 0 ? ((s - p) / s) * 100 : 0 };
+        return { 
+          ...row, 
+          margin: s > 0 ? ((s - p) / s) * 100 : 0 
+        };
       }) || [];
 
       setOperatorLogs(formattedData);
       setStats({ totalSales: sales, totalPayouts: payouts, netProfit: sales - payouts });
-    } catch (err) { console.error(err.message); }
-    finally { setLoading(false); }
+    } catch (err) { 
+      console.error("Report Fetch Error:", err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   }, [selectedDate]);
 
   const toggleOperatorChain = async (operatorId, tenantId) => {
@@ -51,10 +61,13 @@ export default function AdminReports() {
     setIsExpanding(true);
     
     try {
+      // searchId fallback if tenantId is missing from the RPC for some reason
+      const searchId = tenantId || operatorId;
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('id, username, role, balance, parent_id')
-        .eq('tenant_id', tenantId)
+        .eq('tenant_id', searchId)
         .neq('role', 'operator')
         .order('role', { ascending: true });
 
@@ -67,7 +80,9 @@ export default function AdminReports() {
     }
   };
 
-  useEffect(() => { fetchGlobalReports(); }, [fetchGlobalReports]);
+  useEffect(() => { 
+    fetchGlobalReports(); 
+  }, [fetchGlobalReports]);
 
   const paginatedLogs = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -81,7 +96,7 @@ export default function AdminReports() {
       <div className="p-8 max-w-7xl mx-auto space-y-10 bg-[#0b0f1a] min-h-screen text-white">
         
         {/* HEADER */}
-        <div className="flex justify-between items-end">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
           <div>
             <div className="flex items-center gap-2 mb-2">
               <BarChart3 size={16} className="text-[#10b981]" />
@@ -91,7 +106,12 @@ export default function AdminReports() {
           </div>
           <div className="bg-[#111926] border border-white/5 p-4 rounded-2xl flex items-center gap-3">
              <Calendar size={14} className="text-[#10b981]" />
-             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-[10px] font-black uppercase [color-scheme:dark] outline-none"/>
+             <input 
+               type="date" 
+               value={selectedDate} 
+               onChange={(e) => setSelectedDate(e.target.value)} 
+               className="bg-transparent text-[10px] font-black uppercase [color-scheme:dark] outline-none cursor-pointer"
+             />
           </div>
         </div>
 
@@ -103,7 +123,13 @@ export default function AdminReports() {
         </div>
 
         {/* TABLE */}
-        <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+        <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl relative">
+          {loading && (
+            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm z-10 flex items-center justify-center">
+              <RefreshCcw className="animate-spin text-blue-500" size={40} />
+            </div>
+          )}
+          
           <table className="w-full text-left border-collapse">
             <thead className="bg-[#0b0f1a]/50 text-slate-600 uppercase text-[9px] font-black tracking-widest italic">
               <tr>
@@ -115,7 +141,7 @@ export default function AdminReports() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {paginatedLogs.map((row) => (
+              {paginatedLogs.length > 0 ? paginatedLogs.map((row) => (
                 <Fragment key={row.operator_id}>
                   <tr 
                     onClick={() => toggleOperatorChain(row.operator_id, row.tenant_id)}
@@ -146,7 +172,10 @@ export default function AdminReports() {
                       <td colSpan="5" className="p-12">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                           {isExpanding ? (
-                            <div className="col-span-3 py-10 text-center"><RefreshCcw className="animate-spin mx-auto text-blue-500" /></div>
+                            <div className="col-span-3 py-10 text-center flex flex-col items-center gap-4">
+                              <RefreshCcw className="animate-spin text-blue-500" />
+                              <span className="text-[10px] uppercase font-black tracking-widest text-slate-600">Syncing Chain Data...</span>
+                            </div>
                           ) : (
                             ['agent', 'shop', 'cashier'].map(role => (
                               <div key={role} className="space-y-4">
@@ -158,7 +187,7 @@ export default function AdminReports() {
                                 </div>
                                 <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
                                   {chainData.filter(u => u.role === role).map(user => (
-                                    <div key={user.id} className="p-4 bg-[#111926] rounded-2xl border border-white/5 flex justify-between items-center">
+                                    <div key={user.id} className="p-4 bg-[#111926] rounded-2xl border border-white/5 flex justify-between items-center hover:border-white/10 transition-colors">
                                       <div className="flex flex-col">
                                         <span className="text-[11px] font-black uppercase tracking-tight">{user.username}</span>
                                         <span className="text-[9px] text-emerald-500 font-bold">KES {Number(user.balance).toLocaleString()}</span>
@@ -178,15 +207,35 @@ export default function AdminReports() {
                     </tr>
                   )}
                 </Fragment>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan="5" className="p-20 text-center text-slate-500 font-black uppercase italic tracking-widest">
+                    No Activity Recorded for this Date
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
           
           {/* PAGINATION */}
           <div className="p-6 border-t border-white/5 flex justify-center items-center gap-8 bg-[#0b0f1a]/30">
-            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-3 rounded-xl border border-white/5 hover:bg-white/5 disabled:opacity-10 transition-all"><ChevronLeft size={20} /></button>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Page <span className="text-white">{currentPage}</span> of {totalPages || 1}</span>
-            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-3 rounded-xl border border-white/5 hover:bg-white/5 disabled:opacity-10 transition-all"><ChevronRight size={20} /></button>
+            <button 
+              disabled={currentPage === 1 || loading} 
+              onClick={() => setCurrentPage(p => p - 1)} 
+              className="p-3 rounded-xl border border-white/5 hover:bg-white/5 disabled:opacity-10 transition-all"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              Page <span className="text-white">{currentPage}</span> of {totalPages || 1}
+            </span>
+            <button 
+              disabled={currentPage === totalPages || loading} 
+              onClick={() => setCurrentPage(p => p + 1)} 
+              className="p-3 rounded-xl border border-white/5 hover:bg-white/5 disabled:opacity-10 transition-all"
+            >
+              <ChevronRight size={20} />
+            </button>
           </div>
         </div>
       </div>
@@ -199,7 +248,9 @@ function StatCard({ label, value, color, icon }) {
     <div className="bg-[#111926] p-8 rounded-[2.5rem] border border-white/5 shadow-xl relative overflow-hidden group">
       <div className="absolute -right-2 -top-2 opacity-5 scale-150 group-hover:scale-125 transition-transform">{icon}</div>
       <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic mb-2">{label}</p>
-      <p className={`text-4xl font-black italic tracking-tighter ${color}`}>KES {value.toLocaleString()}</p>
+      <p className={`text-4xl font-black italic tracking-tighter ${color}`}>
+        KES {Number(value || 0).toLocaleString()}
+      </p>
     </div>
   );
 }
