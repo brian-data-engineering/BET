@@ -8,7 +8,6 @@ const supabase = createClient(
 async function syncTargetedResults() {
   console.log("--- 🕵️ STEP 1: SCANNING PENDING SELECTIONS ---");
 
-  // 1. Get unique pending leagues from your new table
   const { data: pendingLeagues, error: pendingError } = await supabase
     .from('newselections')
     .select('league, sport')
@@ -21,7 +20,6 @@ async function syncTargetedResults() {
 
   const uniqueNames = [...new Set(pendingLeagues.map(l => l.league))];
 
-  // 2. Get the specific mappings for these leagues
   const { data: mappings, error: mapError } = await supabase
     .from('league_mappings')
     .select('api_display_league, linebet_sport_id, linebet_league_id, linebet_league_name, is_verified')
@@ -33,7 +31,6 @@ async function syncTargetedResults() {
     return;
   }
 
-  // Group by Sport ID to reduce API calls
   const sportGroups = {};
   mappings.forEach(map => {
     const sId = map.linebet_sport_id;
@@ -47,32 +44,42 @@ async function syncTargetedResults() {
     });
   });
 
-  // Time window: Stick to the 24-hour window that we know works
+  // --- THE CRITICAL FIX: EXACT 24-HOUR WINDOW ---
   const now = Math.floor(Date.now() / 1000);
   const roundedTo = now;
-  const roundedFrom = now - 86400; // 24 hours ago
+  const roundedFrom = now - 86400; // MUST BE 86400 TO MATCH YOUR WORKING URL
 
   for (const [sportId, info] of Object.entries(sportGroups)) {
     console.log(`\n--- 📊 SCRAPING ${info.name.toUpperCase()} (ID: ${sportId}) ---`);
 
     for (const league of info.leagues) {
-      // Use the exact URL format from your working manual test
       const gamesUrl = `https://linebet.com/service-api/result/web/api/v3/games?champId=${league.id}&dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189`;
       
       console.log(`🔎 Target: ${league.name} | URL: ${gamesUrl}`);
 
       try {
         const gamesRes = await fetch(gamesUrl);
-        if (!gamesRes.ok) continue;
+        if (!gamesRes.ok) {
+          console.log(`  ❌ Error ${gamesRes.status}`);
+          continue;
+        }
         
         const gamesData = await gamesRes.json();
         const items = gamesData.items || [];
 
         const resultsToUpsert = items.filter(game => game.score).map(game => {
-          // Keep your original clean score logic
           let cleanScore = game.score.replace(/\s\(\d+\).*/, '').split(';')[0].trim();
           const mainScorePart = cleanScore.split(' ')[0];
           const [h, a] = mainScorePart.split(':').map(n => parseInt(n) || 0);
+
+          // Restore period scores logic (p1, p2, etc)
+          const periodMatch = cleanScore.match(/\(([^)]+)\)/);
+          const periods = {};
+          if (periodMatch) {
+            periodMatch[1].split(',').forEach((val, i) => {
+              periods[`p${i + 1}`] = val.trim();
+            });
+          }
 
           return {
             match_id: String(game.id),
@@ -82,6 +89,7 @@ async function syncTargetedResults() {
             away_team: game.opp2,
             start_time_eat: new Date(game.dateStart * 1000).toISOString(),
             full_time_score: { home: h, away: a },
+            period_scores: periods,
             raw_clean_score: cleanScore
           };
         });
