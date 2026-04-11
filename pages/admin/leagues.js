@@ -10,13 +10,19 @@ import {
   Globe, 
   ShieldCheck,
   Fingerprint,
-  Link as LinkIcon
+  Trophy,
+  Dribbble, // Using for basketball/sports feel
+  Activity
 } from 'lucide-react';
 
 export default function LeagueMappingPage() {
   const [mappings, setMappings] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSport, setSelectedSport] = useState("ALL"); // NEW: Sport Filter State
   const [loading, setLoading] = useState(true);
+
+  // Define your target sports for the filter bar
+  const sports = ["ALL", "SOCCER", "TENNIS", "BASKETBALL", "ICE HOCKEY"];
 
   useEffect(() => {
     fetchData();
@@ -53,24 +59,18 @@ export default function LeagueMappingPage() {
     }
   };
 
-  const updateManualID = async (id, newId) => {
-    const { error } = await supabase
-      .from('league_mappings')
-      .update({ linebet_league_id: newId })
-      .eq('id', id);
+  // UPGRADED FILTER LOGIC: Handles both Search and Sport Tabs
+  const filteredMappings = mappings.filter(m => {
+    const matchesSearch = 
+      m.api_display_league?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.api_country?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.linebet_league_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesSport = selectedSport === "ALL" || 
+      m.api_sport_key?.toUpperCase() === selectedSport;
 
-    if (!error) {
-      setMappings(prev => prev.map(m => 
-        m.id === id ? { ...m, linebet_league_id: newId } : m
-      ));
-    }
-  };
-
-  const filteredMappings = mappings.filter(m => 
-    m.api_display_league?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.api_country?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.linebet_league_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    return matchesSearch && matchesSport;
+  });
 
   return (
     <AdminLayout>
@@ -97,10 +97,31 @@ export default function LeagueMappingPage() {
           </div>
         </div>
 
+        {/* NEW: Sport Filter Tabs */}
+        <div className="flex flex-wrap gap-2">
+          {sports.map((sport) => (
+            <button
+              key={sport}
+              onClick={() => setSelectedSport(sport)}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase italic tracking-wider transition-all border ${
+                selectedSport === sport 
+                ? 'bg-[#10b981] text-[#0b0f1a] border-[#10b981] shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
+                : 'bg-[#111926] text-slate-500 border-white/5 hover:border-white/20'
+              }`}
+            >
+              {sport}
+            </button>
+          ))}
+        </div>
+
         {/* Grid View */}
         <div className="space-y-4">
           {loading ? (
             <div className="py-20 text-center animate-pulse italic font-black text-slate-700 uppercase tracking-[0.5em]">Fetching Golden Mappings...</div>
+          ) : filteredMappings.length === 0 ? (
+            <div className="py-20 text-center italic font-black text-slate-800 uppercase tracking-widest border-2 border-dashed border-white/5 rounded-[3rem]">
+              No {selectedSport !== "ALL" ? selectedSport : ""} Mappings Found
+            </div>
           ) : (
             filteredMappings.map((item) => (
               <div key={item.id} className={`bg-[#111926] border ${item.is_verified ? 'border-[#10b981]/40 bg-[#10b981]/[0.03]' : 'border-white/5'} p-6 rounded-[2rem] flex flex-col lg:flex-row items-center justify-between gap-6 transition-all hover:border-white/20`}>
@@ -108,7 +129,12 @@ export default function LeagueMappingPage() {
                 {/* Left Section: Scraped Source */}
                 <div className="flex items-center gap-6 flex-1 w-full">
                   <div className="min-w-[200px]">
-                    <span className="text-[9px] font-black text-slate-500 uppercase italic mb-1 block">Scraped Source</span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-black text-slate-500 uppercase italic">Scraped Source</span>
+                      <span className="bg-white/5 text-[8px] px-2 py-0.5 rounded text-slate-400 font-black italic uppercase">
+                        {item.api_sport_key}
+                      </span>
+                    </div>
                     <h3 className="text-lg font-black italic text-white tracking-tight uppercase leading-tight">{item.api_display_league}</h3>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Globe size={10} className="text-[#10b981]" />
