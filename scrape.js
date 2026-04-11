@@ -8,6 +8,7 @@ const supabase = createClient(
 async function syncTargetedResults() {
   console.log("--- 🕵️ STEP 1: SCANNING PENDING SELECTIONS ---");
 
+  // 1. Get the sports/leagues we are actually looking for
   const { data: pendingLeagues, error: pendingError } = await supabase
     .from('newselections')
     .select('league, sport')
@@ -18,54 +19,53 @@ async function syncTargetedResults() {
     return;
   }
 
-  const uniqueNames = [...new Set(pendingLeagues.map(l => l.league))];
+  // Get unique internal sport names to know which Sport IDs to discover
+  const internalSports = [...new Set(pendingLeagues.map(p => p.sport))];
+  const targetLeagues = [...new Set(pendingLeagues.map(p => p.league))];
 
-  const { data: mappings, error: mapError } = await supabase
-    .from('league_mappings')
-    .select('api_display_league, linebet_sport_id, linebet_league_id, linebet_league_name, is_verified')
-    .in('api_display_league', uniqueNames)
-    .eq('is_verified', true);
+  // Map internal names to Linebet Sport IDs (Extend this as needed)
+  const sportIdMap = { 'tennis': 4, 'soccer': 1, 'basketball': 3 };
 
-  if (mapError || !mappings?.length) {
-    console.log("📭 No verified mappings found.");
-    return;
-  }
-
-  const sportGroups = {};
-  mappings.forEach(map => {
-    const sId = map.linebet_sport_id;
-    const internalSport = pendingLeagues.find(p => p.league === map.api_display_league)?.sport || 'unknown';
-    if (!sportGroups[sId]) {
-      sportGroups[sId] = { name: internalSport, leagues: [] };
-    }
-    sportGroups[sId].leagues.push({
-      id: map.linebet_league_id,
-      name: map.linebet_league_name
-    });
-  });
-
-  // --- THE ZERO-OFFSET FIX ---
-  // Math.floor(now / 3600) * 3600 forces the time to end in 0000 (top of the hour)
+  // --- THE ZERO-OFFSET WINDOW ---
   const now = Math.floor(Date.now() / 1000);
-  const roundedTo = Math.floor(now / 3600) * 3600; 
-  const roundedFrom = roundedTo - 86400; // Exact 24 hours back
+  const roundedTo = Math.floor(now / 3600) * 3600;
+  const roundedFrom = roundedTo - 86400;
 
-  for (const [sportId, info] of Object.entries(sportGroups)) {
-    console.log(`\n--- 📊 SCRAPING ${info.name.toUpperCase()} (ID: ${sportId}) ---`);
+  console.log(`\n--- 🔎 STEP 2: DISCOVERY PHASE (Irregardless of Endpoint) ---`);
 
-    for (const league of info.leagues) {
-      // Now generates: ...dateFrom=1775833200&dateTo=1775919600 (example)
-      const gamesUrl = `https://linebet.com/service-api/result/web/api/v3/games?champId=${league.id}&dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189`;
-      
-      console.log(`🔎 Target: ${league.name} | URL: ${gamesUrl}`);
+  for (const sportName of internalSports) {
+    const sId = sportIdMap[sportName.toLowerCase()];
+    if (!sId) continue;
 
-      try {
-        const gamesRes = await fetch(gamesUrl);
-        if (!gamesRes.ok) {
-          console.log(`   ❌ Error ${gamesRes.status}`);
-          continue;
-        }
+    console.log(`\n📊 SCANNING ${sportName.toUpperCase()} (ID: ${sId})`);
+
+    // Fetch all active championships for this sport
+    const champUrl = `https://linebet.com/service-api/result/web/api/v2/champs?dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189&sportIds=${sId}`;
+    
+    try {
+      const champRes = await fetch(champUrl);
+      const champData = await champRes.json();
+      const discoveredItems = champData.items || [];
+
+      // Find all endpoints that match our target leagues (e.g., contains "Billie Jean")
+      const matchingEndpoints = discoveredItems.filter(item => 
+        targetLeagues.some(tl => item.name.toLowerCase().includes(tl.toLowerCase()))
+      );
+
+      if (matchingEndpoints.length === 0) {
+        console.log(`  ⚪ No active endpoints found for ${sportName} targets.`);
+        continue;
+      }
+
+      for (const endpoint of matchingEndpoints) {
+        console.log(`  🚀 Found Endpoint: ${endpoint.name} (ID: ${endpoint.id})`);
+
+        // Fetch games for this specific endpoint
+        const gamesUrl = `https://linebet.com/service-api/result/web/api/v3/games?champId=${endpoint.id}&dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189`;
         
+        const gamesRes = await fetch(gamesUrl);
+        if (!gamesRes.ok) continue;
+
         const gamesData = await gamesRes.json();
         const items = gamesData.items || [];
 
@@ -84,8 +84,8 @@ async function syncTargetedResults() {
 
           return {
             match_id: String(game.id),
-            sport_key: info.name,
-            league_name: league.name,
+            sport_key: sportName,
+            league_name: endpoint.name,
             home_team: game.opp1,
             away_team: game.opp2,
             start_time_eat: new Date(game.dateStart * 1000).toISOString(),
@@ -101,14 +101,14 @@ async function syncTargetedResults() {
             .upsert(resultsToUpsert, { onConflict: 'match_id' });
 
           if (!upsertError) {
-            console.log(`   ✅ Synced ${resultsToUpsert.length} matches.`);
+            console.log(`     ✅ Synced ${resultsToUpsert.length} matches from ${endpoint.name}.`);
           }
         } else {
-          console.log(`   ⚪ No scored results found in this window.`);
+          console.log(`     ⚪ No scored results in ${endpoint.name}.`);
         }
-      } catch (err) {
-        console.error(`❌ Request Failed for ${league.name}`);
       }
+    } catch (err) {
+      console.error(`❌ Discovery failed for ${sportName}:`, err.message);
     }
   }
 }
