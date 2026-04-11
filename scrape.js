@@ -44,15 +44,17 @@ async function syncTargetedResults() {
     });
   });
 
-  // --- THE CRITICAL FIX: EXACT 24-HOUR WINDOW ---
+  // --- THE ZERO-OFFSET FIX ---
+  // Math.floor(now / 3600) * 3600 forces the time to end in 0000 (top of the hour)
   const now = Math.floor(Date.now() / 1000);
-  const roundedTo = now;
-  const roundedFrom = now - 86400; // MUST BE 86400 TO MATCH YOUR WORKING URL
+  const roundedTo = Math.floor(now / 3600) * 3600; 
+  const roundedFrom = roundedTo - 86400; // Exact 24 hours back
 
   for (const [sportId, info] of Object.entries(sportGroups)) {
     console.log(`\n--- 📊 SCRAPING ${info.name.toUpperCase()} (ID: ${sportId}) ---`);
 
     for (const league of info.leagues) {
+      // Now generates: ...dateFrom=1775833200&dateTo=1775919600 (example)
       const gamesUrl = `https://linebet.com/service-api/result/web/api/v3/games?champId=${league.id}&dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189`;
       
       console.log(`🔎 Target: ${league.name} | URL: ${gamesUrl}`);
@@ -60,7 +62,7 @@ async function syncTargetedResults() {
       try {
         const gamesRes = await fetch(gamesUrl);
         if (!gamesRes.ok) {
-          console.log(`  ❌ Error ${gamesRes.status}`);
+          console.log(`   ❌ Error ${gamesRes.status}`);
           continue;
         }
         
@@ -72,7 +74,6 @@ async function syncTargetedResults() {
           const mainScorePart = cleanScore.split(' ')[0];
           const [h, a] = mainScorePart.split(':').map(n => parseInt(n) || 0);
 
-          // Restore period scores logic (p1, p2, etc)
           const periodMatch = cleanScore.match(/\(([^)]+)\)/);
           const periods = {};
           if (periodMatch) {
@@ -102,6 +103,8 @@ async function syncTargetedResults() {
           if (!upsertError) {
             console.log(`   ✅ Synced ${resultsToUpsert.length} matches.`);
           }
+        } else {
+          console.log(`   ⚪ No scored results found in this window.`);
         }
       } catch (err) {
         console.error(`❌ Request Failed for ${league.name}`);
