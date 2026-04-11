@@ -8,51 +8,48 @@ const supabase = createClient(
 async function syncTargetedResults() {
   console.log("--- 🕵️ STEP 1: SCANNING PENDING SELECTIONS ---");
 
-  // Fetch pending bets joined with their verified mappings
-  const { data: targets, error: targetError } = await supabase
+  // 1. Get all pending league names
+  const { data: pendingLeagues, error: pendingError } = await supabase
     .from('newselections')
-    .select(`
-      sport,
-      league,
-      status,
-      league_mappings!inner (
-        linebet_sport_id,
-        linebet_league_id,
-        linebet_league_name,
-        is_verified
-      )
-    `)
-    .eq('status', 'pending')
-    .eq('league_mappings.is_verified', true);
+    .select('league, sport')
+    .eq('status', 'pending');
 
-  if (targetError) {
-    console.error("❌ Database Error:", targetError.message);
+  if (pendingError || !pendingLeagues || !pendingLeagues.length) {
+    console.log("📭 No pending tickets found. Skipping.");
     return;
   }
 
-  if (!targets || !targets.length) {
-    console.log("📭 No verified pending leagues found in DB. Skipping.");
+  // Get unique league names to query the map
+  const uniqueNames = [...new Set(pendingLeagues.map(l => l.league))];
+
+  // 2. Get the mappings for these specific leagues
+  const { data: mappings, error: mapError } = await supabase
+    .from('league_mappings')
+    .select('api_display_league, linebet_sport_id, linebet_league_id, linebet_league_name, is_verified')
+    .in('api_display_league', uniqueNames)
+    .eq('is_verified', true);
+
+  if (mapError || !mappings || !mappings.length) {
+    console.log("📭 No verified mappings found for current pending leagues.");
     return;
   }
 
-  // --- STEP 2: GROUP BY SPORT & LEAGUE (Avoiding Useless Calls) ---
+  // --- STEP 2: GROUP BY SPORT & LEAGUE ---
   const sportGroups = {};
-
-  targets.forEach(item => {
-    const map = item.league_mappings;
+  
+  mappings.forEach(map => {
     const sId = map.linebet_sport_id;
-    
+    const internalSport = pendingLeagues.find(p => p.league === map.api_display_league)?.sport || 'unknown';
+
     if (!sportGroups[sId]) {
-      sportGroups[sId] = { name: item.sport, leagues: new Map() };
+      sportGroups[sId] = { name: internalSport, leagues: new Map() };
     }
-    
-    // Keying by league_id ensures we only call Linebet once per league
     sportGroups[sId].leagues.set(map.linebet_league_id, map.linebet_league_name);
   });
 
   const now = Math.floor(Date.now() / 1000);
-  const roundedTo = now; // Current time
-  const roundedFrom = now - (86400 * 2); // Check last 48 hours for safety
+  const roundedTo = now;
+  const roundedFrom = now - (86400 * 3); // Check last 3 days for safety
 
   for (const [sportId, info] of Object.entries(sportGroups)) {
     console.log(`\n--- 📊 SCRAPING ${info.name.toUpperCase()} (ID: ${sportId}) ---`);
@@ -60,12 +57,11 @@ async function syncTargetedResults() {
     for (const [leagueId, leagueName] of info.leagues) {
       const gamesUrl = `https://linebet.com/service-api/result/web/api/v3/games?champId=${leagueId}&dateFrom=${roundedFrom}&dateTo=${roundedTo}&lng=en&ref=189`;
       
-      console.log(`🔎 Target: ${leagueName}`);
-      console.log(`🔗 URL: ${gamesUrl}`);
+      console.log(`🔎 Target: ${leagueName} | URL: ${gamesUrl}`);
 
       try {
         const gamesRes = await fetch(gamesUrl);
-        if (!gamesRes.ok) throw new Error(`HTTP Error: ${gamesRes.status}`);
+        if (!gamesRes.ok) continue;
         
         const gamesData = await gamesRes.json();
         const items = gamesData.items || [];
@@ -75,14 +71,6 @@ async function syncTargetedResults() {
           const mainScorePart = cleanScore.split(' ')[0];
           const [h, a] = mainScorePart.split(':').map(n => parseInt(n) || 0);
 
-          const periodMatch = cleanScore.match(/\(([^)]+)\)/);
-          const periods = {};
-          if (periodMatch) {
-            periodMatch[1].split(',').forEach((val, i) => {
-              periods[`p${i + 1}`] = val.trim();
-            });
-          }
-
           return {
             match_id: String(game.id),
             sport_key: info.name,
@@ -91,7 +79,6 @@ async function syncTargetedResults() {
             away_team: game.opp2,
             start_time_eat: new Date(game.dateStart * 1000).toISOString(),
             full_time_score: { home: h, away: a },
-            period_scores: periods,
             raw_clean_score: cleanScore
           };
         });
@@ -101,16 +88,12 @@ async function syncTargetedResults() {
             .from('finalresults')
             .upsert(resultsToUpsert, { onConflict: 'match_id' });
 
-          if (upsertError) {
-            console.error(` ⚠️ Upsert Error:`, upsertError.message);
-          } else {
-            console.log(`   ✅ Synced ${resultsToUpsert.length} matches.`);
-          }
+          if (!upsertError) console.log(`   ✅ Synced ${resultsToUpsert.length} matches.`);
         } else {
-          console.log(`   ⚪ No completed results found yet for this league.`);
+          console.log(`   ⚪ No completed results found.`);
         }
       } catch (err) {
-        console.error(`❌ API Error for League ${leagueId}:`, err.message);
+        console.error(`❌ API Error:`, err.message);
       }
     }
   }
