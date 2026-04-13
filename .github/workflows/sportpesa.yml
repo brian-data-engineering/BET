@@ -1,0 +1,32 @@
+name: Sportpesa Scraper Logic
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Auto-run every hour
+  workflow_dispatch:   # Allows you to click 'Run Workflow' manually
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Libs
+        run: pip install requests pyyaml
+
+      - name: Run Sportpesa Script
+        run: python sportpesa.py
+
+      - name: Push to Branch
+        run: |
+          git config --global user.name "Lucra-Data-Bot"
+          git config --global user.email "bot@lucra.com"
+          git add results.yaml
+          git commit -m "Results Updated: $(date)" || exit 0
+          git push
