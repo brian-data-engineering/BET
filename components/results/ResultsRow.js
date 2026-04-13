@@ -1,48 +1,48 @@
 export default function ResultsRow({ match }) {
-  const sport = match.sport_key; // Updated from sport_type
-  const isBasketball = sport === 'basketball';
-  const isTableTennis = sport === 'table-tennis';
-  const isTennis = sport === 'tennis';
-  const isIceHockey = sport === 'ice-hockey';
+  const sport = match.sport_type; // Match our DB column name
+  const isBasketball = sport === 'Basketball';
+  const isTennis = sport === 'Tennis';
+  const isIceHockey = sport === 'Ice Hockey';
+  const isFootball = sport === 'Football';
   
-  // New JSONB structures from finalresults table
-  const ft = match.full_time_score || { home: 0, away: 0 };
-  const p = match.period_scores || {};
+  // sub_scores comes as a string like "(27:15,25:32,16:25,34:17)"
+  const renderSubScores = () => {
+    if (!match.sub_scores) return null;
 
-  const renderPeriods = () => {
-    // For sports with many segments (Table Tennis, Tennis, Hockey)
-    if (isTableTennis || isIceHockey || isTennis) {
-      const keys = Object.keys(p).sort(); // Gets p1, p2, p3...
+    // Remove brackets and split by comma
+    const cleanScores = match.sub_scores.replace(/[()]/g, '');
+    const segments = cleanScores.split(',');
 
-      return keys.length > 0 ? (
-        <div className="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar">
-          {keys.map((key, i) => (
-            <div key={key} className="flex flex-col items-center bg-black/30 px-2 py-0.5 rounded border border-white/5 min-w-[32px]">
-              <span className="text-[7px] text-slate-500 font-black mb-0.5">{i + 1}</span>
-              <span className="text-[9px] text-slate-300 font-bold">{p[key]}</span>
-            </div>
-          ))}
-        </div>
-      ) : null;
-    }
-
-    // For Basketball (Quarters)
+    // For Basketball Quarters
     if (isBasketball) {
-      const quarters = Object.values(p);
-      return quarters.length > 0 ? (
+      return (
         <span className="text-slate-500 text-[9px] font-bold ml-2 tracking-tighter">
-          Q: {quarters.join(' | ')}
+          Q: {segments.join(' | ')}
         </span>
-      ) : null;
+      );
     }
 
-    // For Soccer (Half Time is usually p1)
-    if (sport === 'soccer' && p.p1) {
+    // For Soccer (Half Time)
+    if (isFootball && segments[0]) {
       return (
         <div className="bg-[#10b981]/10 px-1.5 rounded ml-2 border border-[#10b981]/20">
           <span className="text-[#10b981] text-[9px] font-black italic">
-            HT {p.p1}
+            HT {segments[0]}
           </span>
+        </div>
+      );
+    }
+
+    // For high-segment sports (Tennis, Hockey)
+    if (isTennis || isIceHockey) {
+      return (
+        <div className="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar">
+          {segments.map((score, i) => (
+            <div key={i} className="flex flex-col items-center bg-black/30 px-2 py-0.5 rounded border border-white/5 min-w-[32px]">
+              <span className="text-[7px] text-slate-500 font-black mb-0.5">{i + 1}</span>
+              <span className="text-[9px] text-slate-300 font-bold">{score}</span>
+            </div>
+          ))}
         </div>
       );
     }
@@ -63,30 +63,31 @@ export default function ResultsRow({ match }) {
           </span>
           <span className="w-1 h-1 bg-slate-700 rounded-full" />
           <span className="text-[9px] text-slate-500 font-bold">
-             {new Date(match.start_time_eat).toLocaleTimeString('en-GB', {
+             {new Date(match.event_date).toLocaleTimeString('en-GB', {
                hour: '2-digit', minute: '2-digit'
              })}
           </span>
         </div>
 
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-3">
-             <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-hover:bg-[#10b981] transition-colors" />
-             <span className="text-[13px] font-bold text-slate-200 group-hover:text-white truncate">
-                {match.home_team}
-             </span>
-          </div>
-          <div className="flex items-center gap-3">
-             <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-hover:bg-[#10b981] transition-colors" />
-             <span className="text-[13px] font-bold text-slate-200 group-hover:text-white truncate">
-                {match.away_team}
-             </span>
-          </div>
+           <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-hover:bg-[#10b981] transition-colors" />
+              <span className="text-[13px] font-bold text-slate-200 group-hover:text-white truncate">
+                 {match.match_name.split(' vs ')[0]}
+              </span>
+           </div>
+           <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-hover:bg-[#10b981] transition-colors" />
+              <span className="text-[13px] font-bold text-slate-200 group-hover:text-white truncate">
+                 {match.match_name.split(' vs ')[1]}
+              </span>
+           </div>
         </div>
 
-        {!isTableTennis && !isIceHockey && !isTennis && (
+        {/* Render half-time/quarters for low-segment sports here */}
+        {(isFootball || isBasketball) && (
           <div className="mt-2 flex items-center">
-            {renderPeriods()}
+            {renderSubScores()}
           </div>
         )}
       </div>
@@ -96,20 +97,21 @@ export default function ResultsRow({ match }) {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
              <span className="text-xl font-black italic tracking-tighter text-white">
-               {ft.home}
+               {match.main_score.split(':')[0]}
              </span>
              <span className="text-lg font-black text-slate-700">:</span>
              <span className="text-xl font-black italic tracking-tighter text-white">
-               {ft.away}
+               {match.main_score.split(':')[1]}
              </span>
           </div>
         </div>
 
-        {(isTableTennis || isIceHockey || isTennis) && renderPeriods()}
+        {/* Render period detail boxes for Tennis/Hockey here */}
+        {(isTennis || isIceHockey) && renderSubScores()}
         
         <div className="mt-2 px-2 py-0.5 rounded bg-black/20 border border-white/5">
            <span className="text-[8px] font-black text-[#10b981] uppercase italic tracking-widest">
-             Settled
+             {match.status || 'Settled'}
            </span>
         </div>
       </div>
