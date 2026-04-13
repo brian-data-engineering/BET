@@ -1,8 +1,11 @@
+import { useState, useEffect } from 'react';
+
 export default function ResultsHeader({ count = 0, activeSport = 'Football' }) {
   // Format current time for a "Real-time" feel
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
+    // Updates the timer every minute
     const timer = setInterval(() => setTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
