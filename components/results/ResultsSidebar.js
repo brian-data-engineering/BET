@@ -1,12 +1,12 @@
 import { Trophy, Dribbble, CircleDot, Activity, ChevronRight, Zap, Target } from 'lucide-react';
 
 export default function ResultsSidebar({ activeSport, setActiveSport }) {
+  // Only including sports verified in your recent 129-match sync
   const sports = [
-    { id: 'soccer', name: 'Football', icon: <Trophy size={16} /> },
-    { id: 'basketball', name: 'Basketball', icon: <Dribbble size={16} /> },
-    { id: 'tennis', name: 'Tennis', icon: <Target size={16} /> }, // Added Tennis
-    { id: 'ice-hockey', name: 'Ice Hockey', icon: <Activity size={16} /> },
-    { id: 'table-tennis', name: 'Table Tennis', icon: <CircleDot size={16} /> },
+    { id: 'Football', name: 'Football', icon: <Trophy size={16} /> },
+    { id: 'Basketball', name: 'Basketball', icon: <Dribbble size={16} /> },
+    { id: 'Tennis', name: 'Tennis', icon: <Target size={16} /> },
+    { id: 'Ice Hockey', name: 'Ice Hockey', icon: <Activity size={16} /> },
   ];
 
   return (
@@ -97,13 +97,13 @@ export default function ResultsSidebar({ activeSport, setActiveSport }) {
             <div className="flex items-center gap-2">
               <div className="w-1 h-1 bg-slate-700 rounded-full" />
               <p className="text-[10px] text-slate-400 font-bold leading-none uppercase tracking-tighter">
-                Last 150 records
+                Multi-Sport Optimized
               </p>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1 h-1 bg-slate-700 rounded-full" />
               <p className="text-[10px] text-slate-400 font-bold leading-none uppercase tracking-tighter">
-                24h Rolling Window
+                Verified Data Source
               </p>
             </div>
           </div>
