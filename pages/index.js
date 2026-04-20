@@ -10,8 +10,7 @@ import { Clock, AlertCircle, X, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Home({ initialMatches = [] }) {
-  // Using '1' as default for Soccer (matching Lucra sport_id)
-  const [activeTab, setActiveTab] = useState('1');
+  const [activeTab, setActiveTab] = useState('soccer');
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [searchQuery, setSearchQuery] = useState(''); 
   const { slipItems, setSlipItems } = useBets(); 
@@ -25,65 +24,61 @@ export default function Home({ initialMatches = [] }) {
     return () => clearInterval(timer);
   }, []);
 
-  const getMatchStatus = (startTime) => {
-    if (!startTime) return { isLocked: true, isStartingSoon: false };
-    // Lucra uses standard ISO/Postgres timestamps, so we parse directly
-    const matchDate = new Date(startTime);
+  const getMatchStatus = (commenceTime) => {
+    if (!commenceTime) return { isLocked: true, isStartingSoon: false };
+    const cleanTime = commenceTime.split('+')[0].replace(' ', 'T');
+    const matchDate = new Date(cleanTime);
     const timeDiff = matchDate.getTime() - currentTime.getTime();
     
     return { 
-      isLocked: timeDiff <= 0, 
-      isStartingSoon: timeDiff > 0 && timeDiff <= 300000 // 5 minutes
+      isLocked: timeDiff <= 60000, 
+      isStartingSoon: timeDiff > 60000 && timeDiff <= 300000 
     };
   };
 
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const timeMatch = dateString.match(/(\d{2}:\d{2})/);
+    return timeMatch ? timeMatch[0] : 'TBD';
   };
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
-  // Sport IDs mapped to Lucra sport_id
   const sportTabs = [
-    { id: '1', name: 'Soccer', icon: '⚽' },
-    { id: '18', name: 'Basketball', icon: '🏀' },
-    { id: '4', name: 'Tennis', icon: '🎾' },
-    { id: '10', name: 'Table Tennis', icon: '🏓' },
-    { id: '2', name: 'Ice Hockey', icon: '🏒' },
+    { id: 'soccer', name: 'Soccer', icon: '⚽' },
+    { id: 'basketball', name: 'Basketball', icon: '🏀' },
+    { id: 'tennis', name: 'Tennis', icon: '🎾' },
+    { id: 'ice-hockey', name: 'Ice Hockey', icon: '🏒' },
+    { id: 'table-tennis', name: 'Table Tennis', icon: '🏓' },
   ];
 
   const toggleBet = (selection, value, match) => {
-    const { isLocked } = getMatchStatus(match.start_time);
+    const { isLocked } = getMatchStatus(match.commence_time);
     if (isLocked || !value) return;
 
-    const betId = `${match.match_id}-${selection}`;
+    const betId = `${match.id}-${selection}`;
     setSlipItems(prev => {
       if (prev.find(item => item.id === betId)) return prev.filter(item => item.id !== betId);
       if (prev.length >= 20) return prev; 
-      return [...prev.filter(item => item.matchId !== match.match_id), {
+      return [...prev.filter(item => item.matchId !== match.id), {
         id: betId,
-        matchId: match.match_id,
+        matchId: match.id,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         selection,
         marketName: '1X2',
         odds: value,
-        startTime: match.start_time 
+        startTime: match.commence_time 
       }];
     });
   };
 
   const displayMatches = useMemo(() => {
-    let filtered = initialMatches.filter(m => !getMatchStatus(m.start_time).isLocked);
-    
+    let filtered = initialMatches.filter(m => !getMatchStatus(m.commence_time).isLocked);
     if (selectedLeague) {
-      filtered = filtered.filter(m => m.league_id === selectedLeague);
+      filtered = filtered.filter(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
     } else {
-      // Filter by Lucra sport_id
-      filtered = filtered.filter(m => String(m.sport_id) === activeTab);
+      filtered = filtered.filter(m => m.sport_key === activeTab);
     }
-
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
@@ -101,7 +96,7 @@ export default function Home({ initialMatches = [] }) {
       <div className="flex w-full flex-1 h-[calc(100vh-64px)] overflow-hidden">
         <aside className="hidden lg:flex w-64 border-r border-white/5 bg-[#111926] flex-col shrink-0 overflow-hidden">
           <Sidebar 
-            onSelectLeague={(l, s) => { if(s) setActiveTab(String(s)); setSelectedLeague(l); }} 
+            onSelectLeague={(l, s) => { if(s) setActiveTab(s); setSelectedLeague(l); }} 
             onClearFilter={() => setSelectedLeague(null)} 
           />
         </aside>
@@ -124,19 +119,20 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
+          {/* FIX: Removed max-w-4xl and centering to fill the screen gaps */}
           <div className="pb-32 lg:pb-10 flex-1 w-full">
             <div className="w-full">
               
+              {/* BANNER: Now stretches to touch the sidebar and betslip */}
               <div className="mb-6 border-b border-white/5 shadow-2xl">
                 <HomeBanner />
               </div>
 
+              {/* MATCH LIST: Kept px-4 to ensure text doesn't touch the very edge of the screen */}
               <div className="px-4">
                 {displayMatches.length > 0 ? displayMatches.map((match) => {
-                  const currentSelection = slipItems.find(item => item.matchId === match.match_id);
-                  const { isStartingSoon } = getMatchStatus(match.start_time);
-                  
-                  // Using Lucra schema odds columns
+                  const currentSelection = slipItems.find(item => item.matchId === match.id);
+                  const { isStartingSoon } = getMatchStatus(match.commence_time);
                   const oddsData = [
                     { label: '1', val: match.home_odds },
                     { label: 'X', val: match.draw_odds },
@@ -145,16 +141,16 @@ export default function Home({ initialMatches = [] }) {
 
                   return (
                     <div 
-                      key={match.match_id} 
+                      key={match.id} 
                       className={`grid grid-cols-12 gap-2 py-4 border-b border-white/5 items-center transition-colors px-1 ${isStartingSoon ? 'bg-orange-500/5' : 'hover:bg-white/[0.02]'}`}
                     >
-                      <Link href={`/${match.match_id}`} className="col-span-7 flex flex-col justify-center overflow-hidden">
+                      <Link href={`/${match.id}`} className="col-span-7 flex flex-col justify-center overflow-hidden">
                         <div className="flex items-center gap-1.5 mb-1">
                           <span className="text-[10px] font-bold text-slate-400 capitalize tracking-tight truncate">
-                            {match.display_league || `League ${match.league_id}`}
+                            {match.display_league || match.league_name}
                           </span>
                           <span className={`text-[10px] font-bold flex items-center gap-0.5 whitespace-nowrap ${isStartingSoon ? 'text-orange-500 animate-pulse' : 'text-slate-500'}`}>
-                            <Clock size={10} /> {formatFixedTime(match.start_time)}
+                            <Clock size={10} /> {formatFixedTime(match.commence_time)}
                             {isStartingSoon && <span className="ml-1 text-[8px] italic">Starts Soon!</span>}
                           </span>
                         </div>
@@ -173,15 +169,14 @@ export default function Home({ initialMatches = [] }) {
                          <button
                             key={o.label}
                             onClick={() => toggleBet(o.label, o.val, match)}
-                            disabled={!o.val || o.val === "0"}
                             className={`h-9 px-4 rounded-full flex items-center justify-center transition-all ${
                               currentSelection?.selection === o.label 
                                 ? 'bg-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/20' 
-                                : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95 disabled:opacity-30'
+                                : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95'
                             }`}
                           >
                             <span className="text-[13px] font-black tracking-tight">
-                              {o.val && o.val !== "0" ? parseFloat(o.val).toFixed(2) : '—'}
+                              {o.val ? parseFloat(o.val).toFixed(2) : '—'}
                             </span>
                           </button>
                         ))}
@@ -219,7 +214,7 @@ export default function Home({ initialMatches = [] }) {
         <div className="fixed inset-0 z-[120] flex lg:hidden">
           <div className="w-[280px] h-full bg-[#111926] animate-in slide-in-from-left duration-300">
              <Sidebar 
-                onSelectLeague={(l, s) => { if (s) setActiveTab(String(s)); setSelectedLeague(l); setIsMobileSidebarOpen(false); }} 
+                onSelectLeague={(l, s) => { if (s) setActiveTab(s); setSelectedLeague(l); setIsMobileSidebarOpen(false); }} 
                 onClearFilter={() => { setSelectedLeague(null); setIsMobileSidebarOpen(false); }} 
               />
           </div>
@@ -245,10 +240,10 @@ export default function Home({ initialMatches = [] }) {
 export async function getServerSideProps() {
   try {
     const { data } = await supabase
-      .from('xmatch_odds') // Your primary Lucra table
+      .from('api_events')
       .select('*')
-      .gt('start_time', new Date().toISOString()) // Current and future games
-      .order('start_time', { ascending: true })
+      .gt('commence_time', new Date().toISOString())
+      .order('commence_time', { ascending: true })
       .limit(1000); 
 
     return { props: { initialMatches: data || [] } };
