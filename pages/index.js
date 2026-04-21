@@ -40,8 +40,11 @@ export default function Home({ initialMatches = [] }) {
   };
 
   const sportTabs = [
-    { id: 'soccer', name: 'Soccer', icon: '⚽', sportId: 1 },
-    { id: 'basketball', name: 'Basketball', icon: '🏀', sportId: 3 },
+    { id: 'soccer',       name: 'Soccer',       icon: '⚽', sportKey: 'soccer'       },
+    { id: 'basketball',   name: 'Basketball',   icon: '🏀', sportKey: 'basketball'   },
+    { id: 'tennis',       name: 'Tennis',       icon: '🎾', sportKey: 'tennis'       },
+    { id: 'ice-hockey',   name: 'Ice Hockey',   icon: '🏒', sportKey: 'ice-hockey'   },
+    { id: 'table-tennis', name: 'Table Tennis', icon: '🏓', sportKey: 'table-tennis' },
   ];
 
   const toggleBet = (label, odds, match) => {
@@ -60,24 +63,31 @@ export default function Home({ initialMatches = [] }) {
         selection: label === '1' ? 'Home' : label === 'X' ? 'Draw' : 'Away',
         marketName: 'Full Time',
         odds: odds,
-        startTime: match.start_time
+        startTime: match.start_time,
+        sport_key: match.sport_key,
+        display_league: match.league_name,
+        country: match.league_name?.split('.')?.[0]?.trim() || 'International'
       }];
     });
   };
 
   const displayMatches = useMemo(() => {
     let filtered = initialMatches;
+
     const currentSport = sportTabs.find(t => t.id === activeTab);
-    filtered = filtered.filter(m => String(m.sport_id) === String(currentSport?.sportId));
+    filtered = filtered.filter(m => m.sport_key === currentSport?.sportKey);
+
     if (selectedLeague) {
       filtered = filtered.filter(m => m.league_name === selectedLeague);
     }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m =>
         m.home_team?.toLowerCase().includes(q) || m.away_team?.toLowerCase().includes(q)
       );
     }
+
     return filtered;
   }, [initialMatches, selectedLeague, searchQuery, activeTab]);
 
@@ -96,13 +106,14 @@ export default function Home({ initialMatches = [] }) {
         <div className="fixed top-20 right-6 z-[100] bg-[#111926] p-4 rounded-xl border border-[#10b981]/30 shadow-2xl w-64 text-[10px] font-mono">
           <h3 className="text-[#10b981] mb-2 font-bold uppercase tracking-widest text-[9px]">Lucra Debug HUD</h3>
           <div className="space-y-1 text-slate-300">
-            <p>Total Props: <span className="text-white">{initialMatches.length}</span></p>
+            <p>Total loaded: <span className="text-white">{initialMatches.length}</span></p>
             <p>Filtered: <span className="text-white">{displayMatches.length}</span></p>
-            <p>Active Tab: <span className="text-white">{activeTab}</span></p>
-            <p>Sport ID Target: <span className="text-white">{sportTabs.find(t => t.id === activeTab)?.sportId}</span></p>
+            <p>Active tab: <span className="text-white">{activeTab}</span></p>
+            <p>Sport key: <span className="text-white">{sportTabs.find(t => t.id === activeTab)?.sportKey}</span></p>
             <hr className="border-white/5 my-2" />
-            <p className="truncate text-slate-500">First Match ID: {initialMatches[0]?.match_id || 'N/A'}</p>
-            <p className="truncate text-slate-500">First Sport ID: {initialMatches[0]?.sport_id || 'N/A'}</p>
+            <p className="truncate text-slate-500">First ID: {initialMatches[0]?.match_id || 'N/A'}</p>
+            <p className="truncate text-slate-500">First sport_key: {initialMatches[0]?.sport_key || 'N/A'}</p>
+            <p className="truncate text-slate-500">First league: {initialMatches[0]?.league_name || 'N/A'}</p>
           </div>
         </div>
       )}
@@ -116,12 +127,12 @@ export default function Home({ initialMatches = [] }) {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-[#0b0f1a] no-scrollbar flex flex-col relative">
-          <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 gap-2 shrink-0">
+          <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 gap-2 shrink-0 overflow-x-auto no-scrollbar">
             {sportTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }}
-                className={`py-2 px-5 rounded-full text-[11px] font-bold capitalize italic tracking-wide transition-all border ${
+                className={`py-2 px-5 rounded-full text-[11px] font-bold capitalize italic tracking-wide transition-all border whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20'
                     : 'bg-[#1c2636]/40 border-white/5 text-slate-400 hover:border-white/20'
@@ -137,7 +148,7 @@ export default function Home({ initialMatches = [] }) {
 
             <div className="px-4 mt-6">
               <h2 className="text-[10px] uppercase tracking-[0.2em] font-black text-[#10b981] mb-4 italic px-1">
-                Upcoming {activeTab} Matches
+                Upcoming {sportTabs.find(t => t.id === activeTab)?.name} Matches
               </h2>
 
               {displayMatches.length > 0 ? displayMatches.map((match) => {
@@ -157,16 +168,16 @@ export default function Home({ initialMatches = [] }) {
                     <Link href={`/${match.match_id}`} className="col-span-7 flex flex-col justify-center overflow-hidden group">
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest truncate max-w-[150px]">
-                          {match.league_name || `League ${match.league_id}`}
+                          {match.league_name}
                         </span>
-                        <div className={`h-1 w-1 rounded-full ${isStartingSoon ? 'bg-[#10b981] animate-ping' : 'bg-white/10'}`} />
-                        <span className={`text-[10px] font-bold flex items-center gap-1 ${isStartingSoon ? 'text-[#10b981]' : 'text-slate-400'}`}>
+                        <div className={`h-1 w-1 rounded-full flex-shrink-0 ${isStartingSoon ? 'bg-[#10b981] animate-ping' : 'bg-white/10'}`} />
+                        <span className={`text-[10px] font-bold flex items-center gap-1 whitespace-nowrap ${isStartingSoon ? 'text-[#10b981]' : 'text-slate-400'}`}>
                           <Clock size={10} /> {formatTime(match.start_time)}
                         </span>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[16px] font-black italic capitalize leading-tight tracking-tight group-hover:text-[#10b981] transition-colors">{match.home_team}</p>
-                        <p className="text-[16px] font-black italic capitalize leading-tight tracking-tight text-white/70">{match.away_team}</p>
+                        <p className="text-[16px] font-black italic leading-tight tracking-tight group-hover:text-[#10b981] transition-colors truncate">{match.home_team}</p>
+                        <p className="text-[16px] font-black italic leading-tight tracking-tight text-white/70 truncate">{match.away_team}</p>
                       </div>
                     </Link>
 
@@ -223,9 +234,9 @@ export async function getServerSideProps() {
   try {
     const { data, error } = await supabase
       .from('xmatch_flat')
-      .select('match_id, home_team, away_team, start_time, sport_id, league_id, home_odds, draw_odds, away_odds')
+      .select('match_id, home_team, away_team, start_time, sport_id, sport_key, league_id, league_name, home_odds, draw_odds, away_odds')
       .order('start_time', { ascending: true })
-      .limit(200);
+      .limit(500);
 
     if (error) throw error;
 
