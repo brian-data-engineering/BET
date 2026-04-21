@@ -234,9 +234,10 @@ export async function getServerSideProps() {
   try {
     const { data, error } = await supabase
       .from('xmatch_flat')
-      .select('match_id, home_team, away_team, start_time, sport_id, sport_key, league_id, league_name, home_odds, draw_odds, away_odds')
-      .order('start_time', { ascending: true })
-      .limit(500);
+      .select('match_id, home_team, away_team, start_time, sport_id, sport_key, league_id, league_name, tier_priority, home_odds, draw_odds, away_odds')
+      .order('tier_priority', { ascending: true })
+.order('start_time', { ascending: true })
+      .limit(1000);
 
     if (error) throw error;
 
