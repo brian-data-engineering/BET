@@ -231,9 +231,9 @@ export default function MatchDetail({ match }) {
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
 
-  // Dictionary to map IDs to readable names based on your JSON structure
+  // 1. Define IDs to exclude or include
+  // Group 1 is "Full Time Result" - we remove it from here to avoid duplication
   const MARKET_NAMES = {
-    1: "Full Time Result",
     2: "Handicap",
     8: "Double Chance",
     17: "Total Goals (Over/Under)",
@@ -259,31 +259,38 @@ export async function getServerSideProps({ params }) {
 
     const eventGroups = data.raw_json?.eventGroups || [];
     
-    // Transform the nested Betradar structure into flat rows for the frontend
-    const normalizedMarkets = eventGroups.map(group => {
-      const flatOdds = [];
-      
-      // Navigate the nested array structure: events is an array of arrays
-      if (Array.isArray(group.events)) {
-        group.events.forEach(selectionSubArray => {
-          selectionSubArray.forEach(outcome => {
-            const nameBase = SELECTION_NAMES[outcome.type] || `Type ${outcome.type}`;
-            const param = outcome.eventParams?.params?.[0] || ""; // e.g., "(2.5)"
-            
-            flatOdds.push({
-              display: `${nameBase} ${param}`.trim(),
-              value: parseFloat(outcome.cfView || outcome.cf),
-              type: outcome.type
-            });
+    // 2. Filter and Normalize
+    const normalizedMarkets = eventGroups
+      .filter(group => MARKET_NAMES[group.groupId]) // This line REMOVES Full Time Result (ID 1)
+      .map(group => {
+        const flatOdds = [];
+        const seenTypes = new Set(); // Prevents duplicate buttons in BTS/Total Goals
+        
+        if (Array.isArray(group.events)) {
+          // Use .flat() to simplify the nested array iteration
+          group.events.flat().forEach(outcome => {
+            // Deduplication logic for "Both Teams to Score" and others
+            if (!seenTypes.has(outcome.type)) {
+              seenTypes.add(outcome.type);
+              
+              const nameBase = SELECTION_NAMES[outcome.type] || `Type ${outcome.type}`;
+              const param = outcome.eventParams?.params?.[0] || ""; 
+              
+              flatOdds.push({
+                display: `${nameBase} ${param}`.trim(),
+                value: parseFloat(outcome.cfView || outcome.cf),
+                type: outcome.type
+              });
+            }
           });
-        });
-      }
+        }
 
-      return {
-        name: MARKET_NAMES[group.groupId] || `Market ${group.groupId}`,
-        odds: flatOdds
-      };
-    }).filter(m => m.odds.length > 0);
+        return {
+          name: MARKET_NAMES[group.groupId],
+          odds: flatOdds
+        };
+      })
+      .filter(m => m.odds.length > 0);
 
     return {
       props: {
