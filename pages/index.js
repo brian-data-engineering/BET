@@ -203,7 +203,7 @@ export default function Home({ initialMatches = [] }) {
 
 export async function getServerSideProps() {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('xmatch_odds_deep')
       .select(`
         match_id,
@@ -216,18 +216,31 @@ export async function getServerSideProps() {
           sport_id
         )
       `)
-      .gt('xmatch_odds.start_time', new Date().toISOString())
-      .order('xmatch_odds.start_time', { ascending: true })
-      .limit(100);
+      .order('match_id', { ascending: false }) // Temporary: remove time filter to test
+      .limit(50);
 
-    const matches = data?.map(item => ({
-      ...item.xmatch_odds,
+    if (error) {
+      console.error("Supabase Error:", error);
+      return { props: { initialMatches: [] } };
+    }
+
+    // This "Flat Map" is the most important part. 
+    // It takes the nested Supabase object and flattens it for the UI.
+    const flattenedMatches = data?.map(item => ({
       match_id: item.match_id,
-      raw_json: item.raw_json
+      raw_json: item.raw_json,
+      home_team: item.xmatch_odds?.home_team || 'Unknown',
+      away_team: item.xmatch_odds?.away_team || 'Unknown',
+      start_time: item.xmatch_odds?.start_time,
+      league_name: item.xmatch_odds?.league_name || 'General',
+      sport_id: item.xmatch_odds?.sport_id
     })) || [];
 
-    return { props: { initialMatches: matches } };
+    console.log("Matches Found:", flattenedMatches.length);
+
+    return { props: { initialMatches: flattenedMatches } };
   } catch (err) { 
+    console.error("Fetch Error:", err);
     return { props: { initialMatches: [] } }; 
   }
 }
