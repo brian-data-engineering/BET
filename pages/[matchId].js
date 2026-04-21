@@ -230,6 +230,24 @@ export default function MatchDetail({ match }) {
 
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
+
+  // Dictionary to map IDs to readable names based on your JSON structure
+  const MARKET_NAMES = {
+    1: "Full Time Result",
+    2: "Handicap",
+    8: "Double Chance",
+    17: "Total Goals (Over/Under)",
+    19: "Both Teams to Score"
+  };
+
+  const SELECTION_NAMES = {
+    1: "Home", 2: "Away", 3: "Draw",
+    4: "1X", 5: "12", 6: "X2",
+    9: "Over", 10: "Under",
+    7: "Home Handicap", 8: "Away Handicap",
+    180: "Yes", 181: "No"
+  };
+
   try {
     const { data, error } = await supabase
       .from('xmatch_flat')
@@ -239,18 +257,46 @@ export async function getServerSideProps({ params }) {
 
     if (error || !data) return { notFound: true };
 
-    const rawMarkets = data.raw_json?.markets || [];
+    const eventGroups = data.raw_json?.eventGroups || [];
+    
+    // Transform the nested Betradar structure into flat rows for the frontend
+    const normalizedMarkets = eventGroups.map(group => {
+      const flatOdds = [];
+      
+      // Navigate the nested array structure: events is an array of arrays
+      if (Array.isArray(group.events)) {
+        group.events.forEach(selectionSubArray => {
+          selectionSubArray.forEach(outcome => {
+            const nameBase = SELECTION_NAMES[outcome.type] || `Type ${outcome.type}`;
+            const param = outcome.eventParams?.params?.[0] || ""; // e.g., "(2.5)"
+            
+            flatOdds.push({
+              display: `${nameBase} ${param}`.trim(),
+              value: parseFloat(outcome.cfView || outcome.cf),
+              type: outcome.type
+            });
+          });
+        });
+      }
+
+      return {
+        name: MARKET_NAMES[group.groupId] || `Market ${group.groupId}`,
+        odds: flatOdds
+      };
+    }).filter(m => m.odds.length > 0);
 
     return {
       props: {
         match: JSON.parse(JSON.stringify({ 
           ...data, 
           id: data.match_id, 
-          deep_markets: rawMarkets 
+          start_time: data.start_time,
+          deep_markets: normalizedMarkets 
         }))
       }
     };
   } catch (err) {
+    console.error("Mapping Error:", err);
     return { notFound: true };
   }
 }
