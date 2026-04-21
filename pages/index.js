@@ -6,8 +6,9 @@ import Sidebar from '../components/Sidebar';
 import MobileFooter from '../components/MobileFooter';
 import HomeBanner from '../components/HomeBanner'; 
 import { useBets } from '../context/BetContext'; 
-import { Clock, AlertCircle, X, Trophy } from 'lucide-react';
+import { Clock, AlertCircle, X, Trophy, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { translateOutcome } from '../lib/marketTranslator';
 
 export default function Home({ initialMatches = [] }) {
   const [activeTab, setActiveTab] = useState('soccer');
@@ -25,59 +26,57 @@ export default function Home({ initialMatches = [] }) {
   }, []);
 
   const getMatchStatus = (commenceTime) => {
-    if (!commenceTime) return { isLocked: true, isStartingSoon: false };
-    const cleanTime = commenceTime.split('+')[0].replace(' ', 'T');
-    const matchDate = new Date(cleanTime);
+    if (!commenceTime) return { isLocked: false, isStartingSoon: false };
+    const matchDate = new Date(commenceTime);
     const timeDiff = matchDate.getTime() - currentTime.getTime();
-    
     return { 
-      isLocked: timeDiff <= 60000, 
-      isStartingSoon: timeDiff > 60000 && timeDiff <= 300000 
+      isLocked: timeDiff <= 0, 
+      isStartingSoon: timeDiff > 0 && timeDiff <= 600000 
     };
   };
 
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    const timeMatch = dateString.match(/(\d{2}:\d{2})/);
-    return timeMatch ? timeMatch[0] : 'TBD';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   const cleanName = (name) => name ? name.replace(/['"]+/g, '').trim() : 'TBD';
 
   const sportTabs = [
-    { id: 'soccer', name: 'Soccer', icon: '⚽' },
-    { id: 'basketball', name: 'Basketball', icon: '🏀' },
-    { id: 'tennis', name: 'Tennis', icon: '🎾' },
-    { id: 'ice-hockey', name: 'Ice Hockey', icon: '🏒' },
-    { id: 'table-tennis', name: 'Table Tennis', icon: '🏓' },
+    { id: 'soccer', name: 'Soccer', icon: '⚽', sportId: 1 },
+    { id: 'basketball', name: 'Basketball', icon: '🏀', sportId: 3 },
   ];
 
-  const toggleBet = (selection, value, match) => {
+  const toggleBet = (selectionLabel, odds, match) => {
     const { isLocked } = getMatchStatus(match.commence_time);
-    if (isLocked || !value) return;
+    if (isLocked || !odds) return;
 
-    const betId = `${match.id}-${selection}`;
+    const betId = `${match.match_id}-${selectionLabel}`;
     setSlipItems(prev => {
       if (prev.find(item => item.id === betId)) return prev.filter(item => item.id !== betId);
       if (prev.length >= 20) return prev; 
-      return [...prev.filter(item => item.matchId !== match.id), {
+      return [...prev.filter(item => item.matchId !== match.match_id), {
         id: betId,
-        matchId: match.id,
+        matchId: match.match_id,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
-        selection,
-        marketName: '1X2',
-        odds: value,
+        selection: selectionLabel,
+        marketName: 'Full Time',
+        odds: odds,
         startTime: match.commence_time 
       }];
     });
   };
 
   const displayMatches = useMemo(() => {
-    let filtered = initialMatches.filter(m => !getMatchStatus(m.commence_time).isLocked);
+    let filtered = initialMatches;
+    
+    // Filter by Sport
+    const currentSport = sportTabs.find(t => t.id === activeTab);
+    filtered = filtered.filter(m => m.sport_id === currentSport?.sportId);
+
     if (selectedLeague) {
-      filtered = filtered.filter(m => m.league_name === selectedLeague || m.display_league === selectedLeague);
-    } else {
-      filtered = filtered.filter(m => m.sport_key === activeTab);
+      filtered = filtered.filter(m => m.league_name === selectedLeague);
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -87,23 +86,26 @@ export default function Home({ initialMatches = [] }) {
       );
     }
     return filtered;
-  }, [initialMatches, selectedLeague, searchQuery, activeTab, currentTime]);
+  }, [initialMatches, selectedLeague, searchQuery, activeTab]);
 
   return (
-    <div className="min-h-screen w-full bg-[#0b0f1a] text-white flex flex-col overflow-hidden">
+    <div className="min-h-screen w-full bg-[#0b0f1a] text-white flex flex-col overflow-hidden font-sans">
       <Navbar onSearch={setSearchQuery} />
 
       <div className="flex w-full flex-1 h-[calc(100vh-64px)] overflow-hidden">
-        <aside className="hidden lg:flex w-64 border-r border-white/5 bg-[#111926] flex-col shrink-0 overflow-hidden">
+        {/* SIDEBAR */}
+        <aside className="hidden lg:flex w-64 border-r border-white/5 bg-[#111926] flex-col shrink-0">
           <Sidebar 
             onSelectLeague={(l, s) => { if(s) setActiveTab(s); setSelectedLeague(l); }} 
             onClearFilter={() => setSelectedLeague(null)} 
           />
         </aside>
 
+        {/* MAIN FEED */}
         <main className="flex-1 overflow-y-auto bg-[#0b0f1a] no-scrollbar flex flex-col relative">
           
-          <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 overflow-x-auto no-scrollbar gap-2 shrink-0">
+          {/* SPORT SELECTOR */}
+          <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 gap-2 shrink-0">
             {sportTabs.map((tab) => (
               <button 
                 key={tab.id} 
@@ -119,82 +121,86 @@ export default function Home({ initialMatches = [] }) {
             ))}
           </div>
 
-          {/* FIX: Removed max-w-4xl and centering to fill the screen gaps */}
           <div className="pb-32 lg:pb-10 flex-1 w-full">
-            <div className="w-full">
-              
-              {/* BANNER: Now stretches to touch the sidebar and betslip */}
-              <div className="mb-6 border-b border-white/5 shadow-2xl">
-                <HomeBanner />
-              </div>
+            <HomeBanner />
 
-              {/* MATCH LIST: Kept px-4 to ensure text doesn't touch the very edge of the screen */}
-              <div className="px-4">
-                {displayMatches.length > 0 ? displayMatches.map((match) => {
-                  const currentSelection = slipItems.find(item => item.matchId === match.id);
-                  const { isStartingSoon } = getMatchStatus(match.commence_time);
-                  const oddsData = [
-                    { label: '1', val: match.home_odds },
-                    { label: 'X', val: match.draw_odds },
-                    { label: '2', val: match.away_odds }
-                  ];
+            <div className="px-4 mt-6">
+              <h2 className="text-[10px] uppercase tracking-[0.2em] font-black text-[#10b981] mb-4 italic px-1">
+                Upcoming {activeTab} Matches
+              </h2>
 
-                  return (
-                    <div 
-                      key={match.id} 
-                      className={`grid grid-cols-12 gap-2 py-4 border-b border-white/5 items-center transition-colors px-1 ${isStartingSoon ? 'bg-orange-500/5' : 'hover:bg-white/[0.02]'}`}
-                    >
-                      <Link href={`/${match.id}`} className="col-span-7 flex flex-col justify-center overflow-hidden">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-[10px] font-bold text-slate-400 capitalize tracking-tight truncate">
-                            {match.display_league || match.league_name}
-                          </span>
-                          <span className={`text-[10px] font-bold flex items-center gap-0.5 whitespace-nowrap ${isStartingSoon ? 'text-orange-500 animate-pulse' : 'text-slate-500'}`}>
-                            <Clock size={10} /> {formatFixedTime(match.commence_time)}
-                            {isStartingSoon && <span className="ml-1 text-[8px] italic">Starts Soon!</span>}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <p className="text-[15px] font-black italic capitalize leading-tight truncate tracking-tight">
-                            {cleanName(match.home_team)}
-                          </p>
-                          <p className="text-[15px] font-black italic capitalize leading-tight truncate tracking-tight text-white/90">
-                            {cleanName(match.away_team)}
-                          </p>
-                        </div>
-                      </Link>
+              {displayMatches.length > 0 ? displayMatches.map((match) => {
+                const currentSelection = slipItems.find(item => item.matchId === match.match_id);
+                const { isStartingSoon, isLocked } = getMatchStatus(match.commence_time);
+                
+                // Mapping the 1X2 odds from your DB columns
+                const oddsData = [
+                  { label: '1', val: match.home_odds },
+                  { label: 'X', val: match.draw_odds },
+                  { label: '2', val: match.away_odds }
+                ];
 
-                      <div className="col-span-5 grid grid-cols-3 gap-1.5">
-                        {oddsData.map((o) => (
-                         <button
-                            key={o.label}
-                            onClick={() => toggleBet(o.label, o.val, match)}
-                            className={`h-9 px-4 rounded-full flex items-center justify-center transition-all ${
-                              currentSelection?.selection === o.label 
-                                ? 'bg-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/20' 
-                                : 'bg-[#1c2636]/60 border border-white/5 text-white active:scale-95'
-                            }`}
-                          >
-                            <span className="text-[13px] font-black tracking-tight">
-                              {o.val ? parseFloat(o.val).toFixed(2) : '—'}
-                            </span>
-                          </button>
-                        ))}
+                return (
+                  <div 
+                    key={match.match_id} 
+                    className={`grid grid-cols-12 gap-2 py-5 border-b border-white/5 items-center transition-colors px-2 ${isStartingSoon ? 'bg-[#10b981]/5' : 'hover:bg-white/[0.02]'}`}
+                  >
+                    {/* TEAM INFO */}
+                    <Link href={`/${match.match_id}`} className="col-span-7 flex flex-col justify-center overflow-hidden group">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest truncate max-w-[150px]">
+                          {match.league_name}
+                        </span>
+                        <div className={`h-1 w-1 rounded-full ${isStartingSoon ? 'bg-[#10b981] animate-ping' : 'bg-white/10'}`} />
+                        <span className={`text-[10px] font-bold flex items-center gap-1 ${isStartingSoon ? 'text-[#10b981]' : 'text-slate-400'}`}>
+                          <Clock size={10} /> {formatFixedTime(match.commence_time)}
+                        </span>
                       </div>
+                      
+                      <div className="space-y-0.5">
+                        <p className="text-[16px] font-black italic capitalize leading-tight tracking-tight group-hover:text-[#10b981] transition-colors">
+                          {cleanName(match.home_team)}
+                        </p>
+                        <p className="text-[16px] font-black italic capitalize leading-tight tracking-tight text-white/70">
+                          {cleanName(match.away_team)}
+                        </p>
+                      </div>
+                    </Link>
+
+                    {/* ODDS BUTTONS */}
+                    <div className="col-span-5 grid grid-cols-3 gap-2">
+                      {oddsData.map((o) => (
+                       <button
+                          key={o.label}
+                          disabled={isLocked}
+                          onClick={() => toggleBet(translateOutcome(o.label), o.val, match)}
+                          className={`h-11 rounded-xl flex flex-col items-center justify-center transition-all border ${
+                            currentSelection?.selection === translateOutcome(o.label)
+                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] font-bold shadow-lg shadow-[#10b981]/40 scale-105' 
+                              : 'bg-[#1c2636]/60 border-white/5 text-white hover:border-white/20 active:scale-95'
+                          } ${isLocked ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
+                        >
+                          <span className="text-[9px] font-black opacity-50 mb-0.5">{translateOutcome(o.label)}</span>
+                          <span className="text-[13px] font-black tracking-tighter">
+                            {o.val ? parseFloat(o.val).toFixed(2) : '—'}
+                          </span>
+                        </button>
+                      ))}
                     </div>
-                  );
-                }) : (
-                  <div className="py-32 text-center opacity-20 flex flex-col items-center">
-                    <AlertCircle size={48} className="mb-4 text-[#10b981]" />
-                    <p className="text-sm font-bold italic capitalize tracking-widest">No events available</p>
                   </div>
-                )}
-              </div>
+                );
+              }) : (
+                <div className="py-32 text-center opacity-20 flex flex-col items-center">
+                  <AlertCircle size={48} className="mb-4 text-[#10b981]" />
+                  <p className="text-sm font-bold italic tracking-widest uppercase">No Live Markets Found</p>
+                </div>
+              )}
             </div>
           </div>
         </main>
 
-        <aside className="hidden xl:flex w-[400px] border-l border-white/5 bg-[#111926] shrink-0 p-4">
+        {/* DESKTOP BETSLIP */}
+        <aside className="hidden xl:flex w-[380px] border-l border-white/5 bg-[#111926] shrink-0 p-4">
           <Betslip items={slipItems} setItems={setSlipItems} />
         </aside>
       </div>
@@ -203,34 +209,19 @@ export default function Home({ initialMatches = [] }) {
         itemCount={slipItems.length}
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
         onOpenSlip={() => setIsMobileSlipOpen(true)}
-        onGoHome={() => {
-          setSelectedLeague(null);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        onGoHome={() => setSelectedLeague(null)}
       />
 
-      {/* OVERLAYS */}
+      {/* MOBILE OVERLAYS */}
       {isMobileSidebarOpen && (
         <div className="fixed inset-0 z-[120] flex lg:hidden">
-          <div className="w-[280px] h-full bg-[#111926] animate-in slide-in-from-left duration-300">
+          <div className="w-[280px] h-full bg-[#111926] shadow-2xl">
              <Sidebar 
                 onSelectLeague={(l, s) => { if (s) setActiveTab(s); setSelectedLeague(l); setIsMobileSidebarOpen(false); }} 
                 onClearFilter={() => { setSelectedLeague(null); setIsMobileSidebarOpen(false); }} 
               />
           </div>
-          <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={() => setIsMobileSidebarOpen(false)} />
-        </div>
-      )}
-
-      {isMobileSlipOpen && (
-        <div className="fixed inset-0 z-[130] bg-[#0b0f1a] lg:hidden flex flex-col p-4 animate-in slide-in-from-bottom duration-300">
-          <div className="flex justify-between items-center mb-6 shrink-0">
-             <h3 className="font-black italic text-[#10b981] flex items-center gap-2 capitalize tracking-tighter text-xl"><Trophy size={22}/> Betslip</h3>
-             <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-xl text-slate-400"><X size={24}/></button>
-          </div>
-          <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
-            <Betslip items={slipItems} setItems={setSlipItems} />
-          </div>
+          <div className="flex-1 bg-black/80 backdrop-blur-sm" onClick={() => setIsMobileSidebarOpen(false)} />
         </div>
       )}
     </div>
@@ -240,11 +231,11 @@ export default function Home({ initialMatches = [] }) {
 export async function getServerSideProps() {
   try {
     const { data } = await supabase
-      .from('api_events')
+      .from('xmatch_odds')
       .select('*')
       .gt('commence_time', new Date().toISOString())
       .order('commence_time', { ascending: true })
-      .limit(1000); 
+      .limit(200); 
 
     return { props: { initialMatches: data || [] } };
   } catch (err) { 
