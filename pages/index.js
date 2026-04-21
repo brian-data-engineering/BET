@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar';
 import MobileFooter from '../components/MobileFooter';
 import HomeBanner from '../components/HomeBanner'; 
 import { useBets } from '../context/BetContext'; 
-import { Clock, AlertCircle } from 'lucide-react';
+import { Clock, AlertCircle, Terminal } from 'lucide-react'; // Added Terminal icon
 import { supabase } from '../lib/supabaseClient';
 import { extractOdd, getOutcomeName } from '../lib/marketTranslator';
 
@@ -17,6 +17,8 @@ export default function Home({ initialMatches = [] }) {
   const { slipItems, setSlipItems } = useBets(); 
   const [currentTime, setCurrentTime] = useState(new Date());
   
+  // Debug State
+  const [showDebug, setShowDebug] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
@@ -25,14 +27,13 @@ export default function Home({ initialMatches = [] }) {
     return () => clearInterval(timer);
   }, []);
 
-  // Utility to check if a match has already started
   const getMatchStatus = (startTime) => {
     if (!startTime) return { isLocked: false, isStartingSoon: false };
     const matchDate = new Date(startTime);
     const timeDiff = matchDate.getTime() - currentTime.getTime();
     return { 
       isLocked: timeDiff <= 0, 
-      isStartingSoon: timeDiff > 0 && timeDiff <= 600000 // 10 mins
+      isStartingSoon: timeDiff > 0 && timeDiff <= 600000 
     };
   };
 
@@ -70,10 +71,17 @@ export default function Home({ initialMatches = [] }) {
 
   const displayMatches = useMemo(() => {
     let filtered = initialMatches;
+    
+    // 1. Sport Filter (String conversion for safety)
     const currentSport = sportTabs.find(t => t.id === activeTab);
-    filtered = filtered.filter(m => m.sport_id === currentSport?.sportId);
+    filtered = filtered.filter(m => String(m.sport_id) === String(currentSport?.sportId));
 
-    if (selectedLeague) filtered = filtered.filter(m => m.league_name === selectedLeague);
+    // 2. League Filter
+    if (selectedLeague) {
+        filtered = filtered.filter(m => m.league_name === selectedLeague);
+    }
+
+    // 3. Search Filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(m => 
@@ -86,6 +94,28 @@ export default function Home({ initialMatches = [] }) {
   return (
     <div className="min-h-screen w-full bg-[#0b0f1a] text-white flex flex-col overflow-hidden font-sans">
       <Navbar onSearch={setSearchQuery} />
+
+      {/* DEBUG TOGGLE - Click to see data health */}
+      <button 
+        onClick={() => setShowDebug(!showDebug)}
+        className="fixed bottom-24 right-6 z-[100] bg-black/80 p-3 rounded-full border border-white/10 text-[#10b981] hover:scale-110 transition-all"
+      >
+        <Terminal size={20} />
+      </button>
+
+      {showDebug && (
+        <div className="fixed top-20 right-6 z-[100] bg-[#111926] p-4 rounded-xl border border-[#10b981]/30 shadow-2xl w-64 text-[10px] font-mono">
+          <h3 className="text-[#10b981] mb-2 font-bold uppercase tracking-widest text-[9px]">Lucra Debug HUD</h3>
+          <div className="space-y-1 text-slate-300">
+            <p>Total Props: <span className="text-white">{initialMatches.length}</span></p>
+            <p>Filtered: <span className="text-white">{displayMatches.length}</span></p>
+            <p>Active Tab: <span className="text-white">{activeTab}</span></p>
+            <p>Sport ID Target: <span className="text-white">{sportTabs.find(t => t.id === activeTab)?.sportId}</span></p>
+            <hr className="border-white/5 my-2" />
+            <p className="truncate text-slate-500">First Match ID: {initialMatches[0]?.match_id || 'N/A'}</p>
+          </div>
+        </div>
+      )}
 
       <div className="flex w-full flex-1 h-[calc(100vh-64px)] overflow-hidden">
         <aside className="hidden lg:flex w-64 border-r border-white/5 bg-[#111926] flex-col shrink-0">
@@ -123,7 +153,6 @@ export default function Home({ initialMatches = [] }) {
               {displayMatches.length > 0 ? displayMatches.map((match) => {
                 const { isStartingSoon, isLocked } = getMatchStatus(match.start_time);
                 
-                // Translated markets from deep JSON
                 const oddsData = [
                   { label: '1', type: '1', val: extractOdd(match, '1', '1') },
                   { label: 'X', type: '2', val: extractOdd(match, '1', '2') },
@@ -168,7 +197,7 @@ export default function Home({ initialMatches = [] }) {
                           >
                             <span className="text-[9px] font-black opacity-50 mb-0.5">{o.label}</span>
                             <span className="text-[13px] font-black tracking-tighter">
-                              {o.val ? o.val.toFixed(2) : '—'}
+                              {o.val ? Number(o.val).toFixed(2) : '—'}
                             </span>
                           </button>
                         );
@@ -216,16 +245,15 @@ export async function getServerSideProps() {
           sport_id
         )
       `)
-      .order('match_id', { ascending: false }) // Temporary: remove time filter to test
-      .limit(50);
+      .order('match_id', { ascending: false })
+      .limit(100);
 
     if (error) {
       console.error("Supabase Error:", error);
       return { props: { initialMatches: [] } };
     }
 
-    // This "Flat Map" is the most important part. 
-    // It takes the nested Supabase object and flattens it for the UI.
+    // MAP AND FLATTEN: Ensures the component sees 'sport_id' at the top level
     const flattenedMatches = data?.map(item => ({
       match_id: item.match_id,
       raw_json: item.raw_json,
@@ -235,8 +263,6 @@ export async function getServerSideProps() {
       league_name: item.xmatch_odds?.league_name || 'General',
       sport_id: item.xmatch_odds?.sport_id
     })) || [];
-
-    console.log("Matches Found:", flattenedMatches.length);
 
     return { props: { initialMatches: flattenedMatches } };
   } catch (err) { 
