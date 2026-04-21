@@ -150,7 +150,7 @@ export default function MatchDetail({ match }) {
                         <button 
                           key={idx}
                           disabled={isLocked}
-                          onClick={() => toggleBet('Winner', odd.display, odd.val, uniqueId)}
+                          onClick={() => toggleBet('Match Winner', odd.display, odd.val, uniqueId)}
                           className={`h-11 px-3 rounded-full flex items-center justify-between transition-all border ${
                             isSelected 
                             ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
@@ -172,14 +172,13 @@ export default function MatchDetail({ match }) {
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
                       {market.odds?.map((odd, oIdx) => {
-                        const uniqueId = `${match.id}-${market.name}-${oIdx}`;
+                        const uniqueId = `${match.id}-${market.name}-${odd.type}-${oIdx}`;
                         const isSelected = slipItems.find(item => item.id === uniqueId);
-                        const oddValue = odd.value || odd.odd_value;
                         return (
                           <button 
                             key={oIdx}
                             disabled={isLocked}
-                            onClick={() => toggleBet(market.name, odd.display, oddValue, uniqueId)}
+                            onClick={() => toggleBet(market.name, odd.display, odd.value, uniqueId)}
                             className={`flex items-center justify-between h-10 px-3 rounded-full transition-all border ${
                               isSelected 
                               ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' 
@@ -187,7 +186,7 @@ export default function MatchDetail({ match }) {
                             }`}
                           >
                             <span className="text-[9px] font-bold italic truncate pr-1 lowercase">{odd.display}</span>
-                            <span className="text-[11px] font-black italic">{oddValue?.toFixed(2) || '—'}</span>
+                            <span className="text-[11px] font-black italic">{odd.value?.toFixed(2) || '—'}</span>
                           </button>
                         );
                       })}
@@ -231,9 +230,7 @@ export default function MatchDetail({ match }) {
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
 
-  // Dictionary to map IDs to readable names based on your JSON structure
   const MARKET_NAMES = {
-    1: "Full Time Result",
     2: "Handicap",
     8: "Double Chance",
     17: "Total Goals (Over/Under)",
@@ -259,31 +256,33 @@ export async function getServerSideProps({ params }) {
 
     const eventGroups = data.raw_json?.eventGroups || [];
     
-    // Transform the nested Betradar structure into flat rows for the frontend
-    const normalizedMarkets = eventGroups.map(group => {
-      const flatOdds = [];
-      
-      // Navigate the nested array structure: events is an array of arrays
-      if (Array.isArray(group.events)) {
-        group.events.forEach(selectionSubArray => {
-          selectionSubArray.forEach(outcome => {
-            const nameBase = SELECTION_NAMES[outcome.type] || `Type ${outcome.type}`;
-            const param = outcome.eventParams?.params?.[0] || ""; // e.g., "(2.5)"
-            
-            flatOdds.push({
-              display: `${nameBase} ${param}`.trim(),
-              value: parseFloat(outcome.cfView || outcome.cf),
-              type: outcome.type
-            });
+    const normalizedMarkets = eventGroups
+      .filter(group => MARKET_NAMES[group.groupId]) // Filter out "Full Time Result" (groupId 1)
+      .map(group => {
+        const flatOdds = [];
+        const seenTypes = new Set(); // deduplicate selection types (fixes BTS extra market)
+        
+        if (Array.isArray(group.events)) {
+          group.events.flat().forEach(outcome => {
+            if (!seenTypes.has(outcome.type)) {
+              seenTypes.add(outcome.type);
+              const nameBase = SELECTION_NAMES[outcome.type] || `Type ${outcome.type}`;
+              const param = outcome.eventParams?.params?.[0] || ""; 
+              
+              flatOdds.push({
+                display: `${nameBase} ${param}`.trim(),
+                value: parseFloat(outcome.cfView || outcome.cf),
+                type: outcome.type
+              });
+            }
           });
-        });
-      }
+        }
 
-      return {
-        name: MARKET_NAMES[group.groupId] || `Market ${group.groupId}`,
-        odds: flatOdds
-      };
-    }).filter(m => m.odds.length > 0);
+        return {
+          name: MARKET_NAMES[group.groupId],
+          odds: flatOdds
+        };
+      }).filter(m => m.odds.length > 0);
 
     return {
       props: {
