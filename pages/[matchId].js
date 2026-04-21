@@ -2,9 +2,9 @@ import { useRouter } from 'next/router';
 import { useBets } from '../context/BetContext'; 
 import Navbar from '../components/Navbar';
 import Betslip from '../components/Betslip';
-import Sidebar from '../components/Sidebar'; // Added Sidebar import
+import Sidebar from '../components/Sidebar';
 import MobileFooter from '../components/MobileFooter';
-import { ChevronLeft, Clock, Shield, Lock, X, Trophy } from 'lucide-react'; // Fixed build error
+import { ChevronLeft, Shield, Lock, X, Trophy } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -22,14 +22,13 @@ export default function MatchDetail({ match }) {
   }, []);
 
   const getMatchStatus = () => {
-    const startTime = match?.commence_time;
+    const startTime = match?.start_time;
     if (!startTime) return { isLocked: true, isStartingSoon: false };
-    const cleanTime = startTime.replace('+00', '').replace('Z', '').replace(' ', 'T');
-    const matchDate = new Date(cleanTime);
+    const matchDate = new Date(startTime);
     const timeDiff = matchDate.getTime() - currentTime.getTime();
     return { 
-      isLocked: timeDiff <= 60000, 
-      isStartingSoon: timeDiff > 60000 && timeDiff <= 300000 
+      isLocked: timeDiff <= 30000, 
+      isStartingSoon: timeDiff > 30000 && timeDiff <= 300000 
     };
   };
 
@@ -38,8 +37,8 @@ export default function MatchDetail({ match }) {
 
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    const timeMatch = dateString.match(/(\d{2}:\d{2})/);
-    return timeMatch ? timeMatch[0] : 'TBD';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   if (router.isFallback || !match) {
@@ -62,7 +61,7 @@ export default function MatchDetail({ match }) {
         id: uniqueId,
         matchId: match.id,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
-        startTime: match.commence_time,
+        startTime: match.start_time,
         marketName: marketName,
         selection: selectionLabel,
         odds: value
@@ -81,18 +80,15 @@ export default function MatchDetail({ match }) {
       <Navbar />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Visible on Desktop */}
         <aside className="hidden lg:block w-64 border-r border-white/5 bg-[#111926] shrink-0 overflow-y-auto no-scrollbar">
           <Sidebar 
-            onSelectLeague={() => router.push('/')} 
+            onSelectLeague={(league) => router.push(`/?league=${league}`)} 
             onClearFilter={() => router.push('/')} 
           />
         </aside>
 
-        {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto no-scrollbar">
           <div className="max-w-[1400px] mx-auto grid grid-cols-12 gap-0 lg:gap-8 p-0 lg:p-8">
-            
             <main className="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6 pb-32">
               <div className="flex items-center justify-between px-4 lg:px-0 pt-4 lg:pt-0">
                 <div className="flex items-center gap-4">
@@ -112,7 +108,6 @@ export default function MatchDetail({ match }) {
                 )}
               </div>
 
-              {/* Hero Section */}
               <div 
                 className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[220px] flex items-center ${isLocked ? 'saturate-50' : ''}`}
                 style={{
@@ -132,7 +127,7 @@ export default function MatchDetail({ match }) {
                   <div className="flex flex-col items-center gap-2">
                     <span className="text-orange-500 text-3xl font-black italic tracking-tighter drop-shadow-md">VS</span>
                     <div className={`px-4 py-1.5 rounded-full text-[10px] font-bold italic border backdrop-blur-sm ${isStartingSoon ? 'bg-orange-500 border-orange-400 text-white animate-pulse' : 'bg-[#0b0f1a]/60 border-white/20 text-slate-200'}`}>
-                      {formatFixedTime(match.commence_time)}
+                      {formatFixedTime(match.start_time)}
                     </div>
                   </div>
                   <div className="flex-1 flex flex-col items-center text-center">
@@ -144,10 +139,9 @@ export default function MatchDetail({ match }) {
                 </div>
               </div>
 
-              {/* Odds Markets */}
               <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
                 <section>
-                  <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2">Match Winner</h3>
+                  <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-widest">Match Winner</h3>
                   <div className="grid grid-cols-3 gap-2">
                     {mainMarkets.map((odd, idx) => {
                       const uniqueId = `${match.id}-1x2-${idx}`;
@@ -164,7 +158,7 @@ export default function MatchDetail({ match }) {
                           }`}
                         >
                           <span className="text-[10px] font-bold opacity-60 lowercase">{odd.label}</span>
-                          <span className="text-xs font-black italic">{odd.val || '—'}</span>
+                          <span className="text-xs font-black italic">{odd.val?.toFixed(2) || '—'}</span>
                         </button>
                       );
                     })}
@@ -173,10 +167,10 @@ export default function MatchDetail({ match }) {
 
                 {match.deep_markets?.map((market, mIdx) => (
                   <section key={mIdx}>
-                    <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 capitalize">
+                    <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 capitalize tracking-wider">
                       {market.name?.toLowerCase()}
                     </h3>
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
                       {market.odds?.map((odd, oIdx) => {
                         const uniqueId = `${match.id}-${market.name}-${oIdx}`;
                         const isSelected = slipItems.find(item => item.id === uniqueId);
@@ -193,7 +187,7 @@ export default function MatchDetail({ match }) {
                             }`}
                           >
                             <span className="text-[9px] font-bold italic truncate pr-1 lowercase">{odd.display}</span>
-                            <span className="text-[11px] font-black italic">{oddValue || '—'}</span>
+                            <span className="text-[11px] font-black italic">{oddValue?.toFixed(2) || '—'}</span>
                           </button>
                         );
                       })}
@@ -203,9 +197,8 @@ export default function MatchDetail({ match }) {
               </div>
             </main>
 
-            {/* Right Sidebar - Betslip */}
             <aside className="hidden lg:block lg:col-span-4 xl:col-span-3">
-              <div className="sticky top-0 h-fit">
+              <div className="sticky top-8 h-fit">
                 <Betslip items={slipItems} setItems={setSlipItems} />
               </div>
             </aside>
@@ -239,25 +232,22 @@ export async function getServerSideProps({ params }) {
   const { matchId } = params;
   try {
     const { data, error } = await supabase
-      .from('api_events')
-      .select(`*, api_event_details ( markets )`)
-      .eq('id', matchId)
+      .from('xmatch_flat')
+      .select('*')
+      .eq('match_id', matchId)
       .single();
 
     if (error || !data) return { notFound: true };
 
-    const details = data.api_event_details;
-    let rawMarkets = [];
-    
-    if (Array.isArray(details) && details.length > 0) {
-      rawMarkets = details[0]?.markets?.data || details[0]?.markets || [];
-    } else if (details) {
-      rawMarkets = details.markets?.data || details.markets || [];
-    }
+    const rawMarkets = data.raw_json?.markets || [];
 
     return {
       props: {
-        match: JSON.parse(JSON.stringify({ ...data, deep_markets: rawMarkets }))
+        match: JSON.parse(JSON.stringify({ 
+          ...data, 
+          id: data.match_id, 
+          deep_markets: rawMarkets 
+        }))
       }
     };
   } catch (err) {
