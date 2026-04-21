@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { useRouter } from 'next/router';
-import { Trophy, ChevronRight, ChevronDown, FilterX, Globe, Activity, Loader2, PlayCircle, Star } from 'lucide-react';
+import { Trophy, ChevronRight, ChevronDown, FilterX, Loader2, Star } from 'lucide-react';
 
 const Sidebar = ({ onSelectLeague, onClearFilter }) => {
-  const router = useRouter();
   const [tree, setTree] = useState({});
-  const [topLeagues, setTopLeagues] = useState([]); // High priority leagues
+  const [topLeagues, setTopLeagues] = useState([]);
   const [expandedSport, setExpandedSport] = useState('soccer');
   const [expandedCountry, setExpandedCountry] = useState(null);
-  const [expandedLeague, setExpandedLeague] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const sportMapping = {
@@ -29,14 +26,12 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
     const now = new Date().toISOString();
     const allowedSports = Object.keys(sportMapping);
 
-    // 1. Fetch data from xmatch_flat (which has our tier_priority and league_name)
     const { data, error } = await supabase
       .from('xmatch_flat')
-      .select('match_id, sport_key, league_name, home_team, away_team, tier_priority, start_time')
+      .select('sport_key, league_name, tier_priority, start_time')
       .in('sport_key', allowedSports)
       .gt('start_time', now)
-      .order('tier_priority', { ascending: false, nullsFirst: false }) // Sort by priority
-      .order('league_name', { ascending: true });
+      .order('tier_priority', { ascending: false });
 
     if (data) {
       const newTree = {};
@@ -46,29 +41,23 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
       data.forEach(item => {
         const sport = item.sport_key;
         const league = (item.league_name || "Other").replace(/['"]+/g, '').trim();
-        // Since xmatch_flat might not have 'country', we'll use league prefix or 'International'
         const country = league.includes('.') ? league.split('.')[0] : "International";
-        
+
         if (/(ebasketball|esoccer|srl|electronic|cyber)/i.test(league)) return;
 
-        // Populate Popular/Top Leagues Section (Tier > 500)
+        // Popular Section (Tier >= 500)
         if (item.tier_priority >= 500 && !seenLeagues.has(league)) {
-          popular.push({ name: league, sport: sport, priority: item.tier_priority });
+          popular.push({ name: league, sport: sport });
           seenLeagues.add(league);
         }
 
-        // Build A-Z Tree
+        // Structure: Sport -> Country -> List of Leagues
         if (!newTree[sport]) newTree[sport] = {};
-        if (!newTree[sport][country]) newTree[sport][country] = {};
-        if (!newTree[sport][country][league]) newTree[sport][country][league] = [];
-        
-        newTree[sport][country][league].push({
-          id: item.match_id,
-          name: `${item.home_team} vs ${item.away_team}`.replace(/['"]+/g, '')
-        });
+        if (!newTree[sport][country]) newTree[sport][country] = new Set();
+        newTree[sport][country].add(league);
       });
 
-      setTopLeagues(popular.slice(0, 12)); // Keep top 12 popular leagues
+      setTopLeagues(popular.slice(0, 12));
       setTree(newTree);
     }
     setLoading(false);
@@ -85,19 +74,23 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
            </div>
            <span className="text-[10px] font-black uppercase tracking-widest italic text-white/90">LUCRA SPORTS</span>
         </div>
-        <button onClick={onClearFilter} className="p-2 hover:bg-white/5 rounded-lg text-slate-500 hover:text-red-400 transition-all">
+        <button 
+          onClick={onClearFilter} 
+          className="p-2 hover:bg-white/5 rounded-lg text-slate-500 hover:text-red-400 transition-all"
+          title="Clear Filters"
+        >
           <FilterX size={16} />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar pb-24">
         
-        {/* TOP LEAGUES SECTION (NEW) */}
+        {/* POPULAR LEAGUES */}
         {!loading && topLeagues.length > 0 && (
           <div className="p-2 space-y-1">
             <div className="px-3 py-2 flex items-center gap-2 text-amber-500">
               <Star size={12} fill="currentColor" />
-              <span className="text-[9px] font-black uppercase tracking-widest">Popular Leagues</span>
+              <span className="text-[9px] font-black uppercase tracking-widest">Top Events</span>
             </div>
             {topLeagues.map((league) => (
               <button
@@ -113,15 +106,15 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
           </div>
         )}
 
-        {/* A-Z SPORTS SECTION */}
+        {/* ALL SPORTS HIERARCHY */}
         <div className="px-3 py-2 text-slate-500">
-          <span className="text-[9px] font-black uppercase tracking-widest">All Sports</span>
+          <span className="text-[9px] font-black uppercase tracking-widest">A-Z Sports</span>
         </div>
 
         {loading ? (
           <div className="p-4 flex flex-col items-center justify-center opacity-20 py-20">
             <Loader2 size={24} className="animate-spin mb-2" />
-            <span className="text-[8px] font-black uppercase italic tracking-widest">Updating Feed...</span>
+            <span className="text-[8px] font-black uppercase tracking-widest">Loading...</span>
           </div>
         ) : (
           <div className="px-2 space-y-1">
@@ -158,12 +151,12 @@ const Sidebar = ({ onSelectLeague, onClearFilter }) => {
                           </button>
                           
                           {expandedCountry === country && (
-                            <div className="bg-white/[0.02] ml-2">
-                              {Object.keys(countries[country]).map(league => (
+                            <div className="bg-white/[0.02] ml-2 py-1">
+                              {[...countries[country]].map(league => (
                                 <button
                                   key={league}
                                   onClick={() => onSelectLeague(league, sportKey)}
-                                  className="w-full text-left px-4 py-2 text-[9px] text-slate-400 hover:text-[#10b981] truncate"
+                                  className="w-full text-left px-4 py-2 text-[9px] text-slate-400 hover:text-[#10b981] hover:bg-white/[0.02] transition-colors truncate uppercase font-medium"
                                 >
                                   {league}
                                 </button>
