@@ -251,7 +251,7 @@ export async function getServerSideProps({ params }) {
 
   // 2. Expanded Selection Mapping to fix the "Type ID" issues
   const SELECTION_NAMES = {
-    1: "Home", 2: "Away", 3: "Draw",
+    
     4: "1X", 5: "12", 6: "X2",
     9: "Over", 10: "Under",
     180: "Yes", 181: "No",
