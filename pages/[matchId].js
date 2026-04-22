@@ -231,23 +231,33 @@ export default function MatchDetail({ match }) {
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
 
-  // 1. Define only what we WANT to show (The Whitelist)
+  // 1. Your full expanded Market list for Lucra
   const MARKET_NAMES = {
     1: "Full Time Result",
-    2: "Handicap",
+    2: "European Handicap",
     8: "Double Chance",
-    17: "Total Goals",
-    19: "Both Teams to Score",
-    100: "Both Teams to Score", // Extra group often found in deep data
+    17: "Total Goals (O/U)",
+    19: "Asian Handicap", // Also handles BTTS in some Betradar schemas
+    62: "1st Half Result + Total",
+    99: "Individual Total Home",
+    100: "Both Teams to Score",
+    136: "Exact Goals",
+    2854: "Individual Total Away",
+    8427: "1st Half Asian Handicap",
+    8429: "2nd Half Asian Handicap",
+    8863: "Correct Score",
+    11212: "Draw No Bet"
   };
 
-  // 2. Map all possible valid outcome types
+  // 2. Expanded Selection Mapping to fix the "Type ID" issues
   const SELECTION_NAMES = {
     1: "Home", 2: "Away", 3: "Draw",
     4: "1X", 5: "12", 6: "X2",
     9: "Over", 10: "Under",
     180: "Yes", 181: "No",
-    794: "Yes", 795: "No", // The "Ghost" BTTS types fixed
+    794: "Yes", 795: "No", // Alternative BTTS IDs
+    7: "Home Handicap", 8: "Away Handicap",
+    // Add any specific ghost IDs here as you find them
   };
 
   try {
@@ -261,40 +271,37 @@ export async function getServerSideProps({ params }) {
 
     const eventGroups = data.raw_json?.eventGroups || [];
     
-    const normalizedMarkets = eventGroups
-      .map(group => {
-        // Only process groups that are in our whitelist
-        const marketName = MARKET_NAMES[group.groupId];
-        if (!marketName) return null;
+    const normalizedMarkets = eventGroups.map(group => {
+      const flatOdds = [];
+      const marketName = MARKET_NAMES[group.groupId];
 
-        const flatOdds = [];
-        
-        if (Array.isArray(group.events)) {
-          group.events.forEach(selectionSubArray => {
-            selectionSubArray.forEach(outcome => {
-              const nameBase = SELECTION_NAMES[outcome.type];
-              
-              // Only push if we have a human-readable name for this outcome
-              // This kills the "Type 11273" ghost entries
-              if (nameBase) {
-                const param = outcome.eventParams?.params?.[0] || "";
-                flatOdds.push({
-                  display: `${nameBase} ${param}`.trim(),
-                  value: parseFloat(outcome.cfView || outcome.cf),
-                  type: outcome.type
-                });
-              }
-            });
+      if (Array.isArray(group.events)) {
+        group.events.forEach(selectionSubArray => {
+          selectionSubArray.forEach(outcome => {
+            // FIX: If we know the name, use it. 
+            // If we don't, we'll try to find a name from the outcome object 
+            // or just hide it to avoid the "Ghost" ID feeling.
+            const nameBase = SELECTION_NAMES[outcome.type];
+            
+            if (nameBase) {
+              const param = outcome.eventParams?.params?.[0] || "";
+              flatOdds.push({
+                display: `${nameBase} ${param}`.trim(),
+                value: parseFloat(outcome.cfView || outcome.cf),
+                type: outcome.type
+              });
+            }
           });
-        }
+        });
+      }
 
-        return {
-          name: marketName,
-          odds: flatOdds
-        };
-      })
-      // Filter out nulls (non-whitelisted) and markets with no valid odds
-      .filter(m => m !== null && m.odds.length > 0);
+      return {
+        // If the market isn't in our list, we label it "Other" 
+        // so we can filter it out in the next step.
+        name: marketName || null,
+        odds: flatOdds
+      };
+    }).filter(m => m.name !== null && m.odds.length > 0);
 
     return {
       props: {
