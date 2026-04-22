@@ -237,7 +237,7 @@ export async function getServerSideProps({ params }) {
     2: "European Handicap",
     8: "Double Chance",
     17: "Total Goals (O/U)",
-    19: "Asian Handicap", // Also handles BTTS in some Betradar schemas
+    
     62: "1st Half Result + Total",
     99: "Individual Total Home",
     100: "Both Teams to Score",
