@@ -231,21 +231,23 @@ export default function MatchDetail({ match }) {
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
 
-  // Dictionary to map IDs to readable names based on your JSON structure
+  // 1. Define only what we WANT to show (The Whitelist)
   const MARKET_NAMES = {
     1: "Full Time Result",
     2: "Handicap",
     8: "Double Chance",
-    17: "Total Goals (Over/Under)",
-    19: "Both Teams to Score"
+    17: "Total Goals",
+    19: "Both Teams to Score",
+    100: "Both Teams to Score", // Extra group often found in deep data
   };
 
+  // 2. Map all possible valid outcome types
   const SELECTION_NAMES = {
     1: "Home", 2: "Away", 3: "Draw",
     4: "1X", 5: "12", 6: "X2",
     9: "Over", 10: "Under",
-    7: "Home Handicap", 8: "Away Handicap",
-    180: "Yes", 181: "No"
+    180: "Yes", 181: "No",
+    794: "Yes", 795: "No", // The "Ghost" BTTS types fixed
   };
 
   try {
@@ -259,31 +261,40 @@ export async function getServerSideProps({ params }) {
 
     const eventGroups = data.raw_json?.eventGroups || [];
     
-    // Transform the nested Betradar structure into flat rows for the frontend
-    const normalizedMarkets = eventGroups.map(group => {
-      const flatOdds = [];
-      
-      // Navigate the nested array structure: events is an array of arrays
-      if (Array.isArray(group.events)) {
-        group.events.forEach(selectionSubArray => {
-          selectionSubArray.forEach(outcome => {
-            const nameBase = SELECTION_NAMES[outcome.type] || `Type ${outcome.type}`;
-            const param = outcome.eventParams?.params?.[0] || ""; // e.g., "(2.5)"
-            
-            flatOdds.push({
-              display: `${nameBase} ${param}`.trim(),
-              value: parseFloat(outcome.cfView || outcome.cf),
-              type: outcome.type
+    const normalizedMarkets = eventGroups
+      .map(group => {
+        // Only process groups that are in our whitelist
+        const marketName = MARKET_NAMES[group.groupId];
+        if (!marketName) return null;
+
+        const flatOdds = [];
+        
+        if (Array.isArray(group.events)) {
+          group.events.forEach(selectionSubArray => {
+            selectionSubArray.forEach(outcome => {
+              const nameBase = SELECTION_NAMES[outcome.type];
+              
+              // Only push if we have a human-readable name for this outcome
+              // This kills the "Type 11273" ghost entries
+              if (nameBase) {
+                const param = outcome.eventParams?.params?.[0] || "";
+                flatOdds.push({
+                  display: `${nameBase} ${param}`.trim(),
+                  value: parseFloat(outcome.cfView || outcome.cf),
+                  type: outcome.type
+                });
+              }
             });
           });
-        });
-      }
+        }
 
-      return {
-        name: MARKET_NAMES[group.groupId] || `Market ${group.groupId}`,
-        odds: flatOdds
-      };
-    }).filter(m => m.odds.length > 0);
+        return {
+          name: marketName,
+          odds: flatOdds
+        };
+      })
+      // Filter out nulls (non-whitelisted) and markets with no valid odds
+      .filter(m => m !== null && m.odds.length > 0);
 
     return {
       props: {
@@ -296,7 +307,7 @@ export async function getServerSideProps({ params }) {
       }
     };
   } catch (err) {
-    console.error("Mapping Error:", err);
+    console.error("Lucra Mapping Error:", err);
     return { notFound: true };
   }
 }
