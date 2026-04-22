@@ -231,13 +231,13 @@ export default function MatchDetail({ match }) {
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
 
-  // ✅ Market names (fixed + expanded)
+  // 1. Your full expanded Market list for Lucra
   const MARKET_NAMES = {
     1: "Full Time Result",
     2: "European Handicap",
     8: "Double Chance",
     17: "Total Goals (O/U)",
-    19: "Asian Handicap",
+    19: "Asian Handicap", // Also handles BTTS in some Betradar schemas
     62: "1st Half Result + Total",
     99: "Individual Total Home",
     100: "Both Teams to Score",
@@ -249,14 +249,15 @@ export async function getServerSideProps({ params }) {
     11212: "Draw No Bet"
   };
 
-  // ✅ Known selection names
+  // 2. Expanded Selection Mapping to fix the "Type ID" issues
   const SELECTION_NAMES = {
     1: "Home", 2: "Away", 3: "Draw",
     4: "1X", 5: "12", 6: "X2",
     9: "Over", 10: "Under",
     180: "Yes", 181: "No",
-    794: "Yes", 795: "No",
-    7: "Home Handicap", 8: "Away Handicap"
+    794: "Yes", 795: "No", // Alternative BTTS IDs
+    7: "Home Handicap", 8: "Away Handicap",
+    // Add any specific ghost IDs here as you find them
   };
 
   try {
@@ -269,77 +270,49 @@ export async function getServerSideProps({ params }) {
     if (error || !data) return { notFound: true };
 
     const eventGroups = data.raw_json?.eventGroups || [];
-
+    
     const normalizedMarkets = eventGroups.map(group => {
       const flatOdds = [];
-
-      // ✅ Always give market a name (no silent drop)
-      const marketName = MARKET_NAMES[group.groupId] || `Market ${group.groupId}`;
+      const marketName = MARKET_NAMES[group.groupId];
 
       if (Array.isArray(group.events)) {
         group.events.forEach(selectionSubArray => {
           selectionSubArray.forEach(outcome => {
-
-            let nameBase = SELECTION_NAMES[outcome.type];
-
-            // 🔥 Smart fallback logic (this is the fix)
-            if (!nameBase) {
-              if (group.groupId == 8863) {
-                nameBase = "Score"; // Correct score market
-              } 
-              else if (group.groupId == 17) {
-                nameBase =
-                  outcome.type == 9 ? "Over" :
-                  outcome.type == 10 ? "Under" :
-                  null;
-              } 
-              else if (group.groupId == 100) {
-                nameBase =
-                  (outcome.type == 180 || outcome.type == 794) ? "Yes" :
-                  (outcome.type == 181 || outcome.type == 795) ? "No" :
-                  null;
-              } 
-              else {
-                // 👇 fallback instead of hiding
-                nameBase = `Option ${outcome.type}`;
-              }
+            // FIX: If we know the name, use it. 
+            // If we don't, we'll try to find a name from the outcome object 
+            // or just hide it to avoid the "Ghost" ID feeling.
+            const nameBase = SELECTION_NAMES[outcome.type];
+            
+            if (nameBase) {
+              const param = outcome.eventParams?.params?.[0] || "";
+              flatOdds.push({
+                display: `${nameBase} ${param}`.trim(),
+                value: parseFloat(outcome.cfView || outcome.cf),
+                type: outcome.type
+              });
             }
-
-            // 🚫 Skip only completely useless entries
-            if (!nameBase) return;
-
-            const param = outcome.eventParams?.params?.[0] || "";
-
-            const value = parseFloat(outcome.cfView || outcome.cf);
-            if (!value) return;
-
-            flatOdds.push({
-              display: `${nameBase} ${param}`.trim(),
-              value: value,
-              type: outcome.type
-            });
           });
         });
       }
 
       return {
-        name: marketName,
+        // If the market isn't in our list, we label it "Other" 
+        // so we can filter it out in the next step.
+        name: marketName || null,
         odds: flatOdds
       };
-
-    }).filter(m => m.odds.length > 0); // ✅ only remove empty markets
+    }).filter(m => m.name !== null && m.odds.length > 0);
 
     return {
       props: {
-        match: JSON.parse(JSON.stringify({
-          ...data,
-          id: data.match_id,
+        match: JSON.parse(JSON.stringify({ 
+          ...data, 
+          id: data.match_id, 
           start_time: data.start_time,
-          deep_markets: normalizedMarkets
+          deep_markets: normalizedMarkets 
         }))
       }
     };
-
   } catch (err) {
     console.error("Lucra Mapping Error:", err);
     return { notFound: true };
