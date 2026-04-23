@@ -37,8 +37,7 @@ export default function MatchDetail({ match }) {
 
   const formatFixedTime = (dateString) => {
     if (!dateString) return 'TBD';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   if (router.isFallback || !match) {
@@ -53,7 +52,7 @@ export default function MatchDetail({ match }) {
   }
 
   const toggleBet = (marketName, selectionLabel, value, uniqueId) => {
-    if (isLocked) return;
+    if (isLocked || !value) return;
     setSlipItems(prev => {
       if (prev.find(item => item.id === uniqueId)) return prev.filter(item => item.id !== uniqueId);
       const otherMatches = prev.filter(item => item.matchId !== match.id);
@@ -62,6 +61,9 @@ export default function MatchDetail({ match }) {
         matchId: match.id,
         matchName: `${cleanName(match.home_team)} vs ${cleanName(match.away_team)}`,
         startTime: match.start_time,
+        sport_key: match.sport_key,
+        display_league: match.league_name,
+        country: match.league_name?.split('.')?.[0]?.trim() || 'International',
         marketName: marketName,
         selection: selectionLabel,
         odds: value
@@ -82,7 +84,7 @@ export default function MatchDetail({ match }) {
       <div className="flex-1 flex overflow-hidden">
         <aside className="hidden lg:block w-64 border-r border-white/5 bg-[#111926] shrink-0 overflow-y-auto no-scrollbar">
           <Sidebar 
-            onSelectLeague={(league) => router.push(`/?league=${league}`)} 
+            onSelectLeague={() => router.push('/')} 
             onClearFilter={() => router.push('/')} 
           />
         </aside>
@@ -90,6 +92,8 @@ export default function MatchDetail({ match }) {
         <div className="flex-1 overflow-y-auto no-scrollbar">
           <div className="max-w-[1400px] mx-auto grid grid-cols-12 gap-0 lg:gap-8 p-0 lg:p-8">
             <main className="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6 pb-32">
+
+              {/* Header */}
               <div className="flex items-center justify-between px-4 lg:px-0 pt-4 lg:pt-0">
                 <div className="flex items-center gap-4">
                   <button onClick={() => router.back()} className="p-2.5 bg-[#1c2636] border border-white/5 rounded-xl">
@@ -108,13 +112,10 @@ export default function MatchDetail({ match }) {
                 )}
               </div>
 
+              {/* Hero */}
               <div 
                 className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[220px] flex items-center ${isLocked ? 'saturate-50' : ''}`}
-                style={{
-                  backgroundImage: `url('${bgImageUrl}')`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
-                }}
+                style={{ backgroundImage: `url('${bgImageUrl}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}
               >
                 <div className="absolute inset-0 bg-gradient-to-b from-[#0b0f1a]/90 via-[#0b0f1a]/40 to-[#0b0f1a]/90 z-0" />
                 <div className="w-full flex justify-around items-center px-4 relative z-10">
@@ -139,9 +140,12 @@ export default function MatchDetail({ match }) {
                 </div>
               </div>
 
+              {/* Markets */}
               <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
+
+                {/* 1X2 — always first */}
                 <section>
-                  <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 flex items-center gap-2 uppercase tracking-widest">Match Winner</h3>
+                  <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 uppercase tracking-widest">Match Winner</h3>
                   <div className="grid grid-cols-3 gap-2">
                     {mainMarkets.map((odd, idx) => {
                       const uniqueId = `${match.id}-1x2-${idx}`;
@@ -149,45 +153,45 @@ export default function MatchDetail({ match }) {
                       return (
                         <button 
                           key={idx}
-                          disabled={isLocked}
-                          onClick={() => toggleBet('Winner', odd.display, odd.val, uniqueId)}
+                          disabled={isLocked || !odd.val}
+                          onClick={() => toggleBet('Match Winner', odd.display, odd.val, uniqueId)}
                           className={`h-11 px-3 rounded-full flex items-center justify-between transition-all border ${
                             isSelected 
-                            ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
-                            : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
-                          }`}
+                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
+                              : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
+                          } ${!odd.val ? 'opacity-30 cursor-not-allowed' : ''}`}
                         >
                           <span className="text-[10px] font-bold opacity-60 lowercase">{odd.label}</span>
-                          <span className="text-xs font-black italic">{odd.val?.toFixed(2) || '—'}</span>
+                          <span className="text-xs font-black italic">{odd.val ? Number(odd.val).toFixed(2) : '—'}</span>
                         </button>
                       );
                     })}
                   </div>
                 </section>
 
+                {/* Deep markets */}
                 {match.deep_markets?.map((market, mIdx) => (
                   <section key={mIdx}>
-                    <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 capitalize tracking-wider">
-                      {market.name?.toLowerCase()}
+                    <h3 className="text-[10px] font-bold italic text-slate-500 mb-3 px-1 uppercase tracking-widest">
+                      {market.name}
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
                       {market.odds?.map((odd, oIdx) => {
-                        const uniqueId = `${match.id}-${market.name}-${oIdx}`;
+                        const uniqueId = `${match.id}-${mIdx}-${oIdx}`;
                         const isSelected = slipItems.find(item => item.id === uniqueId);
-                        const oddValue = odd.value || odd.odd_value;
                         return (
                           <button 
                             key={oIdx}
-                            disabled={isLocked}
-                            onClick={() => toggleBet(market.name, odd.display, oddValue, uniqueId)}
+                            disabled={isLocked || !odd.value}
+                            onClick={() => toggleBet(market.name, odd.display, odd.value, uniqueId)}
                             className={`flex items-center justify-between h-10 px-3 rounded-full transition-all border ${
                               isSelected 
-                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' 
-                              : 'bg-[#1c2636]/40 border-white/5 text-slate-400 active:scale-95'
+                                ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' 
+                                : 'bg-[#1c2636]/40 border-white/5 text-slate-400 active:scale-95'
                             }`}
                           >
                             <span className="text-[9px] font-bold italic truncate pr-1 lowercase">{odd.display}</span>
-                            <span className="text-[11px] font-black italic">{oddValue?.toFixed(2) || '—'}</span>
+                            <span className="text-[11px] font-black italic">{odd.value ? Number(odd.value).toFixed(2) : '—'}</span>
                           </button>
                         );
                       })}
@@ -216,8 +220,8 @@ export default function MatchDetail({ match }) {
       {isMobileSlipOpen && (
         <div className="fixed inset-0 z-[130] bg-[#0b0f1a] lg:hidden flex flex-col p-4 animate-in slide-in-from-bottom duration-300">
           <div className="flex justify-between items-center mb-6 shrink-0">
-             <h3 className="font-black italic text-[#10b981] flex items-center gap-2 text-xl"><Trophy size={22}/> Betslip</h3>
-             <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-xl text-slate-400"><X size={24}/></button>
+            <h3 className="font-black italic text-[#10b981] flex items-center gap-2 text-xl"><Trophy size={22}/> Betslip</h3>
+            <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-xl text-slate-400"><X size={24}/></button>
           </div>
           <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
             <Betslip items={slipItems} setItems={setSlipItems} />
@@ -231,34 +235,73 @@ export default function MatchDetail({ match }) {
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
 
-  // 1. Your full expanded Market list for Lucra
+  // Markets to show — Asian Handicap (19, 8427, 8429) excluded
   const MARKET_NAMES = {
-    1: "Full Time Result",
-    2: "European Handicap",
-    8: "Double Chance",
-    17: "Total Goals (O/U)",
-    
-    62: "1st Half Result + Total",
-    99: "Individual Total Home",
-    100: "Both Teams to Score",
-    136: "Exact Goals",
-    2854: "Individual Total Away",
-    8427: "1st Half Asian Handicap",
-    8429: "2nd Half Asian Handicap",
-    8863: "Correct Score",
-    11212: "Draw No Bet"
+    1:     'Match Winner',       // handled separately as mainMarkets
+    2:     'European Handicap',
+    8:     'Double Chance',
+    15:    '1st Half Total Goals',
+    17:    'Total Goals (O/U)',
+    62:    '1st Half Result + Total',
+    99:    'Home Team Total Goals',
+    100:   'Both Teams To Score',
+    136:   'Correct Score',      // extra_params encode the score e.g. ["2","1"]
+    2854:  'Away Team Total Goals',
+    8863:  'Correct Score',
+    11212: 'Draw No Bet',
   };
 
-  // 2. Expanded Selection Mapping to fix the "Type ID" issues
+  // Complete type ID → label mapping from actual DB data
+  // Excludes: 1(Home), 2(Draw), 3(Away) — handled by mainMarkets above
+  // Excludes: all Asian Handicap types (180,181,11273,11274,7778,7779,7780,7781)
   const SELECTION_NAMES = {
-    
-    4: "1X", 5: "12", 6: "X2",
-    9: "Over", 10: "Under",
-    180: "Yes", 181: "No",
-    794: "Yes", 795: "No", // Alternative BTTS IDs
-    7: "Home Handicap", 8: "Away Handicap",
-    // Add any specific ghost IDs here as you find them
+    // Double Chance (G=8)
+    4: '1X', 5: '12', 6: 'X2',
+
+    // Total Goals O/U (G=17) — line from parameter
+    9: 'Over', 10: 'Under',
+
+    // European Handicap (G=2) — line from parameter
+    7: 'Home', 8: 'Away',
+
+    // 1st Half Total (G=15) — line from parameter
+    11: 'Over', 12: 'Under',
+
+    // 1st Half Result+Total (G=62) — line from parameter
+    13: 'Over', 14: 'Under',
+
+    // Home Total Goals (G=99) — line from parameter
+    3827: 'Over', 3828: 'Under',
+
+    // Away Total Goals (G=2854) — line from parameter
+    3829: 'Over', 3830: 'Under',
+
+    // Both Teams To Score (G=100)
+    794: 'Yes', 795: 'No',
+
+    // Correct Score / Exact Goals (G=8863, G=136)
+    // extra_params = ["home_goals", "away_goals"] e.g. ["2","1"] → "2-1"
+    8617: 'Score', 8618: 'Other',
+    731:  'Score', 3786: 'Other scores',
+
+    // Draw No Bet (G=11212)
+    15770: 'Home Win',  15771: 'Away Win',
+    15772: 'Home Win',  15773: 'Home Win',  15774: 'Away Win',
+    15775: 'Away Win',  15776: 'Home Win',  15777: 'Home Win',
+    15778: 'Away Win',  15779: 'Home Win',  15780: 'Home Win',
+    15781: 'Away Win',
   };
+
+  // Draw No Bet — map type to clean label
+  const DNB_LABELS = {
+    15770: 'Home Win', 15771: 'Away Win',  15772: 'Home Win',
+    15773: 'Home Win', 15774: 'Away Win',  15775: 'Away Win',
+    15776: 'Home Win', 15777: 'Home Win',  15778: 'Away Win',
+    15779: 'Home Win', 15780: 'Home Win',  15781: 'Away Win',
+  };
+
+  // Groups to skip entirely (Asian Handicap)
+  const SKIP_GROUPS = new Set([19, 8427, 8429]);
 
   try {
     const { data, error } = await supabase
@@ -270,51 +313,76 @@ export async function getServerSideProps({ params }) {
     if (error || !data) return { notFound: true };
 
     const eventGroups = data.raw_json?.eventGroups || [];
-    
-    const normalizedMarkets = eventGroups.map(group => {
-      const flatOdds = [];
-      const marketName = MARKET_NAMES[group.groupId];
 
-      if (Array.isArray(group.events)) {
-        group.events.forEach(selectionSubArray => {
-          selectionSubArray.forEach(outcome => {
-            // FIX: If we know the name, use it. 
-            // If we don't, we'll try to find a name from the outcome object 
-            // or just hide it to avoid the "Ghost" ID feeling.
-            const nameBase = SELECTION_NAMES[outcome.type];
-            
-            if (nameBase) {
-              const param = outcome.eventParams?.params?.[0] || "";
-              flatOdds.push({
-                display: `${nameBase} ${param}`.trim(),
-                value: parseFloat(outcome.cfView || outcome.cf),
-                type: outcome.type
-              });
-            }
+    const normalizedMarkets = eventGroups
+      .filter(group => !SKIP_GROUPS.has(group.groupId) && group.groupId !== 1)
+      .map(group => {
+        const marketName = MARKET_NAMES[group.groupId];
+        if (!marketName) return null;
+
+        const flatOdds = [];
+
+        if (Array.isArray(group.events)) {
+          group.events.forEach(selectionSubArray => {
+            selectionSubArray.forEach(outcome => {
+              const typeId = outcome.type;
+              const cf = parseFloat(outcome.cfView || outcome.cf);
+              if (!cf || cf <= 1.0) return; // skip locked/invalid odds
+
+              const param = outcome.parameter ?? null;
+              const extraParams = outcome.eventParams?.params || [];
+
+              let display = '';
+
+              // Correct Score / Exact Goals — show as "2-1" from extraParams
+              if (typeId === 8617 || typeId === 731) {
+                if (extraParams.length >= 2) {
+                  display = `${extraParams[0]}-${extraParams[1]}`;
+                } else {
+                  return; // skip entries without a valid score
+                }
+              }
+              // Other scores bucket
+              else if (typeId === 8618 || typeId === 3786) {
+                display = 'Other scores';
+              }
+              // Draw No Bet — use clean label
+              else if (DNB_LABELS[typeId]) {
+                display = DNB_LABELS[typeId];
+              }
+              // Markets with a line parameter — show "Over 2.5", "Home -1"
+              else if (param !== null && SELECTION_NAMES[typeId]) {
+                display = `${SELECTION_NAMES[typeId]} ${param}`;
+              }
+              // Simple markets — just the name
+              else if (SELECTION_NAMES[typeId]) {
+                display = SELECTION_NAMES[typeId];
+              }
+              else {
+                return; // unknown type — skip
+              }
+
+              flatOdds.push({ display: display.trim(), value: cf, type: typeId });
+            });
           });
-        });
-      }
+        }
 
-      return {
-        // If the market isn't in our list, we label it "Other" 
-        // so we can filter it out in the next step.
-        name: marketName || null,
-        odds: flatOdds
-      };
-    }).filter(m => m.name !== null && m.odds.length > 0);
+        return flatOdds.length > 0 ? { name: marketName, odds: flatOdds } : null;
+      })
+      .filter(Boolean);
 
     return {
       props: {
-        match: JSON.parse(JSON.stringify({ 
-          ...data, 
-          id: data.match_id, 
-          start_time: data.start_time,
-          deep_markets: normalizedMarkets 
+        match: JSON.parse(JSON.stringify({
+          ...data,
+          id: data.match_id,
+          deep_markets: normalizedMarkets,
         }))
       }
     };
+
   } catch (err) {
-    console.error("Lucra Mapping Error:", err);
+    console.error('Match detail error:', err);
     return { notFound: true };
   }
 }
