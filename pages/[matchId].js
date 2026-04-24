@@ -26,9 +26,9 @@ export default function MatchDetail({ match }) {
     if (!startTime) return { isLocked: true, isStartingSoon: false };
     const matchDate = new Date(startTime);
     const timeDiff = matchDate.getTime() - currentTime.getTime();
-    return { 
-      isLocked: timeDiff <= 30000, 
-      isStartingSoon: timeDiff > 30000 && timeDiff <= 300000 
+    return {
+      isLocked: timeDiff <= 30000,
+      isStartingSoon: timeDiff > 30000 && timeDiff <= 300000
     };
   };
 
@@ -64,7 +64,7 @@ export default function MatchDetail({ match }) {
         sport_key: match.sport_key,
         display_league: match.league_name,
         country: match.league_name?.split('.')?.[0]?.trim() || 'International',
-        marketName: marketName,
+        marketName,
         selection: selectionLabel,
         odds: value
       }];
@@ -83,9 +83,9 @@ export default function MatchDetail({ match }) {
 
       <div className="flex-1 flex overflow-hidden">
         <aside className="hidden lg:block w-64 border-r border-white/5 bg-[#111926] shrink-0 overflow-y-auto no-scrollbar">
-          <Sidebar 
-            onSelectLeague={() => router.push('/')} 
-            onClearFilter={() => router.push('/')} 
+          <Sidebar
+            onSelectLeague={() => router.push('/')}
+            onClearFilter={() => router.push('/')}
           />
         </aside>
 
@@ -113,7 +113,7 @@ export default function MatchDetail({ match }) {
               </div>
 
               {/* Hero */}
-              <div 
+              <div
                 className={`relative overflow-hidden bg-[#111926] lg:rounded-3xl border-y lg:border border-white/5 min-h-[220px] flex items-center ${isLocked ? 'saturate-50' : ''}`}
                 style={{ backgroundImage: `url('${bgImageUrl}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}
               >
@@ -151,13 +151,13 @@ export default function MatchDetail({ match }) {
                       const uniqueId = `${match.id}-1x2-${idx}`;
                       const isSelected = slipItems.find(item => item.id === uniqueId);
                       return (
-                        <button 
+                        <button
                           key={idx}
                           disabled={isLocked || !odd.val}
                           onClick={() => toggleBet('Match Winner', odd.display, odd.val, uniqueId)}
                           className={`h-11 px-3 rounded-full flex items-center justify-between transition-all border ${
-                            isSelected 
-                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
+                            isSelected
+                              ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20'
                               : 'bg-[#1c2636]/60 border-white/5 text-slate-300 active:scale-95'
                           } ${!odd.val ? 'opacity-30 cursor-not-allowed' : ''}`}
                         >
@@ -180,13 +180,13 @@ export default function MatchDetail({ match }) {
                         const uniqueId = `${match.id}-${mIdx}-${oIdx}`;
                         const isSelected = slipItems.find(item => item.id === uniqueId);
                         return (
-                          <button 
+                          <button
                             key={oIdx}
                             disabled={isLocked || !odd.value}
                             onClick={() => toggleBet(market.name, odd.display, odd.value, uniqueId)}
                             className={`flex items-center justify-between h-10 px-3 rounded-full transition-all border ${
-                              isSelected 
-                                ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]' 
+                              isSelected
+                                ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a]'
                                 : 'bg-[#1c2636]/40 border-white/5 text-slate-400 active:scale-95'
                             }`}
                           >
@@ -210,7 +210,7 @@ export default function MatchDetail({ match }) {
         </div>
       </div>
 
-      <MobileFooter 
+      <MobileFooter
         itemCount={slipItems.length}
         onOpenSidebar={() => router.push('/')}
         onOpenSlip={() => setIsMobileSlipOpen(true)}
@@ -220,8 +220,8 @@ export default function MatchDetail({ match }) {
       {isMobileSlipOpen && (
         <div className="fixed inset-0 z-[130] bg-[#0b0f1a] lg:hidden flex flex-col p-4 animate-in slide-in-from-bottom duration-300">
           <div className="flex justify-between items-center mb-6 shrink-0">
-            <h3 className="font-black italic text-[#10b981] flex items-center gap-2 text-xl"><Trophy size={22}/> Betslip</h3>
-            <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-xl text-slate-400"><X size={24}/></button>
+            <h3 className="font-black italic text-[#10b981] flex items-center gap-2 text-xl"><Trophy size={22} /> Betslip</h3>
+            <button onClick={() => setIsMobileSlipOpen(false)} className="bg-white/5 p-2 rounded-xl text-slate-400"><X size={24} /></button>
           </div>
           <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
             <Betslip items={slipItems} setItems={setSlipItems} />
@@ -232,76 +232,107 @@ export default function MatchDetail({ match }) {
   );
 }
 
+// --- Helpers ---
+
+// Groups that are a "totals" market — only keep .5 lines
+const HALF_LINE_GROUPS = new Set([17, 15, 62, 99, 2854]);
+
+// Is this a .5 line? e.g. 0.5, 1.5, 2.5
+const isHalfLine = (param) => {
+  if (param === null || param === undefined) return true; // no line — always keep
+  const n = parseFloat(param);
+  return !isNaN(n) && (n % 1 === 0.5 || n % 1 === -0.5);
+};
+
+// Skip groups entirely
+const SKIP_GROUPS = new Set([19, 8427, 8429]); // Asian Handicap
+
+// Market labels — groups 136 and 8863 both = Correct Score, deduplicated below
+const MARKET_NAMES = {
+  2:     'European Handicap',
+  8:     'Double Chance',
+  15:    '1st Half Total Goals',
+  17:    'Total Goals (O/U)',
+  62:    '1st Half Result + Total',
+  99:    'Home Team Total Goals',
+  100:   'Both Teams To Score',
+  136:   'Correct Score',
+  2854:  'Away Team Total Goals',
+  8863:  'Correct Score',
+  11212: 'Draw No Bet',
+};
+
+// Type → base label
+const SELECTION_NAMES = {
+  4: '1X', 5: '12', 6: 'X2',           // Double Chance
+  9: 'Over', 10: 'Under',               // Total Goals, 1st Half Total
+  7: 'Home', 8: 'Away',                 // European Handicap
+  11: 'Over', 12: 'Under',              // 1st Half Total
+  13: 'Over', 14: 'Under',              // 1st Half Result+Total
+  3827: 'Over', 3828: 'Under',          // Home Total
+  3829: 'Over', 3830: 'Under',          // Away Total
+  794: 'Yes', 795: 'No',               // BTTS
+  8617: 'SCORE', 731: 'SCORE',          // Correct Score entries
+  8618: 'Other scores', 3786: 'Other scores',
+  15770: 'Home Win', 15771: 'Away Win', // Draw No Bet
+  15772: 'Home Win', 15773: 'Home Win',
+  15774: 'Away Win', 15775: 'Away Win',
+};
+
+function buildOdds(group) {
+  const seenDisplays = new Set();
+  const flatOdds = [];
+  const isTotal = HALF_LINE_GROUPS.has(group.groupId);
+  const isCorrectScore = group.groupId === 8863 || group.groupId === 136;
+
+  if (!Array.isArray(group.events)) return [];
+
+  group.events.forEach(selectionSubArray => {
+    selectionSubArray.forEach(outcome => {
+      const typeId = outcome.type;
+      const cf = parseFloat(outcome.cfView || outcome.cf);
+      if (!cf || cf <= 1.0) return;
+
+      const param = outcome.parameter ?? null;
+      const extraParams = outcome.eventParams?.params || [];
+
+      // For total markets — skip non-.5 lines
+      if (isTotal && !isHalfLine(param)) return;
+
+      let display = '';
+
+      if (isCorrectScore) {
+        // Build "2-1" from extraParams
+        if (extraParams.length >= 2) {
+          display = `${extraParams[0]}-${extraParams[1]}`;
+        } else if (typeId === 8618 || typeId === 3786) {
+          display = 'Other scores';
+        } else {
+          return;
+        }
+      } else if (param !== null && SELECTION_NAMES[typeId]) {
+        display = `${SELECTION_NAMES[typeId]} ${param}`;
+      } else if (SELECTION_NAMES[typeId]) {
+        display = SELECTION_NAMES[typeId];
+      } else {
+        return;
+      }
+
+      display = display.trim();
+
+      // Deduplicate within a market by display label
+      if (seenDisplays.has(display)) return;
+      seenDisplays.add(display);
+
+      flatOdds.push({ display, value: cf, type: typeId });
+    });
+  });
+
+  return flatOdds;
+}
+
 export async function getServerSideProps({ params }) {
   const { matchId } = params;
-
-  // Markets to show — Asian Handicap (19, 8427, 8429) excluded
-  const MARKET_NAMES = {
-    1:     'Match Winner',       // handled separately as mainMarkets
-    2:     'European Handicap',
-    8:     'Double Chance',
-    15:    '1st Half Total Goals',
-    17:    'Total Goals (O/U)',
-    62:    '1st Half Result + Total',
-    99:    'Home Team Total Goals',
-    100:   'Both Teams To Score',
-    136:   'Correct Score',      // extra_params encode the score e.g. ["2","1"]
-    2854:  'Away Team Total Goals',
-    8863:  'Correct Score',
-    11212: 'Draw No Bet',
-  };
-
-  // Complete type ID → label mapping from actual DB data
-  // Excludes: 1(Home), 2(Draw), 3(Away) — handled by mainMarkets above
-  // Excludes: all Asian Handicap types (180,181,11273,11274,7778,7779,7780,7781)
-  const SELECTION_NAMES = {
-    // Double Chance (G=8)
-    4: '1X', 5: '12', 6: 'X2',
-
-    // Total Goals O/U (G=17) — line from parameter
-    9: 'Over', 10: 'Under',
-
-    // European Handicap (G=2) — line from parameter
-    7: 'Home', 8: 'Away',
-
-    // 1st Half Total (G=15) — line from parameter
-    11: 'Over', 12: 'Under',
-
-    // 1st Half Result+Total (G=62) — line from parameter
-    13: 'Over', 14: 'Under',
-
-    // Home Total Goals (G=99) — line from parameter
-    3827: 'Over', 3828: 'Under',
-
-    // Away Total Goals (G=2854) — line from parameter
-    3829: 'Over', 3830: 'Under',
-
-    // Both Teams To Score (G=100)
-    794: 'Yes', 795: 'No',
-
-    // Correct Score / Exact Goals (G=8863, G=136)
-    // extra_params = ["home_goals", "away_goals"] e.g. ["2","1"] → "2-1"
-    8617: 'Score', 8618: 'Other',
-    731:  'Score', 3786: 'Other scores',
-
-    // Draw No Bet (G=11212)
-    15770: 'Home Win',  15771: 'Away Win',
-    15772: 'Home Win',  15773: 'Home Win',  15774: 'Away Win',
-    15775: 'Away Win',  15776: 'Home Win',  15777: 'Home Win',
-    15778: 'Away Win',  15779: 'Home Win',  15780: 'Home Win',
-    15781: 'Away Win',
-  };
-
-  // Draw No Bet — map type to clean label
-  const DNB_LABELS = {
-    15770: 'Home Win', 15771: 'Away Win',  15772: 'Home Win',
-    15773: 'Home Win', 15774: 'Away Win',  15775: 'Away Win',
-    15776: 'Home Win', 15777: 'Home Win',  15778: 'Away Win',
-    15779: 'Home Win', 15780: 'Home Win',  15781: 'Away Win',
-  };
-
-  // Groups to skip entirely (Asian Handicap)
-  const SKIP_GROUPS = new Set([19, 8427, 8429]);
 
   try {
     const { data, error } = await supabase
@@ -314,60 +345,23 @@ export async function getServerSideProps({ params }) {
 
     const eventGroups = data.raw_json?.eventGroups || [];
 
+    // Track which market names we've already added — prevents Correct Score duplication
+    const seenMarketNames = new Set();
+
     const normalizedMarkets = eventGroups
       .filter(group => !SKIP_GROUPS.has(group.groupId) && group.groupId !== 1)
       .map(group => {
         const marketName = MARKET_NAMES[group.groupId];
         if (!marketName) return null;
 
-        const flatOdds = [];
+        // Skip duplicate market names (e.g. second Correct Score group)
+        if (seenMarketNames.has(marketName)) return null;
 
-        if (Array.isArray(group.events)) {
-          group.events.forEach(selectionSubArray => {
-            selectionSubArray.forEach(outcome => {
-              const typeId = outcome.type;
-              const cf = parseFloat(outcome.cfView || outcome.cf);
-              if (!cf || cf <= 1.0) return; // skip locked/invalid odds
+        const odds = buildOdds(group);
+        if (odds.length === 0) return null;
 
-              const param = outcome.parameter ?? null;
-              const extraParams = outcome.eventParams?.params || [];
-
-              let display = '';
-
-              // Correct Score / Exact Goals — show as "2-1" from extraParams
-              if (typeId === 8617 || typeId === 731) {
-                if (extraParams.length >= 2) {
-                  display = `${extraParams[0]}-${extraParams[1]}`;
-                } else {
-                  return; // skip entries without a valid score
-                }
-              }
-              // Other scores bucket
-              else if (typeId === 8618 || typeId === 3786) {
-                display = 'Other scores';
-              }
-              // Draw No Bet — use clean label
-              else if (DNB_LABELS[typeId]) {
-                display = DNB_LABELS[typeId];
-              }
-              // Markets with a line parameter — show "Over 2.5", "Home -1"
-              else if (param !== null && SELECTION_NAMES[typeId]) {
-                display = `${SELECTION_NAMES[typeId]} ${param}`;
-              }
-              // Simple markets — just the name
-              else if (SELECTION_NAMES[typeId]) {
-                display = SELECTION_NAMES[typeId];
-              }
-              else {
-                return; // unknown type — skip
-              }
-
-              flatOdds.push({ display: display.trim(), value: cf, type: typeId });
-            });
-          });
-        }
-
-        return flatOdds.length > 0 ? { name: marketName, odds: flatOdds } : null;
+        seenMarketNames.add(marketName);
+        return { name: marketName, odds };
       })
       .filter(Boolean);
 
