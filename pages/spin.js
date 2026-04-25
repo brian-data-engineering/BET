@@ -1,120 +1,124 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSpinLogic } from '../lib/useSpinLogic';
 import WheelEngine from '../components/spin/WheelEngine';
 import StatsGrid from '../components/spin/StatsGrid';
-import SectorsDisplay from '../components/spin/SectorsDisplay';
+
+// ── Replace these two URLs with your imgbb links ──────────────────────────────
+const LOGO_ROYAL_SPIN = 'https://i.ibb.co/tfP23Bn/Royal-Spin.png'; // e.g. https://i.ibb.co/xxx/royal-spin.png
+const LOGO_BRAND      = 'https://i.ibb.co/67wb7Zm1/download.png';   // e.g. https://i.ibb.co/yyy/mbogi.png
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function SpinPage() {
   const { currentDraw, history, loading } = useSpinLogic();
-  const [timeLeft, setTimeLeft] = useState(0);
+  const [timeLeft,   setTimeLeft]   = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
 
+  // Countdown timer
   useEffect(() => {
     if (!currentDraw?.ends_at || currentDraw?.status === 'closed') {
       setTimeLeft(0);
       return;
     }
-    const timer = setInterval(() => {
-      const end = new Date(currentDraw.ends_at).getTime();
-      const now = new Date().getTime();
-      const diff = Math.max(0, Math.floor((end - now) / 1000));
+    const tick = () => {
+      const diff = Math.max(0, Math.floor((new Date(currentDraw.ends_at) - Date.now()) / 1000));
       setTimeLeft(diff);
-      if (diff === 0) clearInterval(timer);
-    }, 1000);
-    return () => clearInterval(timer);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [currentDraw?.ends_at, currentDraw?.status]);
 
+  // Trigger spin
   useEffect(() => {
-    if (currentDraw?.winning_number !== null && currentDraw?.status === 'closed') {
+    if (currentDraw?.winning_number !== null && currentDraw?.winning_number !== undefined && currentDraw?.status === 'closed') {
       setIsSpinning(true);
     }
   }, [currentDraw?.winning_number, currentDraw?.status]);
 
+  const mm = String(Math.floor(timeLeft / 60)).padStart(1, '0');
+  const ss = String(timeLeft % 60).padStart(2, '0');
+
   if (loading) return (
     <div className="h-screen bg-black flex items-center justify-center">
-      <div className="text-yellow-500 text-xl font-black animate-pulse tracking-widest">INITIALIZING LUCRA...</div>
+      <span className="text-yellow-500 text-xl font-black animate-pulse tracking-widest">INITIALIZING LUCRA...</span>
     </div>
   );
 
   return (
-    <div 
-      className="min-h-screen p-4 font-sans text-white bg-cover bg-center bg-fixed"
-      style={{ backgroundImage: `url('https://i.ibb.co/fV6QLvwP/wood-texture-planks-vertical-patterns-dark-brown-design-background-vector.jpg')` }}
+    <div
+      className="min-h-screen w-full flex overflow-hidden"
+      style={{
+        backgroundImage: `url('https://i.ibb.co/fV6QLvwP/wood-texture-planks-vertical-patterns-dark-brown-design-background-vector.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        fontFamily: "'Barlow Condensed', sans-serif",
+      }}
     >
-      {/* HEADER SECTION */}
-      <div className="max-w-[1600px] mx-auto bg-black/70 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/10 flex justify-between items-center shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="bg-gradient-to-br from-yellow-400 to-yellow-700 p-3 rounded-xl shadow-[0_0_15px_rgba(234,179,8,0.4)]">
-             <span className="text-black font-black text-2xl italic tracking-tighter">LUCRA</span>
-          </div>
-          <div>
-            <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">Royal <span className="text-yellow-500">Spin</span></h1>
-            <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase mt-1">Draw ID: #{currentDraw?.id || '---'}</p>
-          </div>
+
+      {/* ── LEFT SIDEBAR ─────────────────────────────────────────── */}
+      <div className="w-[180px] shrink-0 flex flex-col items-center gap-6 py-8 px-4">
+
+        {/* Royal Spin Logo — swap src with your imgbb link */}
+        <div className="w-full flex justify-center">
+          <img
+            src={LOGO_ROYAL_SPIN}
+            alt="Royal Spin"
+            className="w-28 h-auto drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]"
+          />
         </div>
 
-        <div className="text-right">
-          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1">Time Remaining</span>
-          <span className={`text-5xl font-mono font-black tabular-nums ${timeLeft < 15 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-            {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-          </span>
+        {/* Draw ID */}
+        <div className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-center backdrop-blur-sm">
+          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Draw ID</p>
+          <p className="text-yellow-400 font-black text-xl tracking-tight">
+            # {currentDraw?.id || '---'}
+          </p>
+        </div>
+
+        {/* Bets Close In */}
+        <div className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-center backdrop-blur-sm">
+          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Bets Close In</p>
+          <p className={`font-black text-2xl tabular-nums tracking-tight ${timeLeft < 15 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
+            {mm}:{ss}
+          </p>
+        </div>
+
+        {/* Brand Logo — swap src with your imgbb link */}
+        <div className="mt-auto w-full flex justify-center">
+          <img
+            src={LOGO_BRAND}
+            alt="Brand"
+            className="w-24 h-auto drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]"
+          />
         </div>
       </div>
 
-      {/* MAIN DASHBOARD */}
-      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* LEFT COLUMN: SECTORS & RECENT */}
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-black/80 backdrop-blur-sm rounded-2xl p-5 border border-white/5 shadow-xl">
-            <SectorsDisplay history={history} />
-          </div>
-          
-          <div className="bg-black/80 backdrop-blur-sm rounded-2xl p-5 border border-white/5 shadow-xl">
-            <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4">Last 10 Results</h3>
-            <div className="grid grid-cols-5 gap-3">
-              {history.slice(0, 10).map((h, i) => (
-                <div key={i} className={`aspect-square rounded-full flex items-center justify-center font-black text-sm border-2 shadow-lg transition-transform hover:scale-110 ${
-                  h.color === 'red' ? 'bg-red-600 border-red-400' : 
-                  h.color === 'black' ? 'bg-zinc-900 border-zinc-700' : 'bg-green-600 border-green-400'
-                }`}>
-                  {h.num}
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* ── CENTER: WHEEL ────────────────────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center py-6">
+        <div className="relative">
+          {/* Ambient glow */}
+          <div
+            className="absolute -inset-16 rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse, rgba(212,160,12,0.08) 0%, transparent 70%)' }}
+          />
+          <WheelEngine
+            winningNumber={currentDraw?.winning_number}
+            onSpinComplete={() => setIsSpinning(false)}
+          />
         </div>
-
-        {/* CENTER COLUMN: THE WHEEL ENGINE */}
-        <div className="lg:col-span-6 flex flex-col items-center justify-center py-4">
-          <div className="relative group">
-            {/* Ambient Glow behind the wheel */}
-            <div className="absolute -inset-20 bg-yellow-500/5 rounded-full blur-[100px] pointer-events-none"></div>
-            
-            <WheelEngine 
-              winningNumber={currentDraw?.winning_number} 
-              onSpinComplete={() => setIsSpinning(false)} 
-            />
-            
-            {isSpinning && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
-                 <div className="bg-black/90 px-8 py-3 rounded-full border-2 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.4)]">
-                    <span className="text-yellow-500 font-black tracking-widest text-lg animate-pulse">SPINNING...</span>
-                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: 200 ROUNDS GRID */}
-        <div className="lg:col-span-3">
-          <div className="bg-black/80 backdrop-blur-sm rounded-2xl p-5 border border-white/5 shadow-xl max-h-[80vh] overflow-y-auto custom-scrollbar">
-             <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4 text-center">200 Rounds Frequency</h3>
-             <StatsGrid history={history} />
-          </div>
-        </div>
-
       </div>
+
+      {/* ── RIGHT SIDEBAR: STATS ─────────────────────────────────── */}
+      <div className="w-[340px] shrink-0 flex flex-col py-4 pr-4 pl-2 overflow-y-auto">
+        <div className="bg-black/75 border border-white/8 rounded-2xl p-4 backdrop-blur-sm flex-1 overflow-y-auto custom-scrollbar">
+          <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em] mb-4 text-center">
+            200 Rounds Frequency
+          </h2>
+          <StatsGrid history={history} />
+        </div>
+      </div>
+
     </div>
   );
 }
