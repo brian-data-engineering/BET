@@ -1,26 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSpinLogic } from '../lib/useSpinLogic';
 import WheelEngine from '../components/spin/WheelEngine';
 import StatsGrid from '../components/spin/StatsGrid';
 
-// ── Replace these two URLs with your imgbb links ──────────────────────────────
-const LOGO_ROYAL_SPIN = 'https://i.ibb.co/tfP23Bn/Royal-Spin.png'; // e.g. https://i.ibb.co/xxx/royal-spin.png
-const LOGO_BRAND      = 'https://i.ibb.co/67wb7Zm1/download.png';   // e.g. https://i.ibb.co/yyy/mbogi.png
-// ─────────────────────────────────────────────────────────────────────────────
+const LOGO_ROYAL_SPIN = 'https://i.ibb.co/tfP23Bn/Royal-Spin.png';
+const LOGO_BRAND      = 'https://i.ibb.co/67wb7Zm1/download.png';
 
 export default function SpinPage() {
   const { currentDraw, history, loading } = useSpinLogic();
-  const [timeLeft,   setTimeLeft]   = useState(0);
-  const [isSpinning, setIsSpinning] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [showWinner, setShowWinner] = useState(false);
+  const [localWinningNumber, setLocalWinningNumber] = useState(null);
 
-  // Countdown timer
+  // 1. Precise Countdown Timer
   useEffect(() => {
     if (!currentDraw?.ends_at || currentDraw?.status === 'closed') {
       setTimeLeft(0);
       return;
     }
     const tick = () => {
-      const diff = Math.max(0, Math.floor((new Date(currentDraw.ends_at) - Date.now()) / 1000));
+      const now = Date.now();
+      const end = new Date(currentDraw.ends_at).getTime();
+      const diff = Math.max(0, Math.floor((end - now) / 1000));
       setTimeLeft(diff);
     };
     tick();
@@ -28,25 +29,32 @@ export default function SpinPage() {
     return () => clearInterval(id);
   }, [currentDraw?.ends_at, currentDraw?.status]);
 
-  // Trigger spin
+  // 2. Trigger Logic: Only spin when status is 'closed' and number is fresh
   useEffect(() => {
-    if (currentDraw?.winning_number !== null && currentDraw?.winning_number !== undefined && currentDraw?.status === 'closed') {
-      setIsSpinning(true);
+    const winNum = currentDraw?.winning_number;
+    if (winNum !== null && winNum !== undefined && currentDraw?.status === 'closed') {
+      setLocalWinningNumber(winNum);
+      setShowWinner(false); // Reset overlay for new spin
     }
   }, [currentDraw?.winning_number, currentDraw?.status]);
+
+  const handleSpinComplete = useCallback(() => {
+    setShowWinner(true);
+    // Optional: add a sound effect trigger here
+  }, []);
 
   const mm = String(Math.floor(timeLeft / 60)).padStart(1, '0');
   const ss = String(timeLeft % 60).padStart(2, '0');
 
   if (loading) return (
     <div className="h-screen bg-black flex items-center justify-center">
-      <span className="text-yellow-500 text-xl font-black animate-pulse tracking-widest">INITIALIZING LUCRA...</span>
+      <span className="text-yellow-500 text-xl font-black animate-pulse tracking-[0.3em]">INITIALIZING LUCRA...</span>
     </div>
   );
 
   return (
     <div
-      className="min-h-screen w-full flex overflow-hidden"
+      className="min-h-screen w-full flex overflow-hidden select-none"
       style={{
         backgroundImage: `url('https://i.ibb.co/fV6QLvwP/wood-texture-planks-vertical-patterns-dark-brown-design-background-vector.jpg')`,
         backgroundSize: 'cover',
@@ -55,70 +63,64 @@ export default function SpinPage() {
         fontFamily: "'Barlow Condensed', sans-serif",
       }}
     >
-
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────── */}
-      <div className="w-[180px] shrink-0 flex flex-col items-center gap-6 py-8 px-4">
-
-        {/* Royal Spin Logo — swap src with your imgbb link */}
-        <div className="w-full flex justify-center">
-          <img
-            src={LOGO_ROYAL_SPIN}
-            alt="Royal Spin"
-            className="w-28 h-auto drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]"
-          />
+      <div className="w-[180px] shrink-0 flex flex-col items-center gap-6 py-8 px-4 bg-black/20 backdrop-blur-md border-r border-white/5">
+        <div className="w-full flex justify-center mb-4">
+          <img src={LOGO_ROYAL_SPIN} alt="Royal Spin" className="w-28 h-auto drop-shadow-2xl" />
         </div>
 
-        {/* Draw ID */}
-        <div className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-center backdrop-blur-sm">
+        <div className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-center">
           <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Draw ID</p>
-          <p className="text-yellow-400 font-black text-xl tracking-tight">
-            # {currentDraw?.id || '---'}
-          </p>
+          <p className="text-yellow-400 font-black text-xl italic"># {currentDraw?.id || '---'}</p>
         </div>
 
-        {/* Bets Close In */}
-        <div className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-center backdrop-blur-sm">
+        <div className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-center">
           <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Bets Close In</p>
-          <p className={`font-black text-2xl tabular-nums tracking-tight ${timeLeft < 15 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
+          <p className={`font-black text-3xl tabular-nums ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
             {mm}:{ss}
           </p>
         </div>
 
-        {/* Brand Logo — swap src with your imgbb link */}
-        <div className="mt-auto w-full flex justify-center">
-          <img
-            src={LOGO_BRAND}
-            alt="Brand"
-            className="w-24 h-auto drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]"
-          />
+        <div className="mt-auto w-full flex justify-center opacity-70 hover:opacity-100 transition-opacity">
+          <img src={LOGO_BRAND} alt="Brand" className="w-20 h-auto" />
         </div>
       </div>
 
-      {/* ── CENTER: WHEEL ────────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center py-6">
+      {/* ── CENTER: THE WHEEL ────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col items-center justify-center relative">
+        
+        {/* Winner Announcement Overlay */}
+        {showWinner && (
+          <div className="absolute top-20 z-50 animate-bounce">
+            <div className="bg-yellow-500 text-black px-8 py-2 rounded-full font-black text-4xl shadow-[0_0_30px_#fbbf24]">
+              WINNER: {localWinningNumber}
+            </div>
+          </div>
+        )}
+
         <div className="relative">
-          {/* Ambient glow */}
           <div
-            className="absolute -inset-16 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse, rgba(212,160,12,0.08) 0%, transparent 70%)' }}
+            className="absolute -inset-24 rounded-full pointer-events-none opacity-50"
+            style={{ background: 'radial-gradient(circle, rgba(212,160,12,0.15) 0%, transparent 70%)' }}
           />
           <WheelEngine
-            winningNumber={currentDraw?.winning_number}
-            onSpinComplete={() => setIsSpinning(false)}
+            winningNumber={localWinningNumber}
+            onSpinComplete={handleSpinComplete}
           />
         </div>
       </div>
 
       {/* ── RIGHT SIDEBAR: STATS ─────────────────────────────────── */}
-      <div className="w-[340px] shrink-0 flex flex-col py-4 pr-4 pl-2 overflow-y-auto">
-        <div className="bg-black/75 border border-white/8 rounded-2xl p-4 backdrop-blur-sm flex-1 overflow-y-auto custom-scrollbar">
-          <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em] mb-4 text-center">
-            200 Rounds Frequency
+      <div className="w-[360px] shrink-0 flex flex-col py-6 pr-6 pl-2">
+        <div className="bg-black/80 border border-white/10 rounded-3xl p-5 backdrop-blur-xl flex-1 shadow-2xl overflow-hidden flex flex-col">
+          <h2 className="text-[11px] font-black text-yellow-500/50 uppercase tracking-[0.3em] mb-6 text-center border-b border-white/5 pb-4">
+            Last 200 Rounds Frequency
           </h2>
-          <StatsGrid history={history} />
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+            <StatsGrid history={history} />
+          </div>
         </div>
       </div>
-
     </div>
   );
 }
