@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSpinLogic } from '../lib/useSpinLogic';
 import WheelEngine from '../components/spin/WheelEngine';
 import StatsGrid from '../components/spin/StatsGrid';
@@ -8,37 +8,42 @@ export default function SpinPage() {
   const { currentDraw, history } = useSpinLogic();
   const [timeLeft, setTimeLeft] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [lastProcessedDraw, setLastProcessedDraw] = useState(null);
 
-  // 1. The Countdown Timer Logic
+  // 1. Unified Timer Logic
   useEffect(() => {
     if (!currentDraw?.ends_at) return;
 
-    const timer = setInterval(() => {
+    const calculateTime = () => {
       const end = new Date(currentDraw.ends_at).getTime();
       const now = new Date().getTime();
-      const diff = Math.max(0, Math.floor((end - now) / 1000));
-      
-      setTimeLeft(diff);
+      return Math.max(0, Math.floor((end - now) / 1000));
+    };
 
-      // If time hits 0, the backend should be updating to 'locked' or 'spinning'
+    // Set initial time immediately
+    setTimeLeft(calculateTime());
+
+    const timer = setInterval(() => {
+      const diff = calculateTime();
+      setTimeLeft(diff);
       if (diff === 0) clearInterval(timer);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentDraw]);
+  }, [currentDraw?.ends_at]);
 
-  // 2. Handle what happens when the wheel finishes its rotation
+  // 2. Spin Trigger Logic
+  // Only trigger if draw ID changes AND there is a winning number
+  useEffect(() => {
+    if (currentDraw?.winning_number !== null && currentDraw?.id !== lastProcessedDraw) {
+      setIsSpinning(true);
+      setLastProcessedDraw(currentDraw.id);
+    }
+  }, [currentDraw?.winning_number, currentDraw?.id, lastProcessedDraw]);
+
   const handleSpinComplete = () => {
     setIsSpinning(false);
-    // You could trigger a 'Winner' toast or sound effect here
   };
-
-  // 3. Detect when the database provides a winning number
-  useEffect(() => {
-    if (currentDraw?.winning_number !== null) {
-      setIsSpinning(true);
-    }
-  }, [currentDraw?.winning_number]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -46,32 +51,54 @@ export default function SpinPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4 font-sans">
-      {/* Header Info */}
-      <div className="flex justify-between items-center mb-6 bg-black p-4 rounded-lg border border-gray-700">
-        <div>
-          <h1 className="text-xl font-bold text-yellow-500">LUCRA SPIN</h1>
-          <p className="text-xs text-gray-400">DRAW ID: #{currentDraw?.id || '---'}</p>
-        </div>
-        <div className="text-center">
-          <p className="text-xs uppercase text-gray-400">Next Draw In</p>
-          <p className={`text-3xl font-mono ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-green-500'}`}>
-            {formatTime(timeLeft)}
-          </p>
-        </div>
-      </div>
+  // Optimization: Only slice history when it actually changes
+  const recentHistory = useMemo(() => history.slice(0, 10), [history]);
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT: Stats & Sectors */}
-        <div className="space-y-6">
+  return (
+    <div className="min-h-screen bg-[#0f1115] text-white p-4 font-sans selection:bg-yellow-500/30">
+      {/* Top Navigation / Dashboard Header */}
+      <header className="flex flex-col md:flex-row justify-between items-center mb-8 bg-[#1a1d23] p-5 rounded-2xl border border-white/5 shadow-2xl">
+        <div className="flex items-center gap-4 mb-4 md:mb-0">
+          <div className="h-12 w-12 bg-yellow-500 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+            <span className="text-black font-black text-2xl">L</span>
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tighter text-white">LUCRA <span className="text-yellow-500">SPIN</span></h1>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+              <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Draw ID: {currentDraw?.id || 'CONNECTING...'}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-1">Status</p>
+            <p className="text-sm font-bold uppercase text-yellow-500">{currentDraw?.status || 'Waiting'}</p>
+          </div>
+          <div className="h-12 w-[1px] bg-white/10 hidden md:block"></div>
+          <div className="text-center min-w-[120px]">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-1">Next Spin</p>
+            <p className={`text-3xl font-mono font-black ${timeLeft < 15 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+              {formatTime(timeLeft)}
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Statistics Column */}
+        <div className="lg:col-span-3 space-y-6">
           <SectorsDisplay history={history} />
-          <div className="bg-gray-800 p-4 rounded-lg">
-            <h3 className="text-sm font-bold mb-2">LAST 10 ROUNDS</h3>
-            <div className="flex gap-2">
-              {history.slice(0, 10).map((h, i) => (
-                <div key={i} className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border ${
-                  h.color === 'red' ? 'bg-red-600' : h.color === 'black' ? 'bg-gray-900' : 'bg-green-600'
+          
+          <div className="bg-[#1a1d23] p-5 rounded-2xl border border-white/5">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4">Latest Results</h3>
+            <div className="grid grid-cols-5 gap-3">
+              {recentHistory.map((h, i) => (
+                <div key={i} className={`aspect-square rounded-full flex items-center justify-center text-sm font-black shadow-lg border-2 ${
+                  h.color === 'red' ? 'bg-red-600 border-red-400' : 
+                  h.color === 'black' ? 'bg-zinc-900 border-zinc-700' : 
+                  'bg-green-600 border-green-400'
                 }`}>
                   {h.num}
                 </div>
@@ -80,25 +107,40 @@ export default function SpinPage() {
           </div>
         </div>
 
-        {/* CENTER: The Wheel */}
-        <div className="flex flex-col items-center justify-center bg-black/50 rounded-3xl p-8 border border-white/10">
-          <WheelEngine 
-            winningNumber={currentDraw?.winning_number} 
-            onSpinComplete={handleSpinComplete} 
-          />
+        {/* Live Wheel Arena */}
+        <div className="lg:col-span-6 flex flex-col items-center justify-center relative bg-gradient-to-b from-[#1a1d23] to-[#0f1115] rounded-[40px] p-10 border border-white/5 shadow-inner">
+          <div className="relative">
+            <WheelEngine 
+              winningNumber={currentDraw?.winning_number} 
+              onSpinComplete={handleSpinComplete} 
+            />
+            
+            {/* Center Overlay when results hit */}
+            {!isSpinning && currentDraw?.winning_number !== null && (
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                  <div className="bg-yellow-500 text-black text-4xl font-black h-20 w-20 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(234,179,8,0.5)] border-4 border-white animate-scale-in">
+                    {currentDraw.winning_number}
+                  </div>
+               </div>
+            )}
+          </div>
+
           {isSpinning && (
-            <div className="mt-4 text-yellow-500 font-bold text-xl animate-bounce">
-              SPINNING...
+            <div className="mt-8 flex items-center gap-3 bg-yellow-500/10 px-6 py-2 rounded-full border border-yellow-500/20">
+              <div className="h-2 w-2 bg-yellow-500 rounded-full animate-ping"></div>
+              <span className="text-yellow-500 font-black uppercase tracking-widest text-sm">Wheel Spinning</span>
             </div>
           )}
         </div>
 
-        {/* RIGHT: The 1-36 Stats Grid */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold px-2">NUMBER FREQUENCY (LAST 200)</h3>
-          <StatsGrid history={history} />
+        {/* Global Stats Grid */}
+        <div className="lg:col-span-3">
+          <div className="bg-[#1a1d23] p-5 rounded-2xl border border-white/5 h-full">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4 text-center">200 Rounds Frequency</h3>
+            <StatsGrid history={history} />
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
