@@ -83,10 +83,7 @@ export default function MatchDetail({ match }) {
 
       <div className="flex-1 flex overflow-hidden">
         <aside className="hidden lg:block w-64 border-r border-white/5 bg-[#111926] shrink-0 overflow-y-auto no-scrollbar">
-          <Sidebar
-            onSelectLeague={() => router.push('/')}
-            onClearFilter={() => router.push('/')}
-          />
+          <Sidebar onSelectLeague={() => router.push('/')} onClearFilter={() => router.push('/')} />
         </aside>
 
         <div className="flex-1 overflow-y-auto no-scrollbar">
@@ -143,7 +140,7 @@ export default function MatchDetail({ match }) {
               {/* Markets */}
               <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
 
-                {/* 1X2 — always first */}
+                {/* 1X2 */}
                 <section>
                   <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 uppercase tracking-widest">Match Winner</h3>
                   <div className="grid grid-cols-3 gap-2">
@@ -232,22 +229,21 @@ export default function MatchDetail({ match }) {
   );
 }
 
-// --- Helpers ---
+// ─── Server-side helpers ──────────────────────────────────────────────
 
-// Groups that are a "totals" market — only keep .5 lines
+// Skip Asian Handicap groups entirely
+const SKIP_GROUPS = new Set([19, 8427, 8429]);
+
+// Total markets — only show .5 lines
 const HALF_LINE_GROUPS = new Set([17, 15, 62, 99, 2854]);
 
-// Is this a .5 line? e.g. 0.5, 1.5, 2.5
-const isHalfLine = (param) => {
-  if (param === null || param === undefined) return true; // no line — always keep
-  const n = parseFloat(param);
-  return !isNaN(n) && (n % 1 === 0.5 || n % 1 === -0.5);
+const isHalfLine = (p) => {
+  if (p === null || p === undefined) return true;
+  const n = parseFloat(p);
+  return !isNaN(n) && Math.abs(n % 1) === 0.5;
 };
 
-// Skip groups entirely
-const SKIP_GROUPS = new Set([19, 8427, 8429]); // Asian Handicap
-
-// Market labels — groups 136 and 8863 both = Correct Score, deduplicated below
+// Market name labels
 const MARKET_NAMES = {
   2:     'European Handicap',
   8:     'Double Chance',
@@ -262,71 +258,79 @@ const MARKET_NAMES = {
   11212: 'Draw No Bet',
 };
 
-// Type → base label
-const SELECTION_NAMES = {
-  4: '1X', 5: '12', 6: 'X2',           // Double Chance
-  9: 'Over', 10: 'Under',               // Total Goals, 1st Half Total
-  7: 'Home', 8: 'Away',                 // European Handicap
-  11: 'Over', 12: 'Under',              // 1st Half Total
-  13: 'Over', 14: 'Under',              // 1st Half Result+Total
-  3827: 'Over', 3828: 'Under',          // Home Total
-  3829: 'Over', 3830: 'Under',          // Away Total
-  794: 'Yes', 795: 'No',               // BTTS
-  8617: 'SCORE', 731: 'SCORE',          // Correct Score entries
-  8618: 'Other scores', 3786: 'Other scores',
-  15770: 'Home Win', 15771: 'Away Win', // Draw No Bet
+// Type ID → base label (compact format uses T key)
+const TYPE_LABELS = {
+  4: '1X', 5: '12', 6: 'X2',       // Double Chance
+  7: 'Home', 8: 'Away',             // European Handicap
+  9: 'Over', 10: 'Under',           // Total Goals
+  11: 'Over', 12: 'Under',          // 1st Half Total
+  13: 'Over', 14: 'Under',          // 1st Half Result+Total
+  794: 'Yes', 795: 'No',            // BTTS
+  3827: 'Over', 3828: 'Under',      // Home Total
+  3829: 'Over', 3830: 'Under',      // Away Total
+  15770: 'Home Win', 15771: 'Away Win',
   15772: 'Home Win', 15773: 'Home Win',
   15774: 'Away Win', 15775: 'Away Win',
+  // Correct Score — handled via P value decoding
+  731: 'SCORE', 8617: 'SCORE',
+  3786: 'Other scores', 8618: 'Other scores',
 };
 
+/**
+ * Decode 1xbet correct score P value:
+ * Integer = home goals, decimal .00X = away goals
+ * e.g. 3.002 → "3-2", 0.003 → "0-3", null → "0-0"
+ */
+function decodeCorrectScore(p) {
+  if (p === null || p === undefined) return '0-0';
+  const home = Math.floor(p);
+  const away = Math.round((p - home) * 1000);
+  return `${home}-${away}`;
+}
+
 function buildOdds(group) {
+  const G = group.G;
+  const isTotal = HALF_LINE_GROUPS.has(G);
+  const isScore = G === 136 || G === 8863;
   const seenDisplays = new Set();
   const flatOdds = [];
-  const isTotal = HALF_LINE_GROUPS.has(group.groupId);
-  const isCorrectScore = group.groupId === 8863 || group.groupId === 136;
 
-  if (!Array.isArray(group.events)) return [];
+  for (const outcomeList of (group.E || [])) {
+    for (const e of outcomeList) {
+      const T = e.T;
+      const C = parseFloat(e.C);
+      const P = e.P ?? null;
 
-  group.events.forEach(selectionSubArray => {
-    selectionSubArray.forEach(outcome => {
-      const typeId = outcome.type;
-      const cf = parseFloat(outcome.cfView || outcome.cf);
-      if (!cf || cf <= 1.0) return;
+      if (!C || C <= 1.0) continue;
 
-      const param = outcome.parameter ?? null;
-      const extraParams = outcome.eventParams?.params || [];
-
-      // For total markets — skip non-.5 lines
-      if (isTotal && !isHalfLine(param)) return;
+      // Skip non-.5 lines on total markets
+      if (isTotal && !isHalfLine(P)) continue;
 
       let display = '';
 
-      if (isCorrectScore) {
-        // Build "2-1" from extraParams
-        if (extraParams.length >= 2) {
-          display = `${extraParams[0]}-${extraParams[1]}`;
-        } else if (typeId === 8618 || typeId === 3786) {
+      if (isScore) {
+        if (T === 3786 || T === 8618) {
           display = 'Other scores';
+        } else if (T === 731 || T === 8617) {
+          display = decodeCorrectScore(P);
         } else {
-          return;
+          continue;
         }
-      } else if (param !== null && SELECTION_NAMES[typeId]) {
-        display = `${SELECTION_NAMES[typeId]} ${param}`;
-      } else if (SELECTION_NAMES[typeId]) {
-        display = SELECTION_NAMES[typeId];
+      } else if (P !== null && TYPE_LABELS[T]) {
+        display = `${TYPE_LABELS[T]} ${P}`;
+      } else if (TYPE_LABELS[T]) {
+        display = TYPE_LABELS[T];
       } else {
-        return;
+        continue; // unknown type
       }
 
       display = display.trim();
-
-      // Deduplicate within a market by display label
-      if (seenDisplays.has(display)) return;
+      if (seenDisplays.has(display)) continue;
       seenDisplays.add(display);
 
-      flatOdds.push({ display, value: cf, type: typeId });
-    });
-  });
+      flatOdds.push({ display, value: C, type: T });
+    }
+  }
 
   return flatOdds;
 }
@@ -343,21 +347,21 @@ export async function getServerSideProps({ params }) {
 
     if (error || !data) return { notFound: true };
 
-    const eventGroups = data.raw_json?.eventGroups || [];
+    // New compact format uses 'groups' key with G/GS/E structure
+    const groups = data.raw_json?.groups || [];
 
-    // Track which market names we've already added — prevents Correct Score duplication
     const seenMarketNames = new Set();
 
-    const normalizedMarkets = eventGroups
-      .filter(group => !SKIP_GROUPS.has(group.groupId) && group.groupId !== 1)
-      .map(group => {
-        const marketName = MARKET_NAMES[group.groupId];
+    const normalizedMarkets = groups
+      .filter(g => !SKIP_GROUPS.has(g.G) && g.G !== 1)
+      .map(g => {
+        const marketName = MARKET_NAMES[g.G];
         if (!marketName) return null;
 
-        // Skip duplicate market names (e.g. second Correct Score group)
+        // Deduplicate markets by name (e.g. Correct Score appears in G=136 and G=8863)
         if (seenMarketNames.has(marketName)) return null;
 
-        const odds = buildOdds(group);
+        const odds = buildOdds(g);
         if (odds.length === 0) return null;
 
         seenMarketNames.add(marketName);
