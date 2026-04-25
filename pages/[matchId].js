@@ -140,7 +140,7 @@ export default function MatchDetail({ match }) {
               {/* Markets */}
               <div className={`px-4 lg:px-0 space-y-8 ${isLocked ? 'opacity-60 grayscale-[0.3]' : ''}`}>
 
-                {/* 1X2 */}
+                {/* 1X2 always first */}
                 <section>
                   <h3 className="text-[10px] font-bold italic text-slate-500 mb-4 uppercase tracking-widest">Match Winner</h3>
                   <div className="grid grid-cols-3 gap-2">
@@ -231,55 +231,67 @@ export default function MatchDetail({ match }) {
 
 // ─── Server-side helpers ──────────────────────────────────────────────
 
-// Skip Asian Handicap groups entirely
-const SKIP_GROUPS = new Set([19, 8427, 8429]);
-
-// Total markets — only show .5 lines
-const HALF_LINE_GROUPS = new Set([17, 15, 62, 99, 2854]);
-
+// Only .5 lines for total markets
+const HALF_LINE_GROUPS = new Set([17, 15, 62]);
 const isHalfLine = (p) => {
   if (p === null || p === undefined) return true;
   const n = parseFloat(p);
   return !isNaN(n) && Math.abs(n % 1) === 0.5;
 };
 
-// Market name labels
+// Market names — exactly from notes
 const MARKET_NAMES = {
-  2:     'European Handicap',
-  8:     'Double Chance',
-  15:    '1st Half Total Goals',
-  17:    'Total Goals (O/U)',
-  62:    '1st Half Result + Total',
-  99:    'Home Team Total Goals',
-  100:   'Both Teams To Score',
-  136:   'Correct Score',
-  2854:  'Away Team Total Goals',
-  8863:  'Correct Score',
-  11212: 'Draw No Bet',
+  2:   'European Handicap',
+  8:   'Double Chance',
+  15:  'Home Team Total Goals',
+  17:  'Total Goals (O/U)',
+  19:  'Both Teams To Score',
+  62:  'Away Team Total Goals',
+  136: 'Correct Score',
+  275: 'Victory Margin',
 };
 
-// Type ID → base label (compact format uses T key)
+// Type labels — exactly from notes
 const TYPE_LABELS = {
-  4: '1X', 5: '12', 6: 'X2',       // Double Chance
-  7: 'Home', 8: 'Away',             // European Handicap
-  9: 'Over', 10: 'Under',           // Total Goals
-  11: 'Over', 12: 'Under',          // 1st Half Total
-  13: 'Over', 14: 'Under',          // 1st Half Result+Total
-  794: 'Yes', 795: 'No',            // BTTS
-  3827: 'Over', 3828: 'Under',      // Home Total
-  3829: 'Over', 3830: 'Under',      // Away Total
-  15770: 'Home Win', 15771: 'Away Win',
-  15772: 'Home Win', 15773: 'Home Win',
-  15774: 'Away Win', 15775: 'Away Win',
-  // Correct Score — handled via P value decoding
-  731: 'SCORE', 8617: 'SCORE',
-  3786: 'Other scores', 8618: 'Other scores',
+  // Double Chance (G=8)
+  4: '1X', 5: '12', 6: '2X',
+
+  // European Handicap (G=2)
+  7: 'Home', 8: 'Away',
+
+  // Total Goals O/U (G=17)
+  9: 'Over', 10: 'Under',
+
+  // Home Team Total Goals (G=15)
+  11: 'Over', 12: 'Under',
+
+  // Away Team Total Goals (G=62)
+  13: 'Over', 14: 'Under',
+
+  // Both Teams To Score (G=19)
+  180:   'Yes',
+  181:   'No',
+  11273: 'Both Score 2+ Yes',
+  11274: 'Both Score 2+ No',
+
+  // Victory Margin (G=275)
+  4850: 'Yes',   // Any team wins by P goals
+  4851: 'No',    // Any team wins by P goals
+  4918: '3+ Yes',
+  4919: '3+ No',
+
+  // Correct Score (G=136)
+  731:  'SCORE',
+  3786: 'Other scores',
 };
 
 /**
- * Decode 1xbet correct score P value:
+ * Decode 1xbet correct score P value encoding from notes:
  * Integer = home goals, decimal .00X = away goals
- * e.g. 3.002 → "3-2", 0.003 → "0-3", null → "0-0"
+ * P=null   → "0-0"
+ * P=2.001  → "2-1"
+ * P=0.003  → "0-3"
+ * P=1.001  → "1-1"
  */
 function decodeCorrectScore(p) {
   if (p === null || p === undefined) return '0-0';
@@ -288,10 +300,28 @@ function decodeCorrectScore(p) {
   return `${home}-${away}`;
 }
 
+/**
+ * Build Victory Margin display label from T and P:
+ * T=4850 + P=1 → "Win by 1"
+ * T=4850 + P=2 → "Win by 2"
+ * T=4918 + P=3 → "Win by 3+"
+ * T=4851 → "Not win by P"
+ */
+function buildVictoryMarginDisplay(T, P) {
+  const margin = P !== null ? P : '?';
+  if (T === 4850) return `Win by ${margin}`;
+  if (T === 4851) return `Not win by ${margin}`;
+  if (T === 4918) return `Win by ${margin}+`;
+  if (T === 4919) return `Not win by ${margin}+`;
+  return null;
+}
+
 function buildOdds(group) {
   const G = group.G;
   const isTotal = HALF_LINE_GROUPS.has(G);
-  const isScore = G === 136 || G === 8863;
+  const isScore = G === 136;
+  const isVictory = G === 275;
+  const isBTTS = G === 19;
   const seenDisplays = new Set();
   const flatOdds = [];
 
@@ -303,25 +333,40 @@ function buildOdds(group) {
 
       if (!C || C <= 1.0) continue;
 
-      // Skip non-.5 lines on total markets
+      // Only .5 lines for total markets
       if (isTotal && !isHalfLine(P)) continue;
 
       let display = '';
 
       if (isScore) {
-        if (T === 3786 || T === 8618) {
+        // Correct Score: decode P value per notes
+        if (T === 3786) {
           display = 'Other scores';
-        } else if (T === 731 || T === 8617) {
+        } else if (T === 731) {
           display = decodeCorrectScore(P);
         } else {
           continue;
         }
+      } else if (isVictory) {
+        // Victory Margin: build label from T + P
+        const label = buildVictoryMarginDisplay(T, P);
+        if (!label) continue;
+        display = label;
+      } else if (isBTTS) {
+        // BTTS: T=180/181 simple Yes/No, T=11273/11274 with 2+ threshold
+        if (TYPE_LABELS[T]) {
+          display = TYPE_LABELS[T];
+        } else {
+          continue;
+        }
       } else if (P !== null && TYPE_LABELS[T]) {
+        // Markets with line: "Over 2.5", "Home -1"
         display = `${TYPE_LABELS[T]} ${P}`;
       } else if (TYPE_LABELS[T]) {
+        // Simple markets: "1X", "12", "2X"
         display = TYPE_LABELS[T];
       } else {
-        continue; // unknown type
+        continue;
       }
 
       display = display.trim();
@@ -347,24 +392,18 @@ export async function getServerSideProps({ params }) {
 
     if (error || !data) return { notFound: true };
 
-    // New compact format uses 'groups' key with G/GS/E structure
+    // Read compact format: raw_json.groups with G/GS/E structure
     const groups = data.raw_json?.groups || [];
 
-    const seenMarketNames = new Set();
-
     const normalizedMarkets = groups
-      .filter(g => !SKIP_GROUPS.has(g.G) && g.G !== 1)
+      .filter(g => g.G !== 1) // skip 1X2 — handled by mainMarkets
       .map(g => {
         const marketName = MARKET_NAMES[g.G];
         if (!marketName) return null;
 
-        // Deduplicate markets by name (e.g. Correct Score appears in G=136 and G=8863)
-        if (seenMarketNames.has(marketName)) return null;
-
         const odds = buildOdds(g);
         if (odds.length === 0) return null;
 
-        seenMarketNames.add(marketName);
         return { name: marketName, odds };
       })
       .filter(Boolean);
