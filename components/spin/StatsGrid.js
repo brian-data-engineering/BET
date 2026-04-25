@@ -1,32 +1,30 @@
-import React from 'react';
-
 const StatsGrid = ({ history }) => {
-  // Count frequency of each number in the last 200 rounds
   const counts = history.reduce((acc, curr) => {
     acc[curr.num] = (acc[curr.num] || 0) + 1;
     return acc;
   }, {});
 
-  const renderCell = (num) => {
-    const frequency = counts[num] || 0;
-    // Simple logic: if frequency > average, make it "hot" (yellow)
-    const isHot = frequency > (history.length / 37) + 1;
-
-    return (
-      <div key={num} className={`border p-2 text-center text-xs flex flex-col ${isHot ? 'bg-yellow-600' : 'bg-gray-900 text-white'}`}>
-        <span className="font-bold">{num}</span>
-        <span className="text-[10px] opacity-70">{frequency}</span>
-      </div>
-    );
+  const getNumColor = (n) => {
+    const reds = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+    if (n === 0) return 'bg-green-600 border-green-400';
+    return reds.includes(n) ? 'bg-red-600 border-red-400' : 'bg-zinc-900 border-zinc-700';
   };
 
   return (
-    <div className="grid grid-cols-12 gap-1 bg-black p-2 rounded">
-      {/* Zero is special */}
-      <div className="col-span-12 bg-green-700 text-center py-1 text-white border border-white">0</div>
-      {Array.from({ length: 36 }, (_, i) => renderCell(i + 1))}
+    <div className="grid grid-cols-3 gap-2">
+      {/* Special 0 Row */}
+      <div className={`col-span-3 p-2 rounded-lg border-2 text-center flex flex-col ${getNumColor(0)}`}>
+        <span className="font-bold text-lg">0</span>
+        <span className="text-[10px] font-mono opacity-80">{counts[0] || 0} hits</span>
+      </div>
+      {/* 1-36 Numbers */}
+      {Array.from({ length: 36 }, (_, i) => i + 1).map(num => (
+        <div key={num} className={`p-2 rounded-lg border-2 text-center flex flex-col ${getNumColor(num)}`}>
+           <span className="font-bold">{num}</span>
+           <span className="text-[9px] font-mono opacity-80">{counts[num] || 0}</span>
+        </div>
+      ))}
     </div>
   );
 };
-
 export default StatsGrid;
