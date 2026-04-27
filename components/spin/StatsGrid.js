@@ -17,94 +17,143 @@ function numBg(n) {
 }
 
 export default function StatsGrid({ history = [] }) {
+  const normalizedHistory = useMemo(
+    () => history.map((h) => (typeof h === 'object' ? h.num : h)).filter((n) => n !== undefined && n !== null),
+    [history]
+  );
+
   const counts = useMemo(() => {
     const c = {};
     for (let i = 0; i <= 36; i++) c[i] = 0;
-    history.forEach(h => { 
-      const num = typeof h === 'object' ? h.num : h;
+    normalizedHistory.forEach((num) => {
       if (num !== undefined && c[num] !== undefined) c[num]++; 
     });
     return c;
-  }, [history]);
+  }, [normalizedHistory]);
 
-  const maxCount = useMemo(() => Math.max(...Object.values(counts), 1), [counts]);
-
-  const getFilteredCount = (condition) => history.filter(h => condition(typeof h === 'object' ? h.num : h)).length;
-
-  const rows = Array.from({ length: 12 }, (_, i) => ({ a: i + 1, b: i + 13, c: i + 25 }));
-  const redTotal = getFilteredCount(n => REDS.has(n));
-  const blackTotal = getFilteredCount(n => n !== 0 && !REDS.has(n));
-
-  // Style constants for extreme density
-  const sectionHeader = "text-[9px] font-black uppercase tracking-[0.2em] text-yellow-500/40 mb-2 flex justify-between items-center border-b border-white/5 pb-1";
-  const rowBox = "flex items-center justify-between bg-black/30 rounded-sm px-1.5 py-1 border border-white/5";
+  const getFilteredCount = (condition) => normalizedHistory.filter(condition).length;
+  const rows = Array.from({ length: 12 }, (_, i) => [i + 1, i + 13, i + 25]);
+  const lineGroups = [
+    ['LN1', getFilteredCount((n) => n >= 1 && n <= 34 && (n - 1) % 3 === 0)],
+    ['LN2', getFilteredCount((n) => n >= 2 && n <= 35 && (n - 2) % 3 === 0)],
+    ['LN3', getFilteredCount((n) => n >= 3 && n <= 36 && n % 3 === 0)],
+  ];
+  const dozenGroups = [
+    ['1-12', getFilteredCount((n) => n >= 1 && n <= 12)],
+    ['2-12', getFilteredCount((n) => n >= 13 && n <= 24)],
+    ['3-12', getFilteredCount((n) => n >= 25 && n <= 36)],
+  ];
+  const halfGroups = [
+    ['1-18', getFilteredCount((n) => n >= 1 && n <= 18)],
+    ['2-18', getFilteredCount((n) => n >= 19 && n <= 36)],
+    ['ODD', getFilteredCount((n) => n > 0 && n % 2 !== 0)],
+    ['EVEN', getFilteredCount((n) => n > 0 && n % 2 === 0)],
+  ];
+  const redTotal = getFilteredCount((n) => REDS.has(n));
+  const blackTotal = getFilteredCount((n) => n !== 0 && !REDS.has(n));
+  const sectionTitle = 'mb-1 flex items-end justify-between';
+  const tableWrap = 'overflow-hidden rounded border-2 border-white';
+  const cellBase = 'border border-[#4f4c4c] px-2 py-1 text-center font-bold text-white';
+  const labelCell = `${cellBase} bg-[#787878] text-left`;
+  const valueCell = `${cellBase} bg-[#353535]`;
+  const sectorRows = [['A', 'B', 'C'], ['D', 'E', 'F']];
 
   return (
-    <div className="h-full flex flex-col justify-between text-white select-none space-y-4">
-      
-      {/* ── 1. NUMBERS FREQUENCY (THE CORE) ── */}
-      <section className="flex-none">
-        <div className={sectionHeader}>
-          <span>Statistics</span>
-          <span className="text-[7px] text-gray-600">LAST 200</span>
+    <div className="space-y-4 text-white">
+      <section>
+        <div className={sectionTitle}>
+          <div className="text-base font-bold">STATISTICS</div>
+          <div className="text-xs text-zinc-300">last 200 Rounds</div>
         </div>
-        <div className="grid grid-cols-3 gap-x-1 gap-y-[2px]">
-          {rows.map(({ a, b, c }) => (
-            [a, b, c].map(num => (
-              <div key={num} className="flex items-center justify-between bg-white/[0.03] px-1 py-[1px] rounded-sm">
-                <span className={`w-5 h-5 flex items-center justify-center rounded-sm text-[9px] font-black ${numBg(num)}`}>
-                  {num}
-                </span>
-                <span className={`text-[10px] font-mono ${counts[num] >= maxCount * 0.8 ? 'text-yellow-400 font-bold' : 'text-gray-400'}`}>
-                  {counts[num]}
-                </span>
-              </div>
-            ))
-          ))}
-        </div>
-        {/* Zero & Colors - Inline to save space */}
-        <div className="grid grid-cols-3 gap-1 mt-1">
-          <div className="flex items-center justify-between bg-white/[0.03] px-1 py-[1px] rounded-sm">
-            <span className="w-5 h-5 flex items-center justify-center rounded-sm text-[9px] font-black bg-[#166534]">0</span>
-            <span className="text-[10px] font-mono text-gray-400">{counts[0]}</span>
-          </div>
-          <div className="bg-red-900/20 border border-red-900/40 rounded-sm flex items-center justify-center text-[8px] font-black text-red-500">R: {redTotal}</div>
-          <div className="bg-zinc-800/40 border border-white/5 rounded-sm flex items-center justify-center text-[8px] font-black text-gray-400">B: {blackTotal}</div>
-        </div>
-      </section>
-
-      {/* ── 2. GROUPS (COMPACT GRID) ── */}
-      <section className="flex-none">
-        <div className={sectionHeader}><span>Markets</span></div>
-        <div className="grid grid-cols-5 gap-1">
-          {[
-            ['1-12', getFilteredCount(n => n >= 1 && n <= 12)],
-            ['13-24', getFilteredCount(n => n >= 13 && n <= 24)],
-            ['25-36', getFilteredCount(n => n >= 25 && n <= 36)],
-            ['ODD', getFilteredCount(n => n > 0 && n % 2 !== 0)],
-            ['EVEN', getFilteredCount(n => n > 0 && n % 2 === 0)]
-          ].map(([label, val]) => (
-            <div key={label} className="flex flex-col items-center bg-black/40 rounded-sm py-1 border border-white/5">
-              <span className="text-[7px] font-bold text-gray-500">{label}</span>
-              <span className="text-[10px] font-mono font-black text-yellow-500/80">{val}</span>
-            </div>
-          ))}
+        <div className={tableWrap}>
+          <table className="w-full table-fixed border-collapse text-sm">
+            <tbody>
+              {rows.map(([a, b, c]) => (
+                <tr key={a}>
+                  {[a, b, c].map((num) => (
+                    <React.Fragment key={num}>
+                      <td className={`${cellBase} ${numBg(num)}`}>{num}</td>
+                      <td className={valueCell}>{counts[num]}</td>
+                    </React.Fragment>
+                  ))}
+                </tr>
+              ))}
+              <tr>
+                <td className={`${cellBase} bg-[#1d952d]`}>0</td>
+                <td className={valueCell}>{counts[0]}</td>
+                <td className={`${cellBase} bg-[#8c1117]`}>Red</td>
+                <td className={valueCell}>{redTotal}</td>
+                <td className={`${cellBase} bg-[#1d1c1a]`}>Black</td>
+                <td className={valueCell}>{blackTotal}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
-      {/* ── 3. SECTORS (ULTRA COMPACT) ── */}
-      <section className="flex-none">
-        <div className={sectionHeader}><span>Sectors</span></div>
-        <div className="grid grid-cols-6 gap-1">
-          {Object.entries(SECTORS).map(([letter, nums]) => (
-            <div key={letter} className="flex flex-col items-center bg-gradient-to-b from-zinc-800/50 to-black/50 border border-white/5 rounded-sm py-1">
-              <span className="text-[10px] font-black text-yellow-500 leading-none mb-1">{letter}</span>
-              <span className="text-[9px] font-mono text-white leading-none">{getFilteredCount(n => nums.includes(n))}</span>
-            </div>
-          ))}
+      <section>
+        <div className={sectionTitle}>
+          <div className="text-base font-bold">GROUPS</div>
+          <div className="text-xs text-zinc-300">last 200 Rounds</div>
+        </div>
+        <div className={tableWrap}>
+          <table className="w-full table-fixed border-collapse text-sm">
+            <tbody>
+              <tr>
+                {lineGroups.map(([label, value]) => (
+                  <React.Fragment key={label}>
+                    <td className={labelCell}>{label}</td>
+                    <td className={valueCell}>{value}</td>
+                  </React.Fragment>
+                ))}
+              </tr>
+              <tr>
+                {dozenGroups.map(([label, value]) => (
+                  <React.Fragment key={label}>
+                    <td className={labelCell}>{label}</td>
+                    <td className={valueCell}>{value}</td>
+                  </React.Fragment>
+                ))}
+              </tr>
+              <tr>
+                <td className={`${labelCell} text-center`} colSpan={2}>1-18</td>
+                <td className={valueCell}>{halfGroups[0][1]}</td>
+                <td className={`${labelCell} text-center`} colSpan={2}>2-18</td>
+                <td className={valueCell}>{halfGroups[1][1]}</td>
+              </tr>
+              <tr>
+                <td className={`${labelCell} text-center`} colSpan={2}>ODD</td>
+                <td className={valueCell}>{halfGroups[2][1]}</td>
+                <td className={`${labelCell} text-center`} colSpan={2}>EVEN</td>
+                <td className={valueCell}>{halfGroups[3][1]}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
+      <section>
+        <div className={sectionTitle}>
+          <div className="text-base font-bold">SECTORS</div>
+          <div className="text-xs text-zinc-300">last 200 Rounds</div>
+        </div>
+        <div className={tableWrap}>
+          <table className="w-full table-fixed border-collapse text-sm">
+            <tbody>
+              {sectorRows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((label, labelIndex) => (
+                    <React.Fragment key={label}>
+                      <td className={`${cellBase} ${labelIndex % 2 === rowIndex % 2 ? 'bg-[#a47338]' : 'bg-[#694d1b]'}`}>{label}</td>
+                      <td className={valueCell}>{getFilteredCount((n) => SECTORS[label].includes(n))}</td>
+                    </React.Fragment>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
