@@ -267,58 +267,53 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
   // spinKey === null + winningNumber exists  → position wheel, no spin (page load/return)
   // spinKey !== null + new key              → spin to number (live result)
   // spinKey === null + winningNumber null   → reset (new open round)
+ // ── THE FIX: respond to both spinKey AND winningNumber changes ────────────
   useEffect(() => {
     const st = stateRef.current;
 
-    // New open round — full reset
+    // 1. New open round or reset — clear everything
     if (!spinKey && (winningNumber === null || winningNumber === undefined)) {
-      st.pendingKey  = null;
-      st.displayNum  = null;
-      st.spinning    = false;
-      st.spinStart   = null;
-      st.angle       = 0;
+      st.pendingKey = null;
+      st.displayNum = null;
+      st.spinning = false;
+      st.spinStart = null;
+      st.angle = 0;
       setIsSpinning(false);
       return;
     }
 
-    // winningNumber exists but no spinKey — position without spinning
-    // This fires when: (a) page loads with already-closed draw, (b) data arrives after mount
-    if (!spinKey && winningNumber !== null && winningNumber !== undefined) {
-      if (!st.spinning) {
-        st.angle      = rotationForNumber(winningNumber);
-        st.displayNum = Number(winningNumber);
-        st.pendingKey = null;
+    // 2. LIVE SPIN TRIGGER (Prioritize this above all)
+    // If we have a spinKey and we haven't processed THIS specific key yet, START SPINNING
+    if (spinKey && st.pendingKey !== spinKey && winningNumber !== null && winningNumber !== undefined) {
+      const idx = WHEEL_NUMBERS.indexOf(Number(winningNumber));
+      if (idx !== -1) {
+        const targetAngle = idx * SEG + SEG / 2;
+        const offset = (2 * Math.PI - targetAngle) % (2 * Math.PI);
+        
+        // Add 8 full rotations for a dramatic spin
+        const totalSpin = 8 * 2 * Math.PI + offset;
+
+        st.pendingKey = spinKey; // Mark this key as handled
+        st.displayNum = null;    // Hide the hub number while spinning
+        st.spinning = true;
+        st.spinFrom = st.angle;
+        st.spinTo = st.angle + totalSpin;
+        st.spinStart = performance.now();
+        st.spinDur = 20000;      // 20 seconds
+
+        setIsSpinning(true);
+        return; // Important: Exit here so Scenario 3 doesn't overwrite the angle
       }
-      return;
     }
 
-    // spinKey exists — this is a live spin
-    if (!spinKey) return;
-    if (winningNumber === null || winningNumber === undefined) return;
-    if (st.spinning) return;
-    if (st.pendingKey === spinKey) return; // already handled
-
-    const idx = WHEEL_NUMBERS.indexOf(Number(winningNumber));
-    if (idx === -1) return;
-
-    const targetAngle = idx * SEG + SEG / 2;
-    const offset      = (2 * Math.PI - targetAngle) % (2 * Math.PI);
-    const totalSpin   = 8 * 2 * Math.PI + offset;
-
-    st.pendingKey  = spinKey;
-    st.displayNum  = null;
-    st.spinning    = true;
-    st.spinFrom    = st.angle;
-    st.spinTo      = st.angle + totalSpin;
-    st.spinStart   = performance.now();
-    st.spinDur     = 20000;
-
-    setIsSpinning(true);
-
-    // After spin lands, show the number in hub
-    // (onSpinComplete fires via the loop, then SpinPage sets showWinner)
+    // 3. STATIC POSITIONING (Page Load / No active spin)
+    // If no spin is happening and we have a number, just snap to it
+    if (!st.spinning && !spinKey && winningNumber !== null && winningNumber !== undefined) {
+      st.angle = rotationForNumber(winningNumber);
+      st.displayNum = Number(winningNumber);
+      st.pendingKey = null;
+    }
   }, [spinKey, winningNumber]);
-
   // After spin completes, make sure displayNum is set
   // (loop sets spinning=false but displayNum must come from winningNumber prop)
   useEffect(() => {
