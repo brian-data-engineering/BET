@@ -144,7 +144,8 @@ function drawReferenceWheel(ctx, rotation, size, displayNumber, isSpinning) {
   ctx.fillStyle = hubGradient;
   ctx.fill();
 
-  if (isSpinning) {
+  if (isSpinning || (displayNumber !== null && displayNumber !== undefined)) {
+    const val = isSpinning ? currentCenterNumber : displayNumber;
     ctx.fillStyle = '#ffffff';
     ctx.font = `900 ${Math.round(size * 0.1)}px "Roboto Condensed", sans-serif`;
     ctx.textAlign = 'center';
@@ -152,18 +153,7 @@ function drawReferenceWheel(ctx, rotation, size, displayNumber, isSpinning) {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
     ctx.shadowBlur = Math.max(10, size * 0.028);
     ctx.shadowOffsetY = Math.max(2, size * 0.004);
-    ctx.fillText(String(currentCenterNumber), 0, 0);
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-  } else if (displayNumber !== null && displayNumber !== undefined) {
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `900 ${Math.round(size * 0.1)}px "Roboto Condensed", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-    ctx.shadowBlur = Math.max(10, size * 0.028);
-    ctx.shadowOffsetY = Math.max(2, size * 0.004);
-    ctx.fillText(String(displayNumber), 0, 0);
+    ctx.fillText(String(val), 0, 0);
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
   }
@@ -271,9 +261,18 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
     lastSpinKeyRef.current = spinKey;
     lastResultRef.current = null;
 
-    const targetAngle = (idx * OUTER_SEGMENT_ANGLE) + (OUTER_SEGMENT_ANGLE / 2);
-    const offset = (2 * Math.PI - targetAngle) % (2 * Math.PI);
-    const totalSpin = (Math.PI * 16) + offset;
+    // FIX: Calculate target angle relative to 12 o'clock pointer
+    const targetNumberAngle = (idx * OUTER_SEGMENT_ANGLE);
+    const centerPocketShift = OUTER_SEGMENT_ANGLE / 2;
+    
+    // Normalize current position to find how much more to spin
+    const currentRot = angleRef.current % (2 * Math.PI);
+    const extraFullSpins = Math.PI * 16; // 8 full rounds
+    
+    // Calculate the clockwise distance needed to bring the target number to the top
+    const distanceToTarget = (2 * Math.PI - currentRot - targetNumberAngle - centerPocketShift) + (2 * Math.PI);
+    const totalSpin = extraFullSpins + (distanceToTarget % (2 * Math.PI));
+
     const startAngle = angleRef.current;
     const startTime = performance.now();
     const duration = 20000;
@@ -310,9 +309,7 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
       <div className="reference-wheel__outer-frame">
         <div className="reference-wheel__outer-frame-core" />
       </div>
-      <div
-        className="reference-wheel__ring"
-      >
+      <div className="reference-wheel__ring">
         <div
           className={`reference-wheel__dot-orbit ${isSpinning ? 'reference-wheel__dot-orbit--animating' : ''}`}
           style={{ animationDuration: dotDuration }}
@@ -424,11 +421,6 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
           transform-origin: center center;
         }
 
-        .reference-wheel__dot-orbit--animating .reference-wheel__dot {
-          animation: none;
-          opacity: 1;
-        }
-
         .reference-wheel__dot {
           position: absolute;
           transform: translate(-50%, -50%);
@@ -505,60 +497,26 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
         }
 
         @keyframes orbitBlink {
-          0% {
-            opacity: 0.3;
-            box-shadow: 0 0 5px rgba(255, 215, 0, 0.4);
-          }
-
-          100% {
-            opacity: 1;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 1);
-          }
+          0% { opacity: 0.3; box-shadow: 0 0 5px rgba(255, 215, 0, 0.4); }
+          100% { opacity: 1; box-shadow: 0 0 15px rgba(255, 215, 0, 1); }
         }
 
         @keyframes rotateDots {
-          from {
-            transform: rotate(0deg);
-          }
-
-          to {
-            transform: rotate(360deg);
-          }
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
 
         @keyframes pointerShake {
-          0% {
-            transform: translateX(-50%) rotate(0deg);
-          }
-
-          50% {
-            transform: translateX(-50%) rotate(5deg);
-          }
-
-          100% {
-            transform: translateX(-50%) rotate(0deg);
-          }
+          0% { transform: translateX(-50%) rotate(0deg); }
+          50% { transform: translateX(-50%) rotate(5deg); }
+          100% { transform: translateX(-50%) rotate(0deg); }
         }
 
         @media (max-width: 1023px) {
-          .reference-wheel {
-            width: min(94vw, 94vh);
-            height: min(94vw, 94vh);
-          }
-
-          .reference-wheel__outer-frame {
-            width: min(91vw, 91vh);
-            height: min(91vw, 91vh);
-          }
-
-          .reference-wheel__ring {
-            width: min(85vw, 85vh);
-            height: min(85vw, 85vh);
-          }
-
-          .reference-wheel__pointer {
-            top: 8px;
-          }
+          .reference-wheel { width: min(94vw, 94vh); height: min(94vw, 94vh); }
+          .reference-wheel__outer-frame { width: min(91vw, 91vh); height: min(91vw, 91vh); }
+          .reference-wheel__ring { width: min(85vw, 85vh); height: min(85vw, 85vh); }
+          .reference-wheel__pointer { top: 8px; }
         }
       `}</style>
     </div>
