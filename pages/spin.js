@@ -3,12 +3,10 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSpinLogic } from '../lib/useSpinLogic';
 import ReferenceWheel from '../components/spin/ReferenceWheel';
 import StatsGrid from '../components/spin/StatsGrid';
-import { startNextManualRound, triggerManualSpin } from '../lib/spinLoop';
 
 const LOGO_ROYAL_SPIN = 'https://retail.mb.directgames.bet/Content/images/rspin/RoyalSpin.png';
 const LOGO_BRAND = '/pushvault-logo.svg';
 const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const DEMO_ROUND_MS = 15000;
 
 function getResultNumber(entry) {
   if (typeof entry === 'object' && entry !== null) return entry.num;
@@ -21,30 +19,24 @@ function getBallClasses(num) {
 }
 
 export default function SpinPage() {
+  // 1. Hook provides all the "Truth"
   const { currentDraw, history, loading } = useSpinLogic();
+  
   const [timeLeft, setTimeLeft] = useState(0);
   const [showWinner, setShowWinner] = useState(false);
   const [localWinningNumber, setLocalWinningNumber] = useState(null);
   const [spinKey, setSpinKey] = useState(null);
-  const [demoCurrentDraw, setDemoCurrentDraw] = useState(null);
-  const [demoHistory, setDemoHistory] = useState([]);
-  const [demoMode, setDemoMode] = useState(false);
-  const settlingDrawRef = useRef(null);
-  const openingNextRoundRef = useRef(false);
-  const demoRoundRef = useRef(1);
 
-  const activeDraw = demoMode ? demoCurrentDraw : currentDraw;
-  const activeHistory = demoMode ? demoHistory : history;
-
+  // 2. Timer Sync: Just shows the remaining seconds from currentDraw.ends_at
   useEffect(() => {
-    if (!activeDraw?.ends_at || activeDraw?.status === 'closed') {
+    if (!currentDraw?.ends_at || currentDraw?.status === 'closed') {
       setTimeLeft(0);
       return;
     }
 
     const tick = () => {
       const now = Date.now();
-      const end = new Date(activeDraw.ends_at).getTime();
+      const end = new Date(currentDraw.ends_at).getTime();
       const diff = Math.max(0, Math.floor((end - now) / 1000));
       setTimeLeft(diff);
     };
@@ -52,160 +44,38 @@ export default function SpinPage() {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [activeDraw?.ends_at, activeDraw?.status]);
+  }, [currentDraw?.ends_at, currentDraw?.status]);
 
+  // 3. Spin Sync: Triggers the wheel when the hook status moves to 'closed'
   useEffect(() => {
-    if (!activeDraw) return;
+    if (!currentDraw) return;
 
-    if (activeDraw.status === 'open') {
+    if (currentDraw.status === 'open') {
       setShowWinner(false);
       setLocalWinningNumber(null);
       setSpinKey(null);
       return;
     }
 
-    const winNum = activeDraw.winning_number;
-    if (winNum !== null && winNum !== undefined && activeDraw.status === 'closed') {
+    const winNum = currentDraw.winning_number;
+    if (winNum !== null && winNum !== undefined && currentDraw.status === 'closed') {
       setLocalWinningNumber(winNum);
-      setShowWinner(false);
-      setSpinKey(`${activeDraw.id}:${winNum}`);
+      setShowWinner(false); // Hide the big number while spinning
+      // The spinKey forces ReferenceWheel to reset and spin to the new number
+      setSpinKey(`${currentDraw.id}:${winNum}`);
     }
-  }, [activeDraw]);
+  }, [currentDraw]);
 
   const handleSpinComplete = useCallback(() => {
-    setShowWinner(true);
+    setShowWinner(true); // Now show the big center number
   }, []);
-
-  useEffect(() => {
-    if (demoMode) return;
-    if (!currentDraw?.id || currentDraw.status !== 'open') return;
-    if (timeLeft > 0) return;
-    if (settlingDrawRef.current === currentDraw.id) return;
-
-    settlingDrawRef.current = currentDraw.id;
-
-    let cancelled = false;
-
-    const settleCurrentDraw = async () => {
-      try {
-        await triggerManualSpin(currentDraw.id);
-      } catch (error) {
-        console.error('Failed to settle current draw:', error);
-        if (!cancelled) settlingDrawRef.current = null;
-      }
-    };
-
-    settleCurrentDraw();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentDraw?.id, currentDraw?.status, timeLeft]);
-
-  useEffect(() => {
-    if (demoMode) return;
-    if (!currentDraw?.id || currentDraw.status !== 'closed') return;
-    if (currentDraw.winning_number === null || currentDraw.winning_number === undefined) return;
-    if (openingNextRoundRef.current) return;
-
-    openingNextRoundRef.current = true;
-
-    const timeoutId = setTimeout(async () => {
-      try {
-        await startNextManualRound();
-      } catch (error) {
-        console.error('Failed to start next draw:', error);
-      } finally {
-        openingNextRoundRef.current = false;
-        settlingDrawRef.current = null;
-      }
-    }, 2500);
-
-    return () => clearTimeout(timeoutId);
-  }, [currentDraw?.id, currentDraw?.status, currentDraw?.winning_number]);
-
-  useEffect(() => {
-    if (demoMode) return;
-    if (loading) return;
-    if (currentDraw) return;
-    if (openingNextRoundRef.current) return;
-
-    openingNextRoundRef.current = true;
-
-    const bootstrapDraw = async () => {
-      try {
-        await startNextManualRound();
-      } catch (error) {
-        console.error('Failed to bootstrap first draw:', error);
-      } finally {
-        openingNextRoundRef.current = false;
-      }
-    };
-
-    bootstrapDraw();
-  }, [loading, currentDraw, demoMode]);
-
-  useEffect(() => {
-    if (!loading) return;
-
-    const timeoutId = setTimeout(() => {
-      setDemoMode(true);
-    }, 3500);
-
-    return () => clearTimeout(timeoutId);
-  }, [loading]);
-
-  useEffect(() => {
-    if (loading) return;
-    if (currentDraw) {
-      setDemoMode(false);
-      return;
-    }
-
-    setDemoMode(true);
-  }, [loading, currentDraw]);
-
-  useEffect(() => {
-    if (!demoMode) return;
-
-    const openDemoRound = (id) => ({
-      id,
-      status: 'open',
-      winning_number: null,
-      ends_at: new Date(Date.now() + DEMO_ROUND_MS).toISOString(),
-    });
-
-    if (!demoCurrentDraw) {
-      setDemoCurrentDraw(openDemoRound(demoRoundRef.current));
-      return;
-    }
-
-    if (demoCurrentDraw.status !== 'open' || timeLeft > 0) return;
-
-    const winningNumber = Math.floor(Math.random() * 37);
-
-    setDemoCurrentDraw((prev) => prev ? {
-      ...prev,
-      status: 'closed',
-      winning_number: winningNumber,
-    } : prev);
-
-    setDemoHistory((prev) => [{ num: winningNumber }, ...prev].slice(0, 200));
-
-    const nextRoundTimeout = setTimeout(() => {
-      demoRoundRef.current += 1;
-      setDemoCurrentDraw(openDemoRound(demoRoundRef.current));
-    }, 2500);
-
-    return () => clearTimeout(nextRoundTimeout);
-  }, [demoMode, demoCurrentDraw, timeLeft]);
 
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, '0');
   const ss = String(timeLeft % 60).padStart(2, '0');
 
   const lastTen = useMemo(
-    () => activeHistory.slice(0, 10).map(getResultNumber).filter((num) => num !== null && num !== undefined),
-    [activeHistory]
+    () => history.slice(0, 10).map(getResultNumber).filter((num) => num !== null),
+    [history]
   );
 
   const payTable = [
@@ -227,8 +97,6 @@ export default function SpinPage() {
     <>
       <Head>
         <title>InsaSpinAndWin</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
           href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap"
           rel="stylesheet"
@@ -240,55 +108,50 @@ export default function SpinPage() {
         style={{
           fontFamily: "'Roboto Condensed', sans-serif",
           backgroundColor: '#002114',
-          backgroundImage:
-            "radial-gradient(circle at 44%, transparent 0, transparent 45%, rgba(0,0,0,0.96) 100%), url('https://retail.mb.directgames.bet/Content/images/rspin/spinbg.png')",
+          backgroundImage: "radial-gradient(circle at 44%, transparent 0, transparent 45%, rgba(0,0,0,0.96) 100%), url('https://retail.mb.directgames.bet/Content/images/rspin/spinbg.png')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
       >
         <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[18%_60%_22%]">
+          {/* LEFT SIDEBAR */}
           <aside className="flex flex-col items-center justify-center gap-5 bg-[#653a1bbd] px-4 py-6 lg:px-5">
-          <img src={LOGO_ROYAL_SPIN} alt="Royal Spin" className="w-36 max-w-[55%] drop-shadow-[0_0_12px_rgba(255,215,0,0.6)]" />
+            <img src={LOGO_ROYAL_SPIN} alt="Royal Spin" className="w-36 max-w-[55%] drop-shadow-[0_0_12px_rgba(255,215,0,0.6)]" />
 
-          <div className="w-full rounded-xl border border-[#ffd70033] bg-white/5 px-4 py-4 text-center shadow-[0_0_10px_rgba(255,215,0,0.08)]">
-            <div className="mb-1 text-sm uppercase tracking-[0.2em] text-zinc-300">Draw ID</div>
-            <div className="text-4xl font-bold text-[#ffd700]"># {activeDraw?.id || '---'}</div>
-            {demoMode && <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.25em] text-orange-300">Demo</div>}
-          </div>
-
-          <div className="w-full rounded-xl border border-[#ffd70033] bg-white/5 px-4 py-4 text-center shadow-[0_0_10px_rgba(255,215,0,0.08)]">
-            <div className="mb-1 text-sm uppercase tracking-[0.2em] text-zinc-300">Bets Close In</div>
-            <div
-              className={`font-mono text-4xl font-bold tracking-[0.2em] ${
-                timeLeft < 10 ? 'animate-pulse text-red-400' : 'text-[#00ff00]'
-              }`}
-            >
-              {mm}:{ss}
+            <div className="w-full rounded-xl border border-[#ffd70033] bg-white/5 px-4 py-4 text-center shadow-[0_0_10px_rgba(255,215,0,0.08)]">
+              <div className="mb-1 text-sm uppercase tracking-[0.2em] text-zinc-300">Draw ID</div>
+              <div className="text-4xl font-bold text-[#ffd700]"># {currentDraw?.id || '---'}</div>
             </div>
-          </div>
 
-          <img src={LOGO_BRAND} alt="Brand" className="mt-4 w-28 max-w-[45%] drop-shadow-[0_0_6px_rgba(255,255,255,0.35)]" />
-        </aside>
+            <div className="w-full rounded-xl border border-[#ffd70033] bg-white/5 px-4 py-4 text-center shadow-[0_0_10px_rgba(255,215,0,0.08)]">
+              <div className="mb-1 text-sm uppercase tracking-[0.2em] text-zinc-300">Bets Close In</div>
+              <div className={`font-mono text-4xl font-bold tracking-[0.2em] ${timeLeft < 10 && timeLeft > 0 ? 'animate-pulse text-red-400' : 'text-[#00ff00]'}`}>
+                {mm}:{ss}
+              </div>
+            </div>
 
+            <img src={LOGO_BRAND} alt="Brand" className="mt-4 w-28 max-w-[45%] drop-shadow-[0_0_6px_rgba(255,255,255,0.35)]" />
+          </aside>
+
+          {/* CENTER WHEEL AREA */}
           <main className="relative flex items-center justify-center overflow-hidden px-2 py-3 lg:px-4 lg:py-2">
             <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(255,215,0,0.16)_0%,rgba(0,0,0,0)_58%)]" />
             <div className="relative flex h-full w-full items-center justify-center">
-              <div className="relative flex items-center justify-center">
-                <ReferenceWheel
-                  winningNumber={localWinningNumber}
-                  spinKey={spinKey}
-                  onSpinComplete={handleSpinComplete}
-                />
-                {showWinner && localWinningNumber !== null && (
-                  <div className="spin-result-label">{localWinningNumber}</div>
-                )}
-                {!showWinner && localWinningNumber === null && (
-                  <div className="waiting-label">Waiting for result</div>
-                )}
-                </div>
+              <ReferenceWheel
+                winningNumber={localWinningNumber}
+                spinKey={spinKey}
+                onSpinComplete={handleSpinComplete}
+              />
+              {showWinner && localWinningNumber !== null && (
+                <div className="spin-result-label">{localWinningNumber}</div>
+              )}
+              {currentDraw?.status === 'open' && (
+                <div className="waiting-label">Waiting for result</div>
+              )}
             </div>
           </main>
 
+          {/* RIGHT SIDEBAR */}
           <aside className="overflow-hidden border-l-2 border-[#ffd700] bg-[#653a1bbd] px-3 py-4 lg:px-4">
             <div className="h-full overflow-y-auto rounded-xl bg-black/10 p-2 spin-scrollbar">
               <section className="mb-4">
@@ -298,10 +161,10 @@ export default function SpinPage() {
                     <tbody>
                       {payTable.map(([a, b, c, d]) => (
                         <tr key={`${a}-${c}`}>
-                          <td className="border border-[#4f4c4c] bg-[#787878] px-2 py-1 text-left text-white">{a}</td>
-                          <td className="border border-[#4f4c4c] bg-[#353535] px-2 py-1 text-center text-white">{b}</td>
-                          <td className={`border border-[#4f4c4c] px-2 py-1 text-left text-white ${c === 'Black' ? 'bg-[#1d1c1a]' : 'bg-[#787878]'}`}>{c}</td>
-                          <td className={`border border-[#4f4c4c] px-2 py-1 text-center text-white ${c === 'Black' ? 'bg-[#1d1c1a]' : 'bg-[#353535]'}`}>{d}</td>
+                          <td className="border border-[#4f4c4c] bg-[#787878] px-2 py-1 text-left">{a}</td>
+                          <td className="border border-[#4f4c4c] bg-[#353535] px-2 py-1 text-center">{b}</td>
+                          <td className={`border border-[#4f4c4c] px-2 py-1 text-left ${c === 'Black' ? 'bg-[#1d1c1a]' : 'bg-[#787878]'}`}>{c}</td>
+                          <td className={`border border-[#4f4c4c] px-2 py-1 text-center ${c === 'Black' ? 'bg-[#1d1c1a]' : 'bg-[#353535]'}`}>{d}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -312,7 +175,7 @@ export default function SpinPage() {
               <section className="mb-4">
                 <div className="mb-2 text-base font-bold">LAST 10</div>
                 <div className="rounded-md bg-[#363636] px-2 py-2">
-                  <div className="last-ten-grid grid grid-cols-5 gap-1 lg:grid-cols-5">
+                  <div className="last-ten-grid grid grid-cols-5 gap-1">
                     {lastTen.map((num, index) => (
                       <div
                         key={`${num}-${index}`}
@@ -325,7 +188,7 @@ export default function SpinPage() {
                 </div>
               </section>
 
-              <StatsGrid history={activeHistory} />
+              <StatsGrid history={history} />
             </div>
           </aside>
         </div>
@@ -340,7 +203,6 @@ export default function SpinPage() {
           color: #fff;
           text-shadow: 0 0 18px rgba(0, 0, 0, 0.55);
         }
-
         .spin-page .waiting-label {
           position: absolute;
           bottom: -32px;
@@ -352,38 +214,9 @@ export default function SpinPage() {
           color: rgba(255, 255, 255, 0.7);
           text-transform: uppercase;
         }
-
-        .spin-page .last-ten-grid {
-          min-height: 70px;
-          justify-items: center;
-        }
-
-        .spin-page .spin-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        .spin-page .spin-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 215, 0, 0.3);
-          border-radius: 9999px;
-        }
-
-        @media (max-width: 1023px) {
-          .spin-page {
-            overflow-y: auto;
-          }
-        }
-
-        @media (min-height: 1000px) and (min-width: 1024px) {
-          .spin-page .last-ten-grid {
-            gap: 0.35vh;
-          }
-
-          .spin-page .last-ten-grid > div {
-            width: 3vh;
-            height: 3vh;
-            font-size: 1.6vh;
-          }
-        }
+        .spin-page .last-ten-grid { min-height: 70px; justify-items: center; }
+        .spin-page .spin-scrollbar::-webkit-scrollbar { width: 8px; }
+        .spin-page .spin-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 215, 0, 0.3); border-radius: 9999px; }
       `}</style>
     </>
   );
