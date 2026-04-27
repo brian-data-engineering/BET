@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSpinLogic } from '../lib/useSpinLogic';
 import ReferenceWheel from '../components/spin/ReferenceWheel';
 import StatsGrid from '../components/spin/StatsGrid';
@@ -20,12 +20,16 @@ function getBallClasses(num) {
 
 export default function SpinPage() {
   const { currentDraw, history, loading } = useSpinLogic();
-  const [timeLeft, setTimeLeft] = useState(null);
-  const [showWinner, setShowWinner] = useState(false);
+  const [timeLeft,           setTimeLeft]           = useState(null);
+  const [showWinner,         setShowWinner]         = useState(false);
   const [localWinningNumber, setLocalWinningNumber] = useState(null);
-  const [spinKey, setSpinKey] = useState(null);
+  const [spinKey,            setSpinKey]            = useState(null);
 
-  // ── Timer: null between rounds so we never freeze on 00:00 ───────────────
+  // Track whether the first draw load has been processed
+  // so we don't trigger a spin on initial page load for an already-closed draw
+  const initializedRef = useRef(false);
+
+  // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentDraw?.ends_at || currentDraw?.status === 'closed') {
       setTimeLeft(null);
@@ -40,12 +44,12 @@ export default function SpinPage() {
     return () => clearInterval(id);
   }, [currentDraw?.ends_at, currentDraw?.status]);
 
-  // ── Spin: purely driven by DB realtime, no frontend triggering ────────────
+  // ── Spin trigger ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentDraw) return;
 
     if (currentDraw.status === 'open') {
-      // New round started — reset UI
+      initializedRef.current = true; // open draw = fully initialized
       setShowWinner(false);
       setLocalWinningNumber(null);
       setSpinKey(null);
@@ -53,9 +57,19 @@ export default function SpinPage() {
     }
 
     const winNum = currentDraw.winning_number;
-    if (winNum !== null && winNum !== undefined && currentDraw.status === 'closed') {
-      setLocalWinningNumber(winNum);
-      setShowWinner(false);
+    if (winNum === null || winNum === undefined) return;
+    if (currentDraw.status !== 'closed') return;
+
+    setLocalWinningNumber(winNum);
+    setShowWinner(false);
+
+    if (!initializedRef.current) {
+      // First load and draw is already closed — position wheel WITHOUT spinning
+      // spinKey stays null so ReferenceWheel just positions via initialWinningNumber
+      initializedRef.current = true;
+      setSpinKey(null);
+    } else {
+      // Realtime update — this is a fresh result, spin the wheel
       setSpinKey(`${currentDraw.id}:${winNum}`);
     }
   }, [currentDraw]);
@@ -76,10 +90,10 @@ export default function SpinPage() {
   );
 
   const payTable = [
-    ['Numbers', 'x 36', 'Dozens', 'x 3'],
-    ['Sectors', 'x 6', 'Line', 'x 3'],
-    ['Even/Odd', 'x 2', 'High/Low', 'x 2'],
-    ['Colors', 'x 2', 'Black', 'x 2'],
+    ['Numbers', 'x 36', 'Dozens',   'x 3'],
+    ['Sectors', 'x 6',  'Line',     'x 3'],
+    ['Even/Odd','x 2',  'High/Low', 'x 2'],
+    ['Colors',  'x 2',  'Black',    'x 2'],
   ];
 
   if (loading) return (
