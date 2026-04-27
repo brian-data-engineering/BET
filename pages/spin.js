@@ -21,12 +21,11 @@ function getBallClasses(num) {
 export default function SpinPage() {
   const { currentDraw, history, loading } = useSpinLogic();
   const [timeLeft,           setTimeLeft]           = useState(null);
-  const [showWinner,         setShowWinner]         = useState(false);
+  const [showWinner,          setShowWinner]          = useState(false);
   const [localWinningNumber, setLocalWinningNumber] = useState(null);
-  const [spinKey,            setSpinKey]            = useState(null);
+  const [spinKey,             setSpinKey]             = useState(null);
 
   // Track whether the first draw load has been processed
-  // so we don't trigger a spin on initial page load for an already-closed draw
   const initializedRef = useRef(false);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
@@ -44,37 +43,47 @@ export default function SpinPage() {
     return () => clearInterval(id);
   }, [currentDraw?.ends_at, currentDraw?.status]);
 
-  // ── Spin trigger ──────────────────────────────────────────────────────────
+  // ── IMPROVED Spin trigger ──────────────────────────────────────────────────
   useEffect(() => {
     if (!currentDraw) return;
 
+    // 1. Reset everything when a new round opens
     if (currentDraw.status === 'open') {
-      initializedRef.current = true; // open draw = fully initialized
+      initializedRef.current = true;
       setShowWinner(false);
       setLocalWinningNumber(null);
       setSpinKey(null);
       return;
     }
 
+    // 2. Handle Closed State
     const winNum = currentDraw.winning_number;
-    if (winNum === null || winNum === undefined) return;
-    if (currentDraw.status !== 'closed') return;
+    
+    // Stop if the round is closed but no number has arrived yet
+    if (winNum === null || winNum === undefined || currentDraw.status !== 'closed') return;
 
     setLocalWinningNumber(winNum);
-    setShowWinner(false);
 
     if (!initializedRef.current) {
-      // First load and draw is already closed — position wheel WITHOUT spinning
-      // spinKey stays null so ReferenceWheel just positions via initialWinningNumber
+      // SCENARIO A: Page just loaded and the draw is already finished.
+      // We snap to the number instantly without spinning.
       initializedRef.current = true;
-      setSpinKey(null);
-    } else {
-      // Realtime update — this is a fresh result, spin the wheel
-      setSpinKey(`${currentDraw.id}:${winNum}`);
+      setShowWinner(true);
+      setSpinKey(null); 
+    } else if (!spinKey) {
+      // SCENARIO B: This is a REAL-TIME update from Supabase.
+      // We hide previous winner and trigger the animation with a unique key.
+      setShowWinner(false);
+      setSpinKey(`spin-${currentDraw.id}-${winNum}-${Date.now()}`);
     }
-  }, [currentDraw]);
+  }, [currentDraw, spinKey]); // spinKey added to dependency to allow re-evaluation
 
-  const handleSpinComplete = useCallback(() => setShowWinner(true), []);
+  const handleSpinComplete = useCallback(() => {
+    setShowWinner(true);
+    setSpinKey(null); // Clear key so we are ready for the next draw
+  }, []);
+
+  // ... (rest of your component remains the same)
 
   // ── Timer display ─────────────────────────────────────────────────────────
   const { timerText, urgent, timerLabel } = (() => {
