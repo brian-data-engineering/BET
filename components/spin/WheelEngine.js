@@ -21,57 +21,70 @@ function easeOut(t) {
 function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
   const CX = size / 2, CY = size / 2;
   const R_BORDER = size * 0.494;
-  const R_OUTER = size * 0.455;
-  const R_INNER = size * 0.300;
-  const R_WOODDISC = size * 0.292;
-  const R_DIAMOND = size * 0.268;
+  const R_TRACK_OUTER = size * 0.452;
+  const R_TRACK_INNER = size * 0.335;
+  const R_GOLD_RING = size * 0.318;
+  const R_WOODDISC = size * 0.295;
   const R_CONE = size * 0.252;
-  const R_HUB = size * 0.148;
-  const R_HUBINNER = size * 0.060;
+  const R_HUB = size * 0.145;
+  const R_HUBINNER = size * 0.063;
 
   ctx.clearRect(0, 0, size, size);
+  ctx.save();
+  ctx.translate(CX, CY);
 
-  // 1. Outer gold border
-  const goldGrad = ctx.createLinearGradient(CX - R_BORDER, CY, CX + R_BORDER, CY);
+  const goldGrad = ctx.createLinearGradient(-R_BORDER, 0, R_BORDER, 0);
   goldGrad.addColorStop(0, '#5a3a00');
   goldGrad.addColorStop(0.2, '#F5CC50');
   goldGrad.addColorStop(0.5, '#C9960C');
   goldGrad.addColorStop(0.8, '#F5CC50');
   goldGrad.addColorStop(1, '#5a3a00');
   ctx.beginPath();
-  ctx.arc(CX, CY, R_BORDER, 0, 2 * Math.PI);
+  ctx.arc(0, 0, R_BORDER, 0, 2 * Math.PI);
   ctx.fillStyle = goldGrad;
   ctx.fill();
 
-  // 2. Dark rim
   ctx.beginPath();
-  ctx.arc(CX, CY, R_BORDER * 0.948, 0, 2 * Math.PI);
+  ctx.arc(0, 0, R_BORDER * 0.948, 0, 2 * Math.PI);
   ctx.fillStyle = '#100c00';
   ctx.fill();
 
-  // 3. Number segments
+  const trackGrad = ctx.createRadialGradient(0, 0, R_TRACK_INNER, 0, 0, R_TRACK_OUTER);
+  trackGrad.addColorStop(0, '#230d04');
+  trackGrad.addColorStop(0.55, '#5d3212');
+  trackGrad.addColorStop(1, '#110602');
+  ctx.beginPath();
+  ctx.arc(0, 0, R_TRACK_OUTER, 0, 2 * Math.PI);
+  ctx.fillStyle = trackGrad;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(0, 0, R_TRACK_INNER, 0, 2 * Math.PI);
+  ctx.fillStyle = '#0a0705';
+  ctx.fill();
+
   for (let i = 0; i < N; i++) {
     const startA = rotation + i * SEG - Math.PI / 2;
     const endA = startA + SEG;
     const num = WHEEL_NUMBERS[i];
 
     ctx.beginPath();
-    ctx.moveTo(CX, CY);
-    ctx.arc(CX, CY, R_OUTER, startA, endA);
+    ctx.arc(0, 0, R_TRACK_OUTER, startA, endA);
+    ctx.arc(0, 0, R_TRACK_INNER, endA, startA, true);
     ctx.closePath();
     ctx.fillStyle = numFill(num);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(201,150,12,0.6)';
-    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = 'rgba(237,197,102,0.75)';
+    ctx.lineWidth = Math.max(1, size * 0.0024);
     ctx.stroke();
 
     const midA = startA + SEG / 2;
-    const tx = CX + Math.cos(midA) * ((R_OUTER + R_INNER) / 2);
-    const ty = CY + Math.sin(midA) * ((R_OUTER + R_INNER) / 2);
+    const tx = Math.cos(midA) * ((R_TRACK_OUTER + R_TRACK_INNER) / 2);
+    const ty = Math.sin(midA) * ((R_TRACK_OUTER + R_TRACK_INNER) / 2);
     ctx.save();
     ctx.translate(tx, ty);
     ctx.rotate(midA + Math.PI / 2);
-    ctx.font = `bold ${Math.round(size * 0.027)}px 'DM Mono', monospace`;
+    ctx.font = `700 ${Math.round(size * 0.03)}px 'Roboto Condensed', sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
@@ -79,116 +92,143 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
     ctx.restore();
   }
 
-  // 4. Inner gold ring
   ctx.beginPath();
-  ctx.arc(CX, CY, R_INNER, 0, 2 * Math.PI);
-  ctx.strokeStyle = '#C9960C';
-  ctx.lineWidth = size * 0.013;
+  ctx.arc(0, 0, R_GOLD_RING, 0, 2 * Math.PI);
+  ctx.strokeStyle = '#edc566';
+  ctx.lineWidth = size * 0.012;
   ctx.stroke();
 
-  // 5. Wood-tone inner disc
-  const woodGrad = ctx.createRadialGradient(CX, CY, 0, CX, CY, R_WOODDISC);
-  woodGrad.addColorStop(0, '#c49050');
-  woodGrad.addColorStop(1, '#633e11');
+  const woodGrad = ctx.createRadialGradient(-R_WOODDISC * 0.25, -R_WOODDISC * 0.25, 0, 0, 0, R_WOODDISC);
+  woodGrad.addColorStop(0, '#b77b3d');
+  woodGrad.addColorStop(0.55, '#6d4219');
+  woodGrad.addColorStop(1, '#2a1406');
   ctx.beginPath();
-  ctx.arc(CX, CY, R_WOODDISC, 0, 2 * Math.PI);
+  ctx.arc(0, 0, R_WOODDISC, 0, 2 * Math.PI);
   ctx.fillStyle = woodGrad;
   ctx.fill();
 
-  // 6. Cone sectors A–F
   const SECTOR_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
   for (let i = 0; i < 6; i++) {
     const a1 = rotation + i * (2 * Math.PI / 6) - Math.PI / 2;
     const a2 = a1 + 2 * Math.PI / 6;
     ctx.beginPath();
-    ctx.moveTo(CX, CY);
-    ctx.arc(CX, CY, R_CONE, a1, a2);
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, R_CONE, a1, a2);
     ctx.closePath();
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.05)';
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.07)';
     ctx.fill();
     
     const midA = a1 + Math.PI / 6;
-    const lx = CX + Math.cos(midA) * R_CONE * 0.65;
-    const ly = CY + Math.sin(midA) * R_CONE * 0.65;
+    const lx = Math.cos(midA) * R_CONE * 0.65;
+    const ly = Math.sin(midA) * R_CONE * 0.65;
     ctx.save();
     ctx.translate(lx, ly);
     ctx.rotate(midA + Math.PI / 2);
-    ctx.font = `900 ${Math.round(size * 0.04)}px sans-serif`;
+    ctx.font = `900 ${Math.round(size * 0.042)}px 'Roboto Condensed', sans-serif`;
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText(SECTOR_LABELS[i], 0, 0);
     ctx.restore();
   }
 
-  // 9. Center hub cap
   ctx.beginPath();
-  ctx.arc(CX, CY, R_HUB, 0, 2 * Math.PI);
-  ctx.fillStyle = '#000000';
-  ctx.fill();
-  ctx.strokeStyle = '#F5CC50';
-  ctx.lineWidth = 3;
+  ctx.arc(0, 0, R_CONE, 0, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(237,197,102,0.45)';
+  ctx.lineWidth = size * 0.004;
   ctx.stroke();
 
-  // 10. Result Display
+  ctx.beginPath();
+  ctx.arc(0, 0, R_HUB, 0, 2 * Math.PI);
+  const hubGrad = ctx.createRadialGradient(-R_HUB * 0.3, -R_HUB * 0.3, 0, 0, 0, R_HUB);
+  hubGrad.addColorStop(0, '#1f1a16');
+  hubGrad.addColorStop(1, '#000000');
+  ctx.fillStyle = hubGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#F5CC50';
+  ctx.lineWidth = size * 0.006;
+  ctx.stroke();
+
   if (isSpinning) {
-    ctx.font = `bold ${Math.round(size * 0.06)}px monospace`;
+    ctx.font = `700 ${Math.round(size * 0.06)}px 'Roboto Condensed', sans-serif`;
     ctx.fillStyle = '#F5CC50';
-    ctx.fillText('...', CX, CY);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('...', 0, 0);
   } else if (displayNumber !== null) {
-    ctx.font = `900 ${Math.round(size * 0.1)}px sans-serif`;
+    ctx.font = `900 ${Math.round(size * 0.1)}px 'Roboto Condensed', sans-serif`;
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(displayNumber, CX, CY);
+    ctx.fillText(displayNumber, 0, 0);
   }
 
-  // 12. FLASHING LIGHT BULBS
-  const BULBS = 26;
-  const isSecond = Math.floor(Date.now() / 500) % 2 === 0;
-  for (let i = 0; i < BULBS; i++) {
-    const a = i * (2 * Math.PI / BULBS);
-    const bx = CX + Math.cos(a) * (R_BORDER * 0.948);
-    const by = CY + Math.sin(a) * (R_BORDER * 0.948);
-    const on = isSecond ? (i % 2 === 0) : (i % 2 !== 0);
-    
-    ctx.beginPath();
-    ctx.arc(bx, by, size * 0.015, 0, 2 * Math.PI);
-    ctx.fillStyle = on ? '#FFF176' : '#332200';
-    if (on) {
-      ctx.shadowColor = '#FFD700';
-      ctx.shadowBlur = 10;
-    }
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  // 13. Gold pointer
   ctx.beginPath();
-  ctx.moveTo(CX, CY - R_OUTER + 5);
-  ctx.lineTo(CX - 12, CY - R_BORDER);
-  ctx.lineTo(CX + 12, CY - R_BORDER);
-  ctx.closePath();
-  ctx.fillStyle = '#F5CC50';
+  ctx.arc(0, 0, R_HUBINNER, 0, 2 * Math.PI);
+  ctx.fillStyle = '#f5cc50';
   ctx.fill();
+
+  for (let i = 0; i < 6; i++) {
+    const angle = rotation + i * (Math.PI / 3) - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(angle - 0.08) * R_HUB * 0.95, Math.sin(angle - 0.08) * R_HUB * 0.95);
+    ctx.lineTo(Math.cos(angle + 0.08) * R_HUB * 0.95, Math.sin(angle + 0.08) * R_HUB * 0.95);
+    ctx.closePath();
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.2)';
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
-export default function WheelEngine({ winningNumber, onSpinComplete }) {
+export default function WheelEngine({
+  winningNumber,
+  spinKey,
+  onSpinComplete,
+  onSpinStateChange,
+  maxSize = 920,
+}) {
   const canvasRef = useRef(null);
+  const wrapperRef = useRef(null);
   const angleRef = useRef(0);
   const rafRef = useRef(null);
   const isSpinningRef = useRef(false);
   const lastResultRef = useRef(null);
+  const lastSpinKeyRef = useRef(null);
   const [size, setSize] = useState(480);
 
   // Resize Handler
   useEffect(() => {
-    const handleResize = () => {
-      const s = Math.min(window.innerWidth - 40, 500);
-      setSize(s);
+    const updateSize = () => {
+      const wrapper = wrapperRef.current;
+      if (wrapper) {
+        const nextSize = Math.max(320, Math.min(Math.floor(wrapper.clientWidth), maxSize));
+        setSize(nextSize);
+        return;
+      }
+
+      const fallbackSize = window.innerWidth >= 1024
+        ? Math.min(window.innerWidth * 0.54, window.innerHeight * 0.86, maxSize)
+        : Math.min(window.innerWidth - 32, window.innerHeight * 0.72, maxSize);
+      setSize(Math.max(320, Math.floor(fallbackSize)));
     };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+
+    updateSize();
+
+    const wrapper = wrapperRef.current;
+    const resizeObserver = typeof ResizeObserver !== 'undefined' && wrapper
+      ? new ResizeObserver(() => updateSize())
+      : null;
+
+    if (resizeObserver && wrapper) resizeObserver.observe(wrapper);
+    window.addEventListener('resize', updateSize);
+
+    return () => {
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [maxSize]);
 
   // Persistent Animation Loop (Handles Bulbs and Smooth Drawing)
   useEffect(() => {
@@ -212,12 +252,20 @@ export default function WheelEngine({ winningNumber, onSpinComplete }) {
 
   // Spin Logic Trigger
   useEffect(() => {
+    if (!spinKey) {
+      lastSpinKeyRef.current = null;
+      return;
+    }
+
     if (winningNumber === null || winningNumber === undefined || isSpinningRef.current) return;
+    if (lastSpinKeyRef.current === spinKey) return;
 
     const idx = WHEEL_NUMBERS.indexOf(Number(winningNumber));
     if (idx === -1) return;
 
     isSpinningRef.current = true;
+    if (onSpinStateChange) onSpinStateChange(true);
+    lastSpinKeyRef.current = spinKey;
     lastResultRef.current = null;
 
     const targetAngle = (idx * SEG) + (SEG / 2);
@@ -238,19 +286,25 @@ export default function WheelEngine({ winningNumber, onSpinComplete }) {
       } else {
         angleRef.current = angleRef.current % (2 * Math.PI);
         isSpinningRef.current = false;
+        if (onSpinStateChange) onSpinStateChange(false);
         lastResultRef.current = winningNumber;
         if (onSpinComplete) onSpinComplete();
       }
     };
 
     requestAnimationFrame(animateSpin);
-  }, [winningNumber]);
+  }, [winningNumber, spinKey, onSpinComplete, onSpinStateChange]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="drop-shadow-[0_0_50px_rgba(0,0,0,0.8)]"
-      style={{ display: 'block', margin: 'auto' }}
-    />
+    <div
+      ref={wrapperRef}
+      style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <canvas
+        ref={canvasRef}
+        className="drop-shadow-[0_0_50px_rgba(0,0,0,0.8)]"
+        style={{ display: 'block', margin: 'auto' }}
+      />
+    </div>
   );
 }
