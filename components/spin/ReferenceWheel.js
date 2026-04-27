@@ -26,34 +26,32 @@ function getPocketColor(num) {
   return REDS.has(num) ? '#8c1117' : '#1d1c1a';
 }
 
-// Which number is currently under the pointer (top of wheel)
 function getIndicatedNumber(rotation) {
   const norm = ((2 * Math.PI) - (rotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
   const idx  = Math.floor(norm / SEG) % WHEEL_NUMBERS.length;
   return WHEEL_NUMBERS[idx];
 }
 
-// Compute the exact rotation that places segment [idx] under the pointer
+// Exact rotation that puts segment for `num` under the 12-o'clock pointer
 function rotationForNumber(num) {
   const idx = WHEEL_NUMBERS.indexOf(Number(num));
   if (idx === -1) return 0;
-  // midpoint of segment idx should sit at top (angle 0 in draw-space = -PI/2 in math)
-  const target = (idx * SEG + SEG / 2);
-  return (2 * Math.PI - target + 2 * Math.PI) % (2 * Math.PI);
+  const mid = idx * SEG + SEG / 2;
+  return (2 * Math.PI - mid + 2 * Math.PI * 100) % (2 * Math.PI);
 }
 
 function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
   const C  = size / 2;
-  const OR = size / 2;            // outer ring radius
-  const IR = OR * 0.56;           // inner ring (cone) outer radius
-  const HR = OR * 0.17;           // hub radius
+  const OR = size / 2;
+  const IR = OR * 0.56;
+  const HR = OR * 0.17;
   const pinR = Math.max(3, size * 0.01);
 
   ctx.clearRect(0, 0, size, size);
   ctx.save();
   ctx.translate(C, C);
 
-  // ── Number segments ───────────────────────────────────────────────────────
+  // Number segments
   for (let i = 0; i < WHEEL_NUMBERS.length; i++) {
     const sa  = rotation + i * SEG - Math.PI / 2;
     const ea  = sa + SEG;
@@ -65,8 +63,8 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
     ctx.closePath();
     ctx.fillStyle = getPocketColor(num);
     if (num !== 0) {
-      ctx.shadowColor  = REDS.has(num) ? 'rgba(140,17,23,0.82)' : 'rgba(0,0,0,0.78)';
-      ctx.shadowBlur   = Math.max(16, size * 0.04);
+      ctx.shadowColor   = REDS.has(num) ? 'rgba(140,17,23,0.82)' : 'rgba(0,0,0,0.78)';
+      ctx.shadowBlur    = Math.max(16, size * 0.04);
       ctx.shadowOffsetY = Math.max(4, size * 0.008);
     }
     ctx.fill();
@@ -75,9 +73,8 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
     ctx.lineWidth   = Math.max(1, size * 0.0038);
     ctx.stroke();
 
-    // number label
-    const midA   = sa + SEG / 2;
-    const textR  = OR - Math.max(8, size * 0.042);
+    const midA  = sa + SEG / 2;
+    const textR = OR - Math.max(8, size * 0.042);
     ctx.save();
     ctx.rotate(midA + Math.PI / 2);
     ctx.translate(0, -textR);
@@ -93,23 +90,20 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
     ctx.restore();
   }
 
-  // ── Pins at segment edges ─────────────────────────────────────────────────
+  // Pins
   for (let i = 0; i < WHEEL_NUMBERS.length; i++) {
     const a  = rotation + i * SEG - Math.PI / 2;
-    const px = Math.cos(a) * OR;
-    const py = Math.sin(a) * OR;
     ctx.beginPath();
-    ctx.arc(px, py, pinR, 0, 2 * Math.PI);
+    ctx.arc(Math.cos(a) * OR, Math.sin(a) * OR, pinR, 0, 2 * Math.PI);
     ctx.fillStyle = '#edc566';
     ctx.fill();
   }
 
-  // ── Inner cone sectors ────────────────────────────────────────────────────
+  // Inner cone sectors
   let curAngle = rotation - Math.PI / 2;
   INNER_SECTORS.forEach((sector, idx) => {
     const arc      = (sector.size * Math.PI) / 180;
     const endAngle = curAngle + arc;
-
     ctx.beginPath();
     ctx.arc(0, 0, IR, curAngle, endAngle);
     ctx.arc(0, 0, HR, endAngle, curAngle, true);
@@ -119,7 +113,6 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
     ctx.strokeStyle = '#edc566';
     ctx.lineWidth   = Math.max(2, size * 0.008);
     ctx.stroke();
-
     if (sector.text) {
       const midA  = curAngle + arc / 2;
       const textR = (IR + HR) / 2;
@@ -133,18 +126,14 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
       ctx.fillText(sector.text, 0, 0);
       ctx.restore();
     }
-
     curAngle = endAngle;
     if (idx === 0) curAngle += (0.01 * Math.PI) / 180;
   });
 
-  // ── Hub ───────────────────────────────────────────────────────────────────
-  const shownNum = isSpinning ? getIndicatedNumber(rotation) : displayNumber;
-  const hubColor = (shownNum === null || shownNum === undefined)
-    ? '#8c1117'
-    : getPocketColor(Number(shownNum));
-
-  const hubGrad = ctx.createRadialGradient(-HR * 0.35, -HR * 0.35, 0, 0, 0, HR);
+  // Hub
+  const shownNum  = isSpinning ? getIndicatedNumber(rotation) : displayNumber;
+  const hubColor  = (shownNum === null || shownNum === undefined) ? '#8c1117' : getPocketColor(Number(shownNum));
+  const hubGrad   = ctx.createRadialGradient(-HR * 0.35, -HR * 0.35, 0, 0, 0, HR);
   hubGrad.addColorStop(0, hubColor);
   hubGrad.addColorStop(1, '#000000');
   ctx.beginPath();
@@ -152,7 +141,6 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
   ctx.fillStyle = hubGrad;
   ctx.fill();
 
-  // Hub number
   if (shownNum !== null && shownNum !== undefined) {
     ctx.fillStyle    = '#ffffff';
     ctx.font         = `900 ${Math.round(size * 0.1)}px "Roboto Condensed", sans-serif`;
@@ -168,47 +156,32 @@ function drawWheel(ctx, rotation, size, displayNumber, isSpinning) {
   ctx.restore();
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete }) {
-  const wrapperRef      = useRef(null);
-  const canvasRef       = useRef(null);
-  const sizeRef         = useRef(720);
+  const wrapperRef = useRef(null);
+  const canvasRef  = useRef(null);
+  const sizeRef    = useRef(720);
 
-  // All mutable spin state lives in one ref so the RAF closure always sees current values
   const stateRef = useRef({
-    angle:       0,
-    spinning:    false,
-    displayNum:  null,   // shown in hub when not spinning
-    // spin params
-    spinFrom:    0,
-    spinTo:      0,
-    spinStart:   null,
-    spinDur:     20000,
-    pendingKey:  null,   // spinKey being processed
-    // animation handles
-    rafId:       null,
+    angle:      0,
+    spinning:   false,
+    displayNum: null,
+    spinFrom:   0,
+    spinTo:     0,
+    spinStart:  null,
+    spinDur:    20000,
+    pendingKey: null,
+    rafId:      null,
   });
 
-  const [size,           setSize]           = useState(720);
-  const [isSpinning,     setIsSpinning]     = useState(false);
-  const [pointerDur,     setPointerDur]     = useState('0.6s');
-  const [dotDur,         setDotDur]         = useState('2.5s');
+  const [size,       setSize]       = useState(720);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [pointerDur, setPointerDur] = useState('0.6s');
+  const [dotDur,     setDotDur]     = useState('2.5s');
+
   const onSpinCompleteRef = useRef(onSpinComplete);
   useEffect(() => { onSpinCompleteRef.current = onSpinComplete; }, [onSpinComplete]);
 
-  // ── On load: if winningNumber already exists, position wheel there ─────────
-  // This handles the "came back to the page" case
-  useEffect(() => {
-    if (winningNumber === null || winningNumber === undefined) return;
-    if (stateRef.current.spinning) return;
-    if (stateRef.current.displayNum !== null) return; // already set
-    // Position wheel at winning number without animating
-    stateRef.current.angle      = rotationForNumber(winningNumber);
-    stateRef.current.displayNum = Number(winningNumber);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // only on mount
-
-  // ── Resize: set canvas pixel size once, not every frame ───────────────────
+  // ── Resize ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const update = () => {
       const node = wrapperRef.current;
@@ -225,7 +198,7 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
     return () => { ro?.disconnect(); window.removeEventListener('resize', update); };
   }, []);
 
-  // ── Set canvas backing store when size changes (NOT every frame) ──────────
+  // ── Set canvas backing store on size change only ──────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -238,7 +211,7 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }, [size]);
 
-  // ── Single master RAF loop ────────────────────────────────────────────────
+  // ── Master RAF loop ───────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -248,40 +221,34 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
       const s   = sizeRef.current;
       const dpr = window.devicePixelRatio || 1;
 
-      // Advance spin
       if (st.spinning && st.spinStart !== null) {
-        const elapsed  = ts - st.spinStart;
-        const progress = Math.min(elapsed / st.spinDur, 1);
+        const progress = Math.min((ts - st.spinStart) / st.spinDur, 1);
         st.angle = st.spinFrom + (st.spinTo - st.spinFrom) * easeOut(progress);
 
         if (progress >= 1) {
-          st.angle       = st.spinTo % (2 * Math.PI);
-          st.spinning    = false;
-          st.spinStart   = null;
-          st.displayNum  = Number(winningNumber);
+          st.angle      = st.spinTo % (2 * Math.PI);
+          st.spinning   = false;
+          st.spinStart  = null;
+          // displayNum will be set by the spinKey effect after onSpinComplete
           setIsSpinning(false);
           if (onSpinCompleteRef.current) onSpinCompleteRef.current();
         }
       }
 
-      // Draw — only reset transform, never reset canvas.width (that's expensive)
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawWheel(ctx, st.angle, s, st.displayNum, st.spinning);
-
       st.rafId = requestAnimationFrame(loop);
     };
 
-    const st    = stateRef.current;
-    st.rafId    = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(st.rafId); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size]); // restart loop only when size changes (canvas backing store changed)
+    stateRef.current.rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(stateRef.current.rafId);
+  }, [size]);
 
-  // ── Pointer + dot animation timings ──────────────────────────────────────
+  // ── Pointer + dot timing ──────────────────────────────────────────────────
   useEffect(() => {
     if (!isSpinning) { setPointerDur('0.6s'); setDotDur('2.5s'); return; }
-    const timers = [
+    const t = [
       setTimeout(() => setPointerDur('0.6s'),  0),
       setTimeout(() => setDotDur('2.7s'),    2000),
       setTimeout(() => setDotDur('3s'),      4000),
@@ -293,34 +260,49 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
       setTimeout(() => setPointerDur('3s'), 18000),
       setTimeout(() => setPointerDur('4s'), 19000),
     ];
-    return () => timers.forEach(clearTimeout);
+    return () => t.forEach(clearTimeout);
   }, [isSpinning]);
 
-  // ── Trigger spin when spinKey changes ─────────────────────────────────────
+  // ── THE FIX: respond to both spinKey AND winningNumber changes ────────────
+  // spinKey === null + winningNumber exists  → position wheel, no spin (page load/return)
+  // spinKey !== null + new key              → spin to number (live result)
+  // spinKey === null + winningNumber null   → reset (new open round)
   useEffect(() => {
     const st = stateRef.current;
 
-    // Reset on null spinKey (new open round)
-    if (!spinKey) {
+    // New open round — full reset
+    if (!spinKey && (winningNumber === null || winningNumber === undefined)) {
       st.pendingKey  = null;
       st.displayNum  = null;
       st.spinning    = false;
       st.spinStart   = null;
+      st.angle       = 0;
       setIsSpinning(false);
       return;
     }
 
+    // winningNumber exists but no spinKey — position without spinning
+    // This fires when: (a) page loads with already-closed draw, (b) data arrives after mount
+    if (!spinKey && winningNumber !== null && winningNumber !== undefined) {
+      if (!st.spinning) {
+        st.angle      = rotationForNumber(winningNumber);
+        st.displayNum = Number(winningNumber);
+        st.pendingKey = null;
+      }
+      return;
+    }
+
+    // spinKey exists — this is a live spin
+    if (!spinKey) return;
     if (winningNumber === null || winningNumber === undefined) return;
     if (st.spinning) return;
-    if (st.pendingKey === spinKey) return; // already handled this key
+    if (st.pendingKey === spinKey) return; // already handled
 
     const idx = WHEEL_NUMBERS.indexOf(Number(winningNumber));
     if (idx === -1) return;
 
-    // How far to spin: target = midpoint of winning segment at top
     const targetAngle = idx * SEG + SEG / 2;
     const offset      = (2 * Math.PI - targetAngle) % (2 * Math.PI);
-    // 8 full rotations + alignment offset
     const totalSpin   = 8 * 2 * Math.PI + offset;
 
     st.pendingKey  = spinKey;
@@ -332,7 +314,19 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
     st.spinDur     = 20000;
 
     setIsSpinning(true);
+
+    // After spin lands, show the number in hub
+    // (onSpinComplete fires via the loop, then SpinPage sets showWinner)
   }, [spinKey, winningNumber]);
+
+  // After spin completes, make sure displayNum is set
+  // (loop sets spinning=false but displayNum must come from winningNumber prop)
+  useEffect(() => {
+    const st = stateRef.current;
+    if (!st.spinning && winningNumber !== null && winningNumber !== undefined) {
+      st.displayNum = Number(winningNumber);
+    }
+  });
 
   return (
     <div className="reference-wheel" ref={wrapperRef}>
