@@ -8,7 +8,7 @@ import { startNextManualRound, triggerManualSpin } from '../lib/spinLoop';
 const LOGO_ROYAL_SPIN = 'https://retail.mb.directgames.bet/Content/images/rspin/RoyalSpin.png';
 const LOGO_BRAND = '/pushvault-logo.svg';
 const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const DEMO_ROUND_MS = 300;
+const DEMO_ROUND_MS = 15000;
 
 function getResultNumber(entry) {
   if (typeof entry === 'object' && entry !== null) return entry.num;
