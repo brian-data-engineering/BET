@@ -212,39 +212,43 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete 
   }, [size]);
 
   // ── Master RAF loop ───────────────────────────────────────────────────────
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+ // Change the Master RAF loop useEffect to look like this:
+useEffect(() => {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
 
-    const loop = (ts) => {
-      const st  = stateRef.current;
-      const s   = sizeRef.current;
-      const dpr = window.devicePixelRatio || 1;
+  const loop = (ts) => {
+    const st = stateRef.current;
+    const s = sizeRef.current;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
 
-      if (st.spinning && st.spinStart !== null) {
-        const progress = Math.min((ts - st.spinStart) / st.spinDur, 1);
-        st.angle = st.spinFrom + (st.spinTo - st.spinFrom) * easeOut(progress);
+    if (st.spinning && st.spinStart !== null) {
+      const progress = Math.min((ts - st.spinStart) / st.spinDur, 1);
+      
+      // Use the eased progress to move the angle
+      st.angle = st.spinFrom + (st.spinTo - st.spinFrom) * easeOut(progress);
 
-        if (progress >= 1) {
-          st.angle      = st.spinTo % (2 * Math.PI);
-          st.spinning   = false;
-          st.spinStart  = null;
-          // displayNum will be set by the spinKey effect after onSpinComplete
-          setIsSpinning(false);
-          if (onSpinCompleteRef.current) onSpinCompleteRef.current();
-        }
+      if (progress >= 1) {
+        st.angle = st.spinTo % (2 * Math.PI);
+        st.spinning = false;
+        st.spinStart = null;
+        setIsSpinning(false); // Triggers the 'landed' UI state
+        if (onSpinCompleteRef.current) onSpinCompleteRef.current();
       }
+    }
 
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawWheel(ctx, st.angle, s, st.displayNum, st.spinning);
-      st.rafId = requestAnimationFrame(loop);
-    };
+    // Always clear and redraw, even if static
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawWheel(ctx, st.angle, s, st.displayNum, st.spinning);
+    st.rafId = requestAnimationFrame(loop);
+  };
 
-    stateRef.current.rafId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(stateRef.current.rafId);
-  }, [size]);
+  st.rafId = requestAnimationFrame(loop);
+  return () => cancelAnimationFrame(st.rafId);
+}, [size]); // Keep size as the only dependency to avoid loop restarts 
 
+  
   // ── Pointer + dot timing ──────────────────────────────────────────────────
   useEffect(() => {
     if (!isSpinning) { setPointerDur('0.6s'); setDotDur('2.5s'); return; }
