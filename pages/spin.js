@@ -55,6 +55,34 @@ export default function SpinPage() {
   const [spinKey, setSpinKey] = useState(null);
   const [displayedHistory, setDisplayedHistory] = useState([]);
 
+  // Calculate the most recent winning number for initial positioning
+  const lastNumber = useMemo(() => {
+    if (loading) return null;
+    // If current draw is closed, that's the latest
+    if (currentDraw?.status === 'closed' && currentDraw?.winning_number !== null) {
+      return currentDraw.winning_number;
+    }
+    // Otherwise check history
+    if (history.length > 0) {
+      const entry = history[0];
+      return entry.num ?? entry.winning_number;
+    }
+    return null;
+  }, [currentDraw, history, loading]);
+
+  // Initial state setup once loading is finished
+  useEffect(() => {
+    if (!loading && localWinningNumber === null && lastNumber !== null) {
+      setLocalWinningNumber(lastNumber);
+      // If the current draw is already closed and we haven't shown winner, 
+      // check if we should trigger a spin or just show it.
+      // For simplicity, we just show it if it's already closed on load.
+      if (currentDraw?.status === 'closed') {
+        setShowWinner(true);
+      }
+    }
+  }, [loading, lastNumber, localWinningNumber, currentDraw?.status]);
+
   // 1. TIMER LOOP: Restored the interval so the numbers actually move
   useEffect(() => {
     if (!currentDraw?.ends_at || currentDraw?.status === 'closed') {
@@ -239,6 +267,7 @@ export default function SpinPage() {
                 spinKey={spinKey}
                 showCenterValue={!showWinner}
                 onSpinComplete={handleSpinComplete}
+                lastWinningNumber={lastNumber}
               />
               {showWinner && localWinningNumber !== null && (
                 <div className="spin-result-label" style={getResultLabelStyle(localWinningNumber)}>{localWinningNumber}</div>

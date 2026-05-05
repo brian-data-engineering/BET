@@ -230,6 +230,14 @@ export default function WheelEngine({
     };
   }, [maxSize]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+  }, [size]);
+
   // Persistent Animation Loop (Handles Bulbs and Smooth Drawing)
   useEffect(() => {
     const render = () => {
@@ -237,10 +245,7 @@ export default function WheelEngine({
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
-      
-      canvas.width = size * dpr;
-      canvas.height = size * dpr;
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       drawWheel(ctx, angleRef.current, size, lastResultRef.current, isSpinningRef.current);
       rafRef.current = requestAnimationFrame(render);

@@ -187,7 +187,7 @@ function drawReferenceWheel(ctx, rotation, size, displayNumber, isSpinning) {
   ctx.restore();
 }
 
-export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete, showCenterValue = true }) {
+export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete, showCenterValue = true, lastWinningNumber }) {
   const wrapperRef = useRef(null);
   const canvasRef = useRef(null);
   const centerValueRef = useRef(null);
@@ -198,10 +198,25 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
   const lastSpinKeyRef = useRef(null);
   const lastResultRef = useRef(null);
   const spinningRef = useRef(false);
+  const hasInitializedRef = useRef(false);
   const [size, setSize] = useState(720);
   const [pointerDuration, setPointerDuration] = useState('0.6s');
   const [dotDuration, setDotDuration] = useState('2.5s');
   const [isSpinning, setIsSpinning] = useState(false);
+
+  // Initialize position based on lastWinningNumber
+  useEffect(() => {
+    if (!hasInitializedRef.current && lastWinningNumber !== null && lastWinningNumber !== undefined) {
+      const idx = WHEEL_NUMBERS.indexOf(Number(lastWinningNumber));
+      if (idx !== -1) {
+        const targetNumberAngle = (idx * OUTER_SEGMENT_ANGLE);
+        const centerPocketShift = OUTER_SEGMENT_ANGLE / 2;
+        angleRef.current = (2 * Math.PI - targetNumberAngle - centerPocketShift) % (2 * Math.PI);
+        lastResultRef.current = lastWinningNumber;
+        hasInitializedRef.current = true;
+      }
+    }
+  }, [lastWinningNumber]);
 
   useEffect(() => {
     const updateSize = () => {
@@ -227,14 +242,20 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
   }, []);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+  }, [size]);
+
+  useEffect(() => {
     const render = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const ctx = canvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = size * dpr;
-      canvas.height = size * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       drawReferenceWheel(ctx, angleRef.current, size, lastResultRef.current, spinningRef.current);
@@ -242,11 +263,13 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
       const centerValueNode = centerValueRef.current;
       const centerCoreNode = centerCoreRef.current;
       if (centerValueNode) {
+        // If we are spinning, show the live indicated number.
+        // If not spinning, show the lastResult (either from a finished spin or from initialization)
         const liveValue = spinningRef.current
           ? getIndicatedNumber(angleRef.current)
-          : (showCenterValue ? lastResultRef.current : null);
+          : lastResultRef.current;
 
-        if (showCenterValue && liveValue !== null && liveValue !== undefined) {
+        if (liveValue !== null && liveValue !== undefined) {
           centerValueNode.textContent = String(liveValue);
           centerValueNode.style.opacity = '1';
           if (centerCoreNode) {
