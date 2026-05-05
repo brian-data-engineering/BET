@@ -78,8 +78,9 @@ export default function TicketManager() {
     const to   = from + pageSize - 1;
 
     try {
+      // Switch to the unified view to see both Sports and Roulette
       let query = supabase
-        .from('print')
+        .from('unified_terminal_ledger') 
         .select('*', { count: 'exact' })
         .eq('cashier_id', userId)
         .order('created_at', { ascending: false })
@@ -89,9 +90,22 @@ export default function TicketManager() {
       if (currentStatus !== 'all') query = query.eq('status', currentStatus);
 
       const { data, count, error } = await query;
-      if (error) throw error;
-      setTickets(data || []);
-      setTotalCount(count || 0);
+      if (error) {
+        // Fallback to 'print' if the view doesn't exist yet to prevent UI crash
+        console.warn("Unified view not found, falling back to sports only.");
+        const fallback = await supabase
+          .from('print')
+          .select('*', { count: 'exact' })
+          .eq('cashier_id', userId)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        if (fallback.error) throw fallback.error;
+        setTickets(fallback.data || []);
+        setTotalCount(fallback.count || 0);
+      } else {
+        setTickets(data || []);
+        setTotalCount(count || 0);
+      }
     } catch (err) {
       console.error('Ledger Fetch Error:', err.message);
     } finally {
@@ -284,7 +298,7 @@ export default function TicketManager() {
                   {/* Selections — always visible */}
                   <div className="border-t border-white/5 px-4 md:px-5 pb-3">
                     {selections.map((sel, i) => (
-                      <SelectionRow key={i} sel={sel} />
+                      <SelectionRow key={i} sel={sel} gameType={t.game_type} />
                     ))}
                   </div>
                 </div>

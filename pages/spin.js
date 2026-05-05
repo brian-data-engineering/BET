@@ -53,6 +53,7 @@ export default function SpinPage() {
   const [showWinner, setShowWinner] = useState(false);
   const [localWinningNumber, setLocalWinningNumber] = useState(null);
   const [spinKey, setSpinKey] = useState(null);
+  const [displayedHistory, setDisplayedHistory] = useState([]);
 
   // 1. TIMER LOOP: Restored the interval so the numbers actually move
   useEffect(() => {
@@ -80,8 +81,8 @@ export default function SpinPage() {
     // A. RESET UI when a new round opens
     if (currentDraw.status === 'open') {
       setSpinKey(null);
-      setLocalWinningNumber(null);
-      setShowWinner(false);
+      // We no longer reset localWinningNumber and showWinner here 
+      // so it persists until the next round starts spinning.
       return;
     }
 
@@ -96,11 +97,37 @@ export default function SpinPage() {
         setSpinKey(newKey);
       }
     }
-  }, [currentDraw?.id, currentDraw?.status, currentDraw?.winning_number]);
+  }, [currentDraw?.id, currentDraw?.status, currentDraw?.winning_number, spinKey]);
+
+  // 3. HISTORY SYNC: Buffer history updates until spin is done
+  useEffect(() => {
+    if (loading || history.length === 0) return;
+
+    // Initial load
+    if (displayedHistory.length === 0) {
+      setDisplayedHistory(history);
+      return;
+    }
+
+    const newestHistoryItem = history[0];
+    const newestHistoryId = newestHistoryItem.draw_id || newestHistoryItem.id;
+
+    // If the newest history item matches our currently spinning draw, 
+    // and we haven't shown the winner yet (meaning it's still spinning),
+    // then we WAIT for onSpinComplete to update displayedHistory.
+    if (newestHistoryId === currentDraw?.id && currentDraw?.status === 'closed' && !showWinner) {
+      // Wait for handleSpinComplete
+      return;
+    }
+
+    // Otherwise, sync immediately (e.g. for older history or if we're already showing the winner)
+    setDisplayedHistory(history);
+  }, [history, currentDraw?.id, currentDraw?.status, showWinner, loading, displayedHistory.length]);
 
   const handleSpinComplete = useCallback(() => {
     setShowWinner(true); 
-  }, []);
+    setDisplayedHistory(history); // Sync history now that spin is done
+  }, [history]);
 
   // Use the same duration constant as your hook for the progress bar calculation
   const timerProgress = useMemo(() => {
@@ -113,7 +140,7 @@ export default function SpinPage() {
   // ... rest of your mapping logic (lastTen, payTable, etc.) and JSX
   
   const lastTen = useMemo(() =>
-    history
+    displayedHistory
       .slice(0, 10)
       .map((entry) => ({
         // Support both table column naming conventions
@@ -121,8 +148,9 @@ export default function SpinPage() {
         num: entry.num ?? entry.winning_number,
       }))
       .filter(({ num }) => num !== null && num !== undefined),
-    [history]
+    [displayedHistory]
   );
+
 
   const jackpots = [
     { label: 'Gold', tone: 'jackpot-slot--gold', amount: '999,999' },
@@ -291,7 +319,7 @@ export default function SpinPage() {
                 </div>
               </section>
 
-              <StatsGrid history={history} />
+              <StatsGrid history={displayedHistory} />
             </div>
           </aside>
         </div>

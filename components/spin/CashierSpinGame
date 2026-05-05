@@ -290,6 +290,14 @@ export default function CashierSpinGame({ userProfile, onRefreshProfile }) {
   }, [phase, startNextRound, onRefreshProfile]);
 
   const lastTicket  = sessionTickets[0] ?? null;
+
+  const handleSubmitAndPrint = async () => {
+    const ticket = await submitTicket();
+    if (ticket) {
+      printTicket({ ticket, payout: null, cashierId: userProfile?.id, jackpot });
+    }
+  };
+
   const timerText   = phase === 'SPINNING' ? '00:03' : `00:${String(spinCountdown).padStart(2,'0')}`;
   const isTableView = viewMode === 'table';
 
@@ -603,7 +611,7 @@ export default function CashierSpinGame({ userProfile, onRefreshProfile }) {
                 <div className="grid grid-cols-5 border-t border-white/10 bg-[#090909]">
                   <button type="button" onClick={clearBets} className="footer-btn footer-btn--red">🗑</button>
                   <button type="button" className="footer-btn footer-btn--amber">🧾</button>
-                  <button type="button" onClick={submitTicket} disabled={phase!=='BETTING'||totalStake===0}
+                  <button type="button" onClick={handleSubmitAndPrint} disabled={phase!=='BETTING'||totalStake===0}
                     className="footer-btn footer-btn--cyan disabled:opacity-40">$</button>
                   <button type="button" onClick={startNextRound} className="footer-btn footer-btn--lime">↻</button>
                   <button type="button"

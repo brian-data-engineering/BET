@@ -266,7 +266,8 @@ export default function WheelEngine({
     isSpinningRef.current = true;
     if (onSpinStateChange) onSpinStateChange(true);
     lastSpinKeyRef.current = spinKey;
-    lastResultRef.current = null;
+    // Do NOT clear lastResultRef.current here if we want it to persist from previous round
+    // until the moment the new spin actually starts moving.
 
     const targetAngle = (idx * SEG) + (SEG / 2);
     const offset = (2 * Math.PI - targetAngle) % (2 * Math.PI);
@@ -288,7 +289,7 @@ export default function WheelEngine({
         isSpinningRef.current = false;
         if (onSpinStateChange) onSpinStateChange(false);
         lastResultRef.current = winningNumber;
-        if (onSpinComplete) onSpinComplete();
+        if (onSpinComplete) onSpinComplete(winningNumber);
       }
     };
 

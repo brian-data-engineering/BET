@@ -206,11 +206,66 @@ export default function CashierSpin() {
   // Auto-advance RESULT → BETTING
   useEffect(() => {
     if (phase !== 'RESULT') return;
-    const t = window.setTimeout(() => { startNextRound(); setSpinCountdown(59); }, 2200);
+    // Persist result display longer, but keep logic
+    const t = window.setTimeout(() => { startNextRound(); setSpinCountdown(59); }, 5000);
     return () => window.clearTimeout(t);
   }, [phase, startNextRound]);
 
-  const lastTicket  = sessionTickets[0] ?? null;
+  const lastTicket = sessionTickets[0] ?? null;
+
+  const handleSubmitAndPrint = async () => {
+    const ticket = await submitTicket();
+    if (ticket) {
+      // Create a formatted bets array for the printer
+      const formattedBets = Object.values(ticket.bets).map(b => ({
+        key: b.key,
+        label: b.label,
+        amount: b.amount
+      }));
+      printTicket({ 
+        ticket: { ...ticket, bets: formattedBets }, 
+        payout: null, 
+        jackpot 
+      });
+    }
+  };
+
+  const handleReprint = () => {
+    if (!lastTicket) return alert("No recent ticket found");
+    const formattedBets = Object.values(lastTicket.bets).map(b => ({
+      key: b.key,
+      label: b.label,
+      amount: b.amount
+    }));
+    printTicket({ 
+      ticket: { ...lastTicket, bets: formattedBets }, 
+      payout: lastTicket.status === 'won' || lastTicket.status === 'paid' ? {
+        winning_number: lastTicket.winning_number,
+        amount: lastTicket.potential_payout,
+        winning_labels: lastTicket.winning_labels,
+        paid: lastTicket.status === 'paid',
+        paid_at: lastTicket.paid_at
+      } : null, 
+      jackpot 
+    });
+  };
+
+  const handleCancel = () => {
+    if (!lastTicket) return alert("No recent ticket found");
+    if (lastTicket.status !== 'active') return alert(`Cannot cancel: Ticket is ${lastTicket.status}`);
+    if (window.confirm(`CANCEL TICKET #${lastTicket.ticket_serial} AND REFUND KSh ${lastTicket.total_stake}?`)) {
+      cancelTicket(lastTicket.id);
+    }
+  };
+
+  const handlePayout = () => {
+    if (!lastTicket) return alert("No recent ticket found");
+    if (lastTicket.status !== 'won') return alert("This ticket is not won or already paid");
+    if (window.confirm(`PAY OUT KSh ${lastTicket.potential_payout} FOR TICKET #${lastTicket.ticket_serial}?`)) {
+      markPaid(lastTicket.id);
+    }
+  };
+
   const timerText   = phase === 'SPINNING' ? '00:03' : `00:${String(spinCountdown).padStart(2,'0')}`;
   const isTableView = viewMode === 'table';
 
@@ -221,7 +276,7 @@ export default function CashierSpin() {
           <div className="relative flex-1 overflow-hidden bg-[linear-gradient(180deg,#214c40_0%,#163831_100%)]">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_8%,rgba(164,14,14,0.58),transparent_18%),radial-gradient(circle_at_18%_28%,rgba(255,255,255,0.06),transparent_20%)]" />
 
-            {/* Watermark — identical to doc 6 */}
+            {/* Watermark */}
             <div className="casino-watermark" aria-hidden="true">
               <div className="casino-watermark__chip casino-watermark__chip--left"><span className="casino-watermark__chip-core"/></div>
               <div className="casino-watermark__chip casino-watermark__chip--right"><span className="casino-watermark__chip-core"/></div>
@@ -393,24 +448,15 @@ export default function CashierSpin() {
                       ))}
                     </div>
 
-                    {/* Result panel + PAY OUT button */}
+                    {/* Result panel */}
                     {lastResult?(
                       <div className="mt-8 w-full rounded-xl border border-white/15 bg-black/25 px-6 py-4 text-center">
                         <div className="text-[11px] font-black uppercase tracking-[0.25em] text-white/55">Winning Number</div>
                         <div className={`mt-1 text-5xl font-black ${lastResult.winningNumber===0?'text-[#45ff72]':RED_NUMBERS.has(lastResult.winningNumber)?'text-[#ff5757]':'text-white'}`}>{lastResult.winningNumber}</div>
-                        <div className={`mt-2 text-sm font-black ${lastResult.payout>0?'text-[#59ea88]':'text-white/55'}`}>
-                          {lastResult.payout>0?`Win: ${lastResult.payout} KSh`:'No win'}
-                        </div>
-                        {/* PAY OUT — calls execute_roulette_payout via markPaid */}
-                        {lastResult.payout>0 && lastPayout && !lastPayout.paid && (
-                          <button
-                            onClick={()=>markPaid(lastPayout.id, lastPayout.ticket_id, lastPayout.amount)}
-                            className="mt-3 w-full rounded-lg bg-emerald-600 py-2 text-sm font-black uppercase tracking-widest text-white hover:bg-emerald-500 transition-colors">
-                            💵 PAY OUT {lastResult.payout.toLocaleString()} KSh
-                          </button>
-                        )}
-                        {lastPayout?.paid && (
-                          <div className="mt-3 text-[11px] font-bold text-emerald-400 uppercase tracking-widest">✓ Paid</div>
+                        {lastTicket && lastTicket.status === 'won' && (
+                          <div className="mt-2 text-sm font-black text-[#59ea88]">
+                            WIN: {lastTicket.potential_payout} KSh
+                          </div>
                         )}
                       </div>
                     ):null}
@@ -421,7 +467,7 @@ export default function CashierSpin() {
           </div>
         </div>
 
-        {/* ── FASTBET sidebar — identical to doc 6 ── */}
+        {/* ── FASTBET sidebar ── */}
         <aside className="w-[420px] shrink-0 border-l border-white/10 bg-[#050505] shadow-[-12px_0_28px_rgba(0,0,0,0.3)]">
           <div className="flex h-full flex-col">
             <div className="border-b border-white/10 bg-[linear-gradient(180deg,#1d1d1d_0%,#090909_100%)] px-4 py-3 text-center text-[18px] font-black uppercase tracking-[0.22em] text-[#d8d8d8]">FASTBET</div>
@@ -459,11 +505,11 @@ export default function CashierSpin() {
                 <div className="mt-1 flex items-center justify-between"><span className="uppercase tracking-[0.08em] text-white/72">Max Total Win</span><span className="text-[13px] text-[#ffe29b]">{maxTotalWin} KSh</span></div>
               </div>
               <div className="grid grid-cols-5 border-t border-white/10 bg-[#090909]">
-                <button type="button" onClick={clearBets} className="footer-btn footer-btn--red">🗑</button>
-                <button type="button" className="footer-btn footer-btn--amber">🧾</button>
-                <button type="button" onClick={submitTicket} disabled={phase!=='BETTING'||totalStake===0} className="footer-btn footer-btn--cyan disabled:opacity-40">$</button>
-                <button type="button" onClick={startNextRound} className="footer-btn footer-btn--lime">↻</button>
-                <button type="button" onClick={()=>printTicket({ticket:lastTicket,payout:lastPayout,jackpot})} className="footer-btn footer-btn--green">🖨</button>
+                <button type="button" onClick={clearBets} className="footer-btn footer-btn--red" title="Delete Selections (Clear)">🗑</button>
+                <button type="button" onClick={handleCancel} className="footer-btn footer-btn--amber" title="Cancel Last Ticket">❌</button>
+                <button type="button" onClick={handlePayout} className="footer-btn footer-btn--cyan" title="Payout Last Ticket">💵</button>
+                <button type="button" onClick={handleReprint} className="footer-btn footer-btn--lime" title="Reprint Last Ticket">🖨</button>
+                <button type="button" onClick={handleSubmitAndPrint} disabled={phase!=='BETTING'||totalStake===0} className="footer-btn footer-btn--green disabled:opacity-40" title="Print Ticket">$</button>
               </div>
             </div>
           </div>
