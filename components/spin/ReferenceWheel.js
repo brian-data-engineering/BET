@@ -204,6 +204,10 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
   const [dotDuration, setDotDuration] = useState('2.5s');
   const [isSpinning, setIsSpinning] = useState(false);
 
+  // Offscreen canvas for pre-rendering
+  const offscreenCanvasRef = useRef(null);
+  const lastRenderedValueRef = useRef(null);
+
   // Initialize position based on lastWinningNumber
   useEffect(() => {
     if (!hasInitializedRef.current && lastWinningNumber !== null && lastWinningNumber !== undefined) {
@@ -218,28 +222,21 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
     }
   }, [lastWinningNumber]);
 
+  // Pre-render the static wheel once
   useEffect(() => {
-    const updateSize = () => {
-      const node = wrapperRef.current;
-      if (!node) return;
-      const next = Math.max(340, Math.min(Math.floor(node.clientWidth), 940));
-      setSize(next);
-    };
+    if (!size) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = size * dpr;
+    offscreen.height = size * dpr;
+    const ctx = offscreen.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    updateSize();
-    const node = wrapperRef.current;
-    const observer = typeof ResizeObserver !== 'undefined' && node
-      ? new ResizeObserver(() => updateSize())
-      : null;
-
-    if (observer && node) observer.observe(node);
-    window.addEventListener('resize', updateSize);
-
-    return () => {
-      if (observer) observer.disconnect();
-      window.removeEventListener('resize', updateSize);
-    };
-  }, []);
+    // Draw the static wheel (at 0 rotation)
+    drawReferenceWheel(ctx, 0, size, null, false);
+    offscreenCanvasRef.current = offscreen;
+  }, [size]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -256,32 +253,44 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
 
       const ctx = canvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const center = size / 2;
 
-      drawReferenceWheel(ctx, angleRef.current, size, lastResultRef.current, spinningRef.current);
+      ctx.clearRect(0, 0, size * dpr, size * dpr);
+      
+      if (offscreenCanvasRef.current) {
+        ctx.save();
+        ctx.translate(center * dpr, center * dpr);
+        ctx.rotate(angleRef.current);
+        ctx.translate(-center * dpr, -center * dpr);
+        ctx.drawImage(offscreenCanvasRef.current, 0, 0);
+        ctx.restore();
+      }
 
       const centerValueNode = centerValueRef.current;
       const centerCoreNode = centerCoreRef.current;
+      
       if (centerValueNode) {
-        // If we are spinning, show the live indicated number.
-        // If not spinning, show the lastResult (either from a finished spin or from initialization)
         const liveValue = spinningRef.current
           ? getIndicatedNumber(angleRef.current)
           : lastResultRef.current;
 
-        if (liveValue !== null && liveValue !== undefined) {
-          centerValueNode.textContent = String(liveValue);
-          centerValueNode.style.opacity = '1';
-          if (centerCoreNode) {
-            const pocketColor = getPocketColor(Number(liveValue));
-            centerCoreNode.style.background = `radial-gradient(circle at 35% 35%, ${pocketColor}, #000000)`;
+        // Optimization: Only touch the DOM if the value changed
+        if (liveValue !== lastRenderedValueRef.current) {
+          if (liveValue !== null && liveValue !== undefined) {
+            centerValueNode.textContent = String(liveValue);
+            centerValueNode.style.opacity = '1';
+            if (centerCoreNode) {
+              const pocketColor = getPocketColor(Number(liveValue));
+              centerCoreNode.style.background = `radial-gradient(circle at 35% 35%, ${pocketColor}, #000000)`;
+            }
+          } else {
+            centerValueNode.textContent = '';
+            centerValueNode.style.opacity = '0';
+            if (centerCoreNode) {
+              centerCoreNode.style.background = 'radial-gradient(circle at 35% 35%, #8c1117, #000000)';
+            }
           }
-        } else {
-          centerValueNode.textContent = '';
-          centerValueNode.style.opacity = '0';
-          if (centerCoreNode) {
-            centerCoreNode.style.background = 'radial-gradient(circle at 35% 35%, #8c1117, #000000)';
-          }
+          lastRenderedValueRef.current = liveValue;
         }
       }
       renderRafRef.current = requestAnimationFrame(render);
