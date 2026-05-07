@@ -162,7 +162,7 @@ export default function CashierDashboard() {
 
   return (
     <CashierLayout>
-      <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 no-print">
+      <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start no-print">
         
         {/* Left Side: Search & Info */}
         <div className="lg:col-span-8 space-y-6">
@@ -212,17 +212,19 @@ export default function CashierDashboard() {
         </div>
 
         {/* Right Side: Betslip */}
-        <div className="lg:col-span-4">
-          <Betslip 
-            items={cart} 
-            setItems={setCart} 
-            stake={stake} 
-            setStake={setStake} 
-            maxGames={userProfile?.cashier_selection_limit || 20}
-            onProcess={handleProcessPayment} 
-            isProcessing={isProcessing} 
-            user={userProfile} 
-          />
+        <div className="lg:col-span-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="min-h-0 lg:h-[calc(100vh-7rem)]">
+            <Betslip 
+              items={cart} 
+              setItems={setCart} 
+              stake={stake} 
+              setStake={setStake} 
+              maxGames={userProfile?.cashier_selection_limit || 20}
+              onProcess={handleProcessPayment} 
+              isProcessing={isProcessing} 
+              user={userProfile} 
+            />
+          </div>
         </div>
       </div>
 

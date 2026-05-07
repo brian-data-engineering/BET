@@ -1,5 +1,6 @@
 import Head from 'next/head';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRouter } from 'next/router';
 import { useSpinLogic } from '../lib/useSpinLogic';
 import ReferenceWheel from '../components/spin/ReferenceWheel';
 import StatsGrid from '../components/spin/StatsGrid';
@@ -47,41 +48,41 @@ function getResultLabelStyle(num) {
 }
 
 export default function SpinPage() {
+  const router = useRouter();
   const { currentDraw, history, loading } = useSpinLogic();
+  const isViewerMode = router.query.viewer === 'fullscreen';
   
   const [timeLeft, setTimeLeft] = useState(0);
   const [showWinner, setShowWinner] = useState(false);
+  const [isAnimatingSpin, setIsAnimatingSpin] = useState(false);
   const [localWinningNumber, setLocalWinningNumber] = useState(null);
   const [spinKey, setSpinKey] = useState(null);
   const [displayedHistory, setDisplayedHistory] = useState([]);
+  const lastAnimatedDrawRef = useRef(null);
+  const historyReadyRef = useRef(false);
 
-  // Calculate the most recent winning number for initial positioning
-  const lastNumber = useMemo(() => {
-    if (loading) return null;
-    // If current draw is closed, that's the latest
-    if (currentDraw?.status === 'closed' && currentDraw?.winning_number !== null) {
-      return currentDraw.winning_number;
-    }
-    // Otherwise check history
-    if (history.length > 0) {
-      const entry = history[0];
-      return entry.num ?? entry.winning_number;
-    }
-    return null;
-  }, [currentDraw, history, loading]);
-
-  // Initial state setup once loading is finished
   useEffect(() => {
-    if (!loading && localWinningNumber === null && lastNumber !== null) {
-      setLocalWinningNumber(lastNumber);
-      // If the current draw is already closed and we haven't shown winner, 
-      // check if we should trigger a spin or just show it.
-      // For simplicity, we just show it if it's already closed on load.
-      if (currentDraw?.status === 'closed') {
-        setShowWinner(true);
-      }
+    if (!router.isReady) return;
+    if (!isViewerMode) return;
+
+    const root = document.documentElement;
+    const requestFullscreen = root.requestFullscreen
+      || root.webkitRequestFullscreen
+      || root.msRequestFullscreen;
+
+    if (typeof requestFullscreen === 'function' && !document.fullscreenElement) {
+      Promise.resolve(requestFullscreen.call(root)).catch(() => {});
     }
-  }, [loading, lastNumber, localWinningNumber, currentDraw?.status]);
+    document.body.style.margin = '0';
+    document.body.style.overflow = 'hidden';
+    document.body.style.background = '#000000';
+
+    return () => {
+      document.body.style.margin = '';
+      document.body.style.overflow = '';
+      document.body.style.background = '';
+    };
+  }, [router.isReady, isViewerMode]);
 
   // 1. TIMER LOOP: Restored the interval so the numbers actually move
   useEffect(() => {
@@ -102,32 +103,44 @@ export default function SpinPage() {
     return () => clearInterval(id);
   }, [currentDraw?.ends_at, currentDraw?.status]);
 
-  // 2. STATE SYNC: Reset UI for new rounds or trigger spin for closed rounds
-  useEffect(() => {
-    if (!currentDraw) return;
+  const triggerSpin = useCallback((drawId, winNum) => {
+    if (drawId === null || drawId === undefined) return;
+    if (winNum === null || winNum === undefined) return;
+    const newKey = `${drawId}:${winNum}`;
+    if (lastAnimatedDrawRef.current === newKey) return;
 
-    // A. RESET UI when a new round opens
-    if (currentDraw.status === 'open') {
-      setSpinKey(null);
-      // We no longer reset localWinningNumber and showWinner here 
-      // so it persists until the next round starts spinning.
+    lastAnimatedDrawRef.current = newKey;
+    setIsAnimatingSpin(true);
+    setLocalWinningNumber(winNum);
+    setShowWinner(false);
+    setSpinKey(newKey);
+  }, []);
+
+  // 2. RESULT SYNC: use the newest history entry as the source of truth for spins.
+  // This ensures the wheel spins for finalized results only, and visible history
+  // is updated only after the spin completes.
+  useEffect(() => {
+    if (loading || history.length === 0) return;
+
+    if (!historyReadyRef.current) {
+      historyReadyRef.current = true;
+      setDisplayedHistory(history);
+      const latestEntry = history[0];
+      const latestWinningNumber = latestEntry?.num ?? latestEntry?.winning_number;
+      if (latestWinningNumber !== null && latestWinningNumber !== undefined) {
+        setLocalWinningNumber(latestWinningNumber);
+        setShowWinner(true);
+      }
       return;
     }
 
-    // B. TRIGGER SPIN when the database closes the round
-    const winNum = currentDraw.winning_number;
-    if (winNum !== null && winNum !== undefined && currentDraw.status === 'closed') {
-      // If we haven't started this spin yet (check spinKey)
-      const newKey = `${currentDraw.id}:${winNum}`;
-      if (spinKey !== newKey) {
-        setLocalWinningNumber(winNum);
-        setShowWinner(false); 
-        setSpinKey(newKey);
-      }
-    }
-  }, [currentDraw?.id, currentDraw?.status, currentDraw?.winning_number, spinKey]);
+    const newestHistoryItem = history[0];
+    const historyDrawId = newestHistoryItem.draw_id || newestHistoryItem.id;
+    const historyWinningNumber = newestHistoryItem.num ?? newestHistoryItem.winning_number;
+    triggerSpin(historyDrawId, historyWinningNumber);
+  }, [history, loading, triggerSpin]);
 
-  // 3. HISTORY SYNC: Buffer history updates until spin is done
+  // 3. HISTORY SYNC: Buffer history updates until the wheel animation finishes
   useEffect(() => {
     if (loading || history.length === 0) return;
 
@@ -137,22 +150,17 @@ export default function SpinPage() {
       return;
     }
 
-    const newestHistoryItem = history[0];
-    const newestHistoryId = newestHistoryItem.draw_id || newestHistoryItem.id;
-
-    // If the newest history item matches our currently spinning draw, 
-    // and we haven't shown the winner yet (meaning it's still spinning),
-    // then we WAIT for onSpinComplete to update displayedHistory.
-    if (newestHistoryId === currentDraw?.id && currentDraw?.status === 'closed' && !showWinner) {
-      // Wait for handleSpinComplete
+    // Freeze the visible history completely while the wheel is spinning.
+    // Once the animation finishes, handleSpinComplete will publish the latest history.
+    if (isAnimatingSpin) {
       return;
     }
 
-    // Otherwise, sync immediately (e.g. for older history or if we're already showing the winner)
     setDisplayedHistory(history);
-  }, [history, currentDraw?.id, currentDraw?.status, showWinner, loading, displayedHistory.length]);
+  }, [history, loading, displayedHistory.length, isAnimatingSpin]);
 
   const handleSpinComplete = useCallback(() => {
+    setIsAnimatingSpin(false);
     setShowWinner(true); 
     setDisplayedHistory(history); // Sync history now that spin is done
   }, [history]);
@@ -207,6 +215,7 @@ export default function SpinPage() {
     <>
       <Head>
         <title>InsaSpinAndWin</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <link
           href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap"
           rel="stylesheet"
@@ -214,7 +223,7 @@ export default function SpinPage() {
       </Head>
 
       <div
-        className="spin-page min-h-screen w-full select-none overflow-hidden text-white"
+        className={`spin-page min-h-screen w-full select-none overflow-hidden text-white ${isViewerMode ? 'spin-page--viewer' : ''}`}
         style={{
           fontFamily: "'Roboto Condensed', sans-serif",
           backgroundColor: '#002114',
@@ -267,12 +276,11 @@ export default function SpinPage() {
                 spinKey={spinKey}
                 showCenterValue={!showWinner}
                 onSpinComplete={handleSpinComplete}
-                lastWinningNumber={lastNumber}
               />
               {showWinner && localWinningNumber !== null && (
                 <div className="spin-result-label" style={getResultLabelStyle(localWinningNumber)}>{localWinningNumber}</div>
               )}
-              {currentDraw?.status === 'open' && (
+              {currentDraw?.status === 'open' && !isAnimatingSpin && !showWinner && (
                 <div className="waiting-label">Waiting for result</div>
               )}
             </div>
@@ -355,6 +363,28 @@ export default function SpinPage() {
       </div>
 
       <style jsx global>{`
+        html, body, #__next {
+          width: 100%;
+          min-height: 100%;
+        }
+        body {
+          margin: 0;
+          overflow: hidden;
+          background: #000;
+        }
+        .spin-page--viewer {
+          height: 100vh;
+          cursor: none;
+        }
+        .spin-page--viewer * {
+          user-select: none;
+        }
+        .spin-page--viewer .spin-scrollbar {
+          scrollbar-width: none;
+        }
+        .spin-page--viewer .spin-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
         .spin-page .spin-result-label {
           position: absolute;
           width: clamp(7rem, 18vh, 11rem);

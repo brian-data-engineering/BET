@@ -41,17 +41,55 @@ function groupBets(arr = []) {
   );
 }
 
+function fmtDateOnly(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-KE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function fmtTimeOnly(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('en-KE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function compactBetLabel(label = '') {
+  return String(label || '')
+    .replace(/\s+/g, ' ')
+    .replace('Low/High Color:', 'Low/High Color ')
+    .replace('Color:', 'Color ')
+    .replace('Dozen:', 'Dozen ')
+    .replace('Column:', 'Column ')
+    .replace('Number:', 'Number ')
+    .replace('Split:', 'Split ')
+    .replace('Street:', 'Street ')
+    .replace('Six Line:', 'Six Line ')
+    .replace('Corner:', 'Corner ')
+    .replace('Finals:', 'Finals ')
+    .replace('Mirror:', 'Mirror ')
+    .replace('Twins:', 'Twins ')
+    .replace('Neighbours', 'Neighbours')
+    .trim();
+}
+
 // ── printTicket (Native Window Printing) ─────────────────────────────────────
 
 export function printTicket({ ticket, payout, jackpot = 0 }) {
   const bets      = groupBets(ticket?.bets ?? []);
+  const betCount  = bets.length;
   const stake     = ticket?.total_stake ?? 0;
   const resolved  = !!payout;
   const won       = resolved && (payout?.amount ?? 0) > 0;
   const winNum    = payout?.winning_number;
   const serial    = ticket?.ticket_serial ?? ticket?.id ?? '00000000';
   const logoSrc   = ticket?.logo_url ?? FALLBACK_LOGO;
-  const shopName  = (ticket?.shop_name ?? 'LUCRA').toUpperCase();
+  const cashierName = ticket?.cashier_name || ticket?.cashier_username || ticket?.cashier || ticket?.cashier_id || 'N/A';
 
   const betRows = bets.map((b) => `
     <div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:0.2px solid #eee">
@@ -71,76 +109,104 @@ export function printTicket({ ticket, payout, jackpot = 0 }) {
 <title>Ticket — ${serial}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:monospace;font-size:12px;color:#000;background:#fff;width:72mm;margin:0 auto;padding:6mm 4mm 14mm;line-height:1.1}
-  @media print{body{margin:0;padding:4mm 3mm 8mm}@page{margin:0;size:72mm auto}}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#000;background:#fff;width:72mm;margin:0 auto;padding:3mm 2.5mm 8mm;line-height:1.02}
+  table{width:100%;border-collapse:collapse}
+  td,th{border:1px solid #000;padding:2px 3px;vertical-align:middle}
+  .center{text-align:center}
+  .right{text-align:right}
+  .bold{font-weight:700}
+  .xbold{font-weight:900}
+  .tiny{font-size:8px}
+  .small{font-size:9px}
+  .head{background:#f3f3f3}
+  .meta td{height:18px}
+  .bets td{font-size:9px}
+  .bets .amount{font-weight:700}
+  .totals td{font-size:9px}
+  .barcode-wrap{padding-top:6px;text-align:center}
+  @media print{body{margin:0;padding:2.5mm 2mm 6mm}@page{margin:0;size:72mm auto}}
 </style>
 </head>
 <body>
+<table class="meta">
+  <tr>
+    <td rowspan="3" class="center">
+      <img src="${logoSrc}" style="width:148px;max-height:58px;object-fit:contain;display:block;margin:0 auto;filter:grayscale(1) contrast(150%)" onerror="this.src='${FALLBACK_LOGO}'"/>
+    </td>
+    <td class="bold">Cashier:</td>
+    <td class="right xbold">${cashierName}</td>
+  </tr>
+  <tr>
+    <td class="bold">Ticket:</td>
+    <td class="right xbold">${serial}</td>
+  </tr>
+</table>
+
+<table style="margin-top:4px">
+  <tr>
+    <td class="center xbold small">Bet Placed On ${fmtDateOnly(ticket?.created_at ?? new Date().toISOString())}, ${fmtTimeOnly(ticket?.created_at ?? new Date().toISOString())}</td>
+  </tr>
+</table>
+
+<table class="bets" style="margin-top:4px">
+  <tr class="head xbold center">
+    <td style="width:36%">SPIN & WIN</td>
+    <td style="width:34%">Selection</td>
+    <td style="width:12%">Odds</td>
+    <td style="width:18%">Amount</td>
+  </tr>
+  ${(bets.map((b) => `
+    <tr>
+      <td class="xbold">SPIN 2 WIN<br>#${ticket?.draw_id ?? ticket?.id ?? 'PENDING'}</td>
+      <td class="center xbold">${compactBetLabel(b.label || '')}</td>
+      <td class="center xbold">${Number(b.payout || 0).toFixed(0)}</td>
+      <td class="right amount">KES ${Number(b.amount || 0).toLocaleString('en-US')}</td>
+    </tr>
+  `).join('')) || `<tr><td colspan="4" class="center small">No selections</td></tr>`}
+</table>
+
+<table class="totals" style="margin-top:4px">
+  <tr>
+    <td class="center xbold">BET TYPE: SPIN & WIN SINGLE(${betCount})</td>
+  </tr>
+  <tr>
+    <td class="center xbold">TOTAL STAKE: KES ${stake.toLocaleString('en-US')}</td>
+  </tr>
+</table>
+
+<table class="totals" style="margin-top:4px">
+  <tr>
+    <td class="xbold">MIN ODD:</td>
+    <td class="right xbold">0</td>
+    <td class="xbold">MAX ODD:</td>
+    <td class="right xbold">${bets.length ? Math.max(...bets.map(b => Number(b.payout || 0))).toFixed(0) : '0'}</td>
+  </tr>
+  <tr>
+    <td class="xbold">Min NET WIN:</td>
+    <td class="right xbold">KES ${Math.max(Math.round(stake * 0.36), 0).toLocaleString('en-US')}</td>
+    <td class="xbold">Max NET WIN:</td>
+    <td class="right xbold">KES ${(resolved && won ? Number(payout?.amount || 0) : jackpot).toLocaleString('en-US')}</td>
+  </tr>
+</table>
 
 ${resolved ? `
-<div style="text-align:center;border:1.5px solid #000;padding:3px;margin-bottom:8px;font-weight:900;font-size:16px;letter-spacing:2px;background:${won?'#000':'#fff'};color:${won?'#fff':'#000'}">
-  ${won ? '✓ WON ✓' : '✗ LOST ✗'}
-</div>` : ''}
+<table style="margin-top:4px">
+  <tr>
+    <td class="center xbold" style="font-size:12px;background:${won ? '#000' : '#f3f3f3'};color:${won ? '#fff' : '#000'}">
+      ${won ? 'WON' : 'LOST'} | ${winNum} ${numLabel(winNum)}
+    </td>
+  </tr>
+</table>
+${won && winRows ? `<div style="margin-top:4px;text-align:center">${winRows}</div>` : ''}
+` : ''}
 
-<div style="text-align:center;margin-bottom:5px">
-  <img src="${logoSrc}" style="width:140px;max-height:70px;object-fit:contain;display:block;margin:0 auto 5px;filter:grayscale(1) contrast(150%)" onerror="this.src='${FALLBACK_LOGO}'"/>
-  <div style="font-size:11px;font-weight:bold">SHOP: ${shopName}</div>
-  <div style="font-size:9px">DATE: ${fmt(ticket?.created_at ?? new Date().toISOString())}</div>
+<div class="tiny center" style="margin-top:5px">
+  Terms and conditions apply, ticket placed after market<br/>
+  closed will be voided.
 </div>
 
-<div style="border-top:1.5px solid #000;margin:5px 0"></div>
-
-<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
-  <span>Serial:</span><span style="font-weight:bold">#${serial}</span>
-</div>
-<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
-  <span>Draw ID:</span><span style="font-weight:bold">${ticket?.draw_id ? `#${ticket.draw_id}` : 'PENDING'}</span>
-</div>
-
-<div style="border-top:1px dashed #000;margin:5px 0"></div>
-<div style="text-align:center;font-size:10px;font-weight:bold;margin:3px 0">★ JACKPOT: ${jackpot.toLocaleString()} ★</div>
-<div style="border-top:1px dashed #000;margin:5px 0"></div>
-
-<div style="font-size:10px;font-weight:bold;text-transform:uppercase;margin:8px 0 4px">SELECTIONS</div>
-<div style="margin-bottom:10px">
-  ${betRows || '<div style="font-size:10px;opacity:0.5">No selections</div>'}
-</div>
-
-<div style="border-top:1.5px dashed #000;padding-top:6px">
-  <div style="display:flex;justify-content:space-between;font-size:12px">
-    <span>Total Stake:</span>
-    <span style="font-weight:bold">KSh ${stake.toLocaleString(undefined,{minimumFractionDigits:2})}</span>
-  </div>
-  
-  ${resolved ? `
-  <div style="text-align:center;border:1.5px solid #000;padding:6px;margin:10px 0">
-    <div style="font-size:9px;text-transform:uppercase;opacity:0.6">Winning Number</div>
-    <div style="font-size:36px;font-weight:900;color:${numColor(winNum)}">${winNum}</div>
-    <div style="font-size:10px;font-weight:bold">${numLabel(winNum)}</div>
-  </div>
-  
-  ${won ? `
-  <div style="margin-bottom:5px">${winRows}</div>
-  <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:900;margin-top:6px;border-top:1.5px solid #000;padding-top:4px">
-    <span>PAYOUT:</span>
-    <span>${(payout?.amount??0).toLocaleString(undefined,{minimumFractionDigits:2})}</span>
-  </div>
-  ` : `
-  <div style="text-align:center;font-size:14px;font-weight:900;opacity:0.3;margin-top:5px">-- NO PAYOUT --</div>
-  `}
-  ` : `
-  <div style="text-align:center;border:1px dashed #aaa;padding:10px;margin:10px 0;font-size:10px;opacity:0.5;text-transform:uppercase">
-    Awaiting Draw Result
-  </div>
-  `}
-</div>
-
-<div style="margin-top:20px;text-align:center">
+<div class="barcode-wrap">
   <svg id="bc"></svg>
-  <div style="font-size:12px;font-weight:900;margin-top:4px">#${serial}</div>
-  <div style="font-size:8px;margin-top:10px;font-style:italic;opacity:0.8;line-height:1.2">
-    Play responsibly. Must be 18+.<br/>Keep this ticket as proof of bet.<br/>Valid for 30 days.
-  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
@@ -167,13 +233,14 @@ export default function TicketPreview({ ticket, payout, jackpot = 0, onMarkPaid,
   const [payingOut, setPayingOut] = useState(false);
 
   const bets      = groupBets(ticket?.bets ?? []);
+  const betCount  = bets.length;
   const stake     = ticket?.total_stake ?? 0;
   const resolved  = !!payout;
   const won       = resolved && (payout?.amount ?? 0) > 0;
   const winNum    = payout?.winning_number;
   const serial    = ticket?.ticket_serial ?? ticket?.id ?? '00000000';
   const logoSrc   = ticket?.logo_url ?? FALLBACK_LOGO;
-  const shopName  = (ticket?.shop_name ?? 'LUCRA').toUpperCase();
+  const cashierName = ticket?.cashier_name || ticket?.cashier_username || ticket?.cashier || ticket?.cashier_id || 'N/A';
 
   async function handlePayOut() {
     if (!onMarkPaid || !payout || payout.paid) return;
@@ -188,121 +255,113 @@ export default function TicketPreview({ ticket, payout, jackpot = 0, onMarkPaid,
   }
 
   return (
-    <div className="bg-white text-black p-6 rounded-[2.5rem] shadow-2xl w-full max-w-sm mx-auto font-monospace border border-white/10" style={{ fontFamily: 'monospace' }}>
-      
-      {/* STATUS BANNER */}
+    <div className="mx-auto w-full max-w-sm border border-black bg-white p-2.5 text-black shadow-2xl" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <table className="w-full border-collapse text-[9px]">
+        <tbody>
+          <tr>
+            <td className="border border-black p-1 align-top" style={{ width: '56%' }} rowSpan={3}>
+              <img src={logoSrc} className="mx-auto h-14 w-36 object-contain grayscale contrast-150" alt="LOGO" />
+            </td>
+            <td className="border border-black p-1 font-bold">Cashier:</td>
+            <td className="border border-black p-1 text-right font-black">{cashierName}</td>
+          </tr>
+          <tr>
+            <td className="border border-black p-1 font-bold">Ticket:</td>
+            <td className="border border-black p-1 text-right font-black">{serial}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table className="mt-1 w-full border-collapse text-[9px]">
+        <tbody>
+          <tr>
+            <td className="border border-black p-1 text-center font-bold">
+              Bet Placed On {fmtDateOnly(ticket?.created_at)}, {fmtTimeOnly(ticket?.created_at)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table className="mt-1 w-full border-collapse text-[9px]">
+        <thead>
+          <tr className="bg-neutral-100">
+            <th className="border border-black p-1">SPIN &amp; WIN</th>
+            <th className="border border-black p-1">Selection</th>
+            <th className="border border-black p-1">Odds</th>
+            <th className="border border-black p-1">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bets.length ? bets.map((b) => (
+            <tr key={b.key}>
+              <td className="border border-black p-1 font-bold">SPIN 2 WIN<br />#{ticket?.draw_id ?? ticket?.id ?? 'PENDING'}</td>
+              <td className="border border-black p-1 text-center font-bold">{compactBetLabel(b.label || '')}</td>
+              <td className="border border-black p-1 text-center font-bold">{Number(b.payout || 0).toFixed(0)}</td>
+              <td className="border border-black p-1 text-right font-bold">KES {Number(b.amount || 0).toLocaleString('en-US')}</td>
+            </tr>
+          )) : (
+            <tr><td colSpan={4} className="border border-black p-2 text-center">No selections</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      <table className="mt-1 w-full border-collapse text-[9px]">
+        <tbody>
+          <tr><td className="border border-black p-1 text-center font-black">BET TYPE: SPIN &amp; WIN SINGLE({betCount})</td></tr>
+          <tr><td className="border border-black p-1 text-center font-black">TOTAL STAKE: KES {stake.toLocaleString('en-US')}</td></tr>
+        </tbody>
+      </table>
+
+      <table className="mt-1 w-full border-collapse text-[9px]">
+        <tbody>
+          <tr>
+            <td className="border border-black p-1 font-black">MIN ODD:</td>
+            <td className="border border-black p-1 text-right font-black">0</td>
+            <td className="border border-black p-1 font-black">MAX ODD:</td>
+            <td className="border border-black p-1 text-right font-black">{bets.length ? Math.max(...bets.map(b => Number(b.payout || 0))).toFixed(0) : '0'}</td>
+          </tr>
+          <tr>
+            <td className="border border-black p-1 font-black">Min NET WIN:</td>
+            <td className="border border-black p-1 text-right font-black">KES {Math.max(Math.round(stake * 0.36), 0).toLocaleString('en-US')}</td>
+            <td className="border border-black p-1 font-black">Max NET WIN:</td>
+            <td className="border border-black p-1 text-right font-black">KES {(resolved && won ? Number(payout?.amount || 0) : jackpot).toLocaleString('en-US')}</td>
+          </tr>
+        </tbody>
+      </table>
+
       {resolved && (
-        <div className={`text-center py-2 mb-4 font-black text-lg tracking-widest border-2 border-black ${won ? 'bg-black text-white' : 'bg-white text-black'}`}>
-          {won ? '✓ WON ✓' : '✗ LOST ✗'}
+        <div className={`mt-2 border border-black p-2 text-center text-[11px] font-black ${won ? 'bg-black text-white' : 'bg-neutral-100 text-black'}`}>
+          {won ? 'WON' : 'LOST'} | {winNum} {numLabel(winNum)}
         </div>
       )}
 
-      {/* HEADER */}
-      <div className="text-center mb-4">
-        <img src={logoSrc} className="w-32 h-16 object-contain mx-auto mb-2 grayscale contrast-150" alt="LOGO" />
-        <div className="text-xs font-black uppercase tracking-tighter">SHOP: {shopName}</div>
-        <div className="text-[10px] opacity-60 mt-1">{fmt(ticket?.created_at)}</div>
+      <div className="mt-2 text-center text-[8px]">
+        Terms and conditions apply, ticket placed after market<br />
+        closed will be voided.
       </div>
 
-      <div className="border-t-2 border-black my-4"></div>
-
-      {/* META */}
-      <div className="space-y-1 mb-6">
-        <div className="flex justify-between text-[11px]">
-          <span className="opacity-50 uppercase">Serial</span>
-          <span className="font-black">#{serial}</span>
-        </div>
-        <div className="flex justify-between text-[11px]">
-          <span className="opacity-50 uppercase">Draw ID</span>
-          <span className="font-black">{ticket?.draw_id ? `#${ticket.draw_id}` : 'PENDING'}</span>
-        </div>
-      </div>
-
-      <div className="border-t border-dashed border-black/20 my-4"></div>
-      <div className="text-center font-black text-xs tracking-widest text-amber-600">
-        ★ JACKPOT: {jackpot.toLocaleString()} ★
-      </div>
-      <div className="border-t border-dashed border-black/20 my-4"></div>
-
-      {/* SELECTIONS */}
-      <div className="text-[10px] font-black uppercase mb-3 tracking-widest opacity-40">Selections</div>
-      <div className="space-y-2 mb-6">
-        {bets.map((b) => (
-          <div key={b.key} className="flex justify-between text-[11px] border-b border-black/5 pb-1">
-            <span>{b.label}</span>
-            <span className="font-black">{b.amount.toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* TOTALS */}
-      <div className="border-t-2 border-dashed border-black pt-4">
-        <div className="flex justify-between text-sm">
-          <span>Total Stake:</span>
-          <span className="font-black">KSh {stake.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-        </div>
-
-        {resolved ? (
-          <>
-            <div className="text-center border-2 border-black rounded-2xl p-4 my-4">
-              <div className="text-[10px] opacity-50 uppercase font-black">Winning Number</div>
-              <div className="text-5xl font-black" style={{ color: numColor(winNum) }}>{winNum}</div>
-              <div className="text-xs font-black">{numLabel(winNum)}</div>
-            </div>
-
-            {won ? (
-              <>
-                <div className="flex flex-wrap gap-1 mb-4">
-                  {(payout?.winning_labels ?? []).map(label => (
-                    <span key={label} className="bg-black text-white text-[9px] px-2 py-1 font-black uppercase">✓ {label}</span>
-                  ))}
-                </div>
-                <div className="flex justify-between text-2xl font-black border-t-2 border-black pt-2 mt-4">
-                  <span>PAYOUT:</span>
-                  <span>{Number(payout?.amount || 0).toLocaleString()}</span>
-                </div>
-                
-                {!payout.paid ? (
-                  <button onClick={handlePayOut} disabled={payingOut} className="w-full bg-[#10b981] text-black font-black py-4 rounded-2xl mt-4 hover:scale-105 transition-all text-sm italic uppercase shadow-xl disabled:opacity-50">
-                    {payingOut ? 'Processing...' : '💵 PAY OUT'}
-                  </button>
-                ) : (
-                  <div className="text-center text-[#10b981] font-black uppercase mt-4 text-xs italic">
-                    ✓ Paid on {fmt(payout.paid_at)}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center text-red-500 font-black uppercase mt-4 text-xs tracking-[0.3em] opacity-30">
-                -- NO WIN --
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-center border border-dashed border-black/20 p-6 my-4 text-[10px] uppercase opacity-40 tracking-widest">
-            Awaiting Draw Result
-          </div>
-        )}
-      </div>
-
-      {/* BARCODE */}
-      <div className="mt-8 text-center">
-        <div className="flex justify-center mb-2">
+      <div className="mt-3 text-center">
+        <div className="mb-2 flex justify-center">
           <Barcode value={serial} width={1.2} height={40} displayValue={false} margin={0} />
         </div>
-        <div className="font-black text-xs">#{serial}</div>
-        
-        <div className="flex flex-col gap-2 mt-6">
+
+        {resolved && won && !payout?.paid && (
+          <button onClick={handlePayOut} disabled={payingOut} className="mt-2 w-full bg-black py-3 text-[11px] font-black uppercase text-white disabled:opacity-50">
+            {payingOut ? 'Processing...' : 'Pay Out'}
+          </button>
+        )}
+
+        <div className="mt-3 flex flex-col gap-2">
           <button 
             onClick={() => { setPrinting(true); printTicket({ ticket, payout, jackpot }); setTimeout(() => setPrinting(false), 1200); }}
             disabled={printing}
-            className="w-full bg-black text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 hover:brightness-110 transition-all text-xs uppercase"
+            className="w-full bg-black py-3 text-[11px] font-black uppercase text-white"
           >
-            {printing ? 'Opening...' : '🖨 Print Ticket'}
+            {printing ? 'Opening...' : 'Print Ticket'}
           </button>
           
           {onClose && (
-            <button onClick={onClose} className="w-full text-black/40 font-black py-2 text-[10px] uppercase hover:text-black transition-colors">
+            <button onClick={onClose} className="w-full py-2 text-[10px] font-black uppercase text-black/50">
               Close Preview
             </button>
           )}

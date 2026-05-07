@@ -64,7 +64,7 @@ export default function Betslip({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#111926] border-l border-white/5 p-6 shadow-2xl relative overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden border-l border-white/5 bg-[#111926] p-6 shadow-2xl">
       
       {/* Background Decor */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 blur-[100px] -mr-16 -mt-16 pointer-events-none" />
@@ -94,7 +94,7 @@ export default function Betslip({
       </div>
 
       {/* Games List */}
-      <div className="flex-1 overflow-y-auto space-y-3 mb-6 pr-1 custom-scrollbar">
+      <div className="mb-6 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 custom-scrollbar">
         {items.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-700">
             <div className="p-6 border-2 border-dashed border-white/5 rounded-[2rem] flex flex-col items-center">
@@ -145,7 +145,7 @@ export default function Betslip({
       </div>
 
       {/* Financial Controls */}
-      <div className="mt-auto space-y-4">
+      <div className="mt-auto shrink-0 space-y-4">
         
         {/* Odds & Summary */}
         <div className="flex justify-between items-center bg-black/40 p-4 rounded-2xl border border-white/5">

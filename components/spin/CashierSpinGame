@@ -555,7 +555,7 @@ export default function CashierSpinGame({ userProfile, onRefreshProfile }) {
 
           {/* ── FASTBET sidebar ────────────────────────────────────────────── */}
           <aside className="w-[420px] shrink-0 border-l border-white/10 bg-[#050505] shadow-[-12px_0_28px_rgba(0,0,0,0.3)]">
-            <div className="flex h-full flex-col">
+          <div className="flex h-full min-h-0 flex-col">
               <div className="border-b border-white/10 bg-[linear-gradient(180deg,#1d1d1d_0%,#090909_100%)] px-4 py-3 text-center text-[18px] font-black uppercase tracking-[0.22em] text-[#d8d8d8]">FASTBET</div>
 
               {betEntries.length === 0 ? (
@@ -573,7 +573,7 @@ export default function CashierSpinGame({ userProfile, onRefreshProfile }) {
                   <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#141414_0%,#090909_100%)]">
                     {betEntries.map((bet, i) => (
                       <div key={bet.key} className={`grid grid-cols-[minmax(0,1fr)_72px_70px_34px] items-center border-b border-white/8 px-3 py-2 ${i%2===0?'bg-white/[0.03]':'bg-white/[0.06]'}`}>
-                        <div className="truncate pr-2 text-[11px] font-bold text-white/92">{bet.label}</div>
+                        <div className="min-w-0 break-words pr-2 text-[11px] font-bold leading-4 text-white/92">{bet.label}</div>
                         <div className="text-center text-[11px] font-black text-white/80">{bet.payout.toFixed(2)}</div>
                         <div className="flex justify-center">
                           <div className="min-w-[54px] rounded border border-white/15 bg-black/55 px-2 py-1 text-right text-[11px] font-black text-[#f2d48c]">{bet.amount}</div>
@@ -588,16 +588,6 @@ export default function CashierSpinGame({ userProfile, onRefreshProfile }) {
               )}
 
               <div className="mt-auto">
-                <div className="border-t border-white/10 bg-[#121212] px-4 py-3 text-[11px] font-black text-white/82">
-                  <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.08em] text-white/55">Potential Min Win</span>
-                    <span>{Math.max(Math.round(totalStake*0.05),0)} KSh</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="uppercase tracking-[0.08em] text-white/55">Potential Max Win</span>
-                    <span className="text-[#f0cd7b]">{maxTotalWin} KSh</span>
-                  </div>
-                </div>
                 <div className="bg-[linear-gradient(180deg,#831515_0%,#540909_100%)] px-4 py-3 text-[11px] font-black text-white">
                   <div className="flex items-center justify-between">
                     <span className="uppercase tracking-[0.08em] text-white/72">Total Stake</span>

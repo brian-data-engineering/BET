@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react';
 import { useCashierRoulette } from '../../lib/useCashierRoulette';
 import { printTicket } from '../../components/spin/Ticketprint';
 import CashierLayout from '../../components/cashier/CashierLayout';
+import { supabase } from '../../lib/supabaseClient';
 
 // ── All constants identical to doc 6 ─────────────────────────────────────────
 
@@ -84,6 +85,17 @@ function buildChip(amount, compact=false) {
   );
 }
 
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString('en-US');
+}
+
+function formatCountdown(totalSeconds) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function wheelNeighbours(center, spread=2) {
   const index = WHEEL_ORDER.indexOf(center);
   if (index===-1) return [center];
@@ -137,6 +149,54 @@ function BoardButton({children,className,onClick,chip}){
   return(<button type="button" onClick={onClick} className={`relative ${className}`}>{children}{chip?<div className="board-chip">{buildChip(chip,true)}</div>:null}</button>);
 }
 
+function FooterGlyph({ type }) {
+  if (type === 'clear') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 6h18" />
+        <path d="M8 6V4h8v2" />
+        <path d="M6 6l1 14h10l1-14" />
+        <path d="M10 10v6" />
+        <path d="M14 10v6" />
+      </svg>
+    );
+  }
+  if (type === 'cancel') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 12h10a7 7 0 1 1 0 14" />
+        <path d="M3 12l4-4" />
+        <path d="M3 12l4 4" />
+      </svg>
+    );
+  }
+  if (type === 'redeem') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path d="M12 9v6" />
+        <path d="M9 12h6" />
+      </svg>
+    );
+  }
+  if (type === 'reprint') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M7 8V4h10v4" />
+        <rect x="5" y="14" width="14" height="6" rx="1" />
+        <rect x="3" y="8" width="18" height="8" rx="2" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v18" />
+      <path d="M7 8l5-5 5 5" />
+      <path d="M7 16l5 5 5-5" />
+    </svg>
+  );
+}
+
 function NumberCell({num,rowIndex,colIndex,row,betMap,placeBet}){
   const hk=colIndex<11?`split-${[num,row[colIndex+1]].sort((a,b)=>a-b).join('-')}`:null;
   const vk=rowIndex<2?`split-${[num,ROWS[rowIndex+1][colIndex]].sort((a,b)=>a-b).join('-')}`:null;
@@ -147,7 +207,7 @@ function NumberCell({num,rowIndex,colIndex,row,betMap,placeBet}){
   const slk=sixLine?`sixline-${sixLine.join('-')}`:null;
   return(
     <div className="relative">
-      <BoardButton onClick={()=>placeBet(`num-${num}`)} chip={betMap[`num-${num}`]?.amount} className={`h-[68px] w-full rounded-[4px] border-2 border-white/85 text-[1.2rem] font-black ${getBoardNumberClass(num)}`}>{num}</BoardButton>
+      <BoardButton onClick={()=>placeBet(`num-${num}`)} chip={betMap[`num-${num}`]?.amount} className={`h-[58px] w-full rounded-[4px] border-2 border-white/85 text-[1rem] font-black 2xl:h-[68px] 2xl:text-[1.2rem] ${getBoardNumberClass(num)}`}>{num}</BoardButton>
       {hk&&<button type="button" onClick={()=>placeBet(hk)} className="inside-hotspot inside-hotspot--vertical right-[-5px] top-[14px] h-[40px] w-[10px]">{betMap[hk]?.amount?<div className="inside-hotspot-chip">{buildChip(betMap[hk].amount,true)}</div>:null}</button>}
       {vk&&<button type="button" onClick={()=>placeBet(vk)} className="inside-hotspot inside-hotspot--horizontal bottom-[-5px] left-[14px] h-[10px] w-[40px]">{betMap[vk]?.amount?<div className="inside-hotspot-chip">{buildChip(betMap[vk].amount,true)}</div>:null}</button>}
       {ck&&<button type="button" onClick={()=>placeBet(ck)} className="inside-hotspot inside-hotspot--corner bottom-[-8px] right-[-8px] h-[16px] w-[16px] rounded-full">{betMap[ck]?.amount?<div className="inside-hotspot-chip">{buildChip(betMap[ck].amount,true)}</div>:null}</button>}
@@ -165,6 +225,8 @@ export default function CashierSpin() {
   const [viewMode, setViewMode]           = useState('deluxe');
   const [clockLabel, setClockLabel]       = useState('00:00');
   const [spinCountdown, setSpinCountdown] = useState(59);
+  const [cashierName, setCashierName]     = useState('');
+  const [displayedResult, setDisplayedResult] = useState(null);
 
   const roulette = useCashierRoulette({ terminalId: 'T1' });
   const {
@@ -184,6 +246,19 @@ export default function CashierSpin() {
   };
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const loadCashierName = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .single();
+      if (data?.username) setCashierName(data.username);
+    };
+    loadCashierName();
+  }, []);
   useEffect(() => {
     if (!mounted) return;
     const t = setInterval(() => setClockLabel(new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})), 1000);
@@ -220,10 +295,11 @@ export default function CashierSpin() {
       const formattedBets = Object.values(ticket.bets).map(b => ({
         key: b.key,
         label: b.label,
-        amount: b.amount
+        amount: b.amount,
+        payout: b.payout
       }));
       printTicket({ 
-        ticket: { ...ticket, bets: formattedBets }, 
+        ticket: { ...ticket, bets: formattedBets, cashier_name: cashierName }, 
         payout: null, 
         jackpot 
       });
@@ -235,10 +311,11 @@ export default function CashierSpin() {
     const formattedBets = Object.values(lastTicket.bets).map(b => ({
       key: b.key,
       label: b.label,
-      amount: b.amount
+      amount: b.amount,
+      payout: b.payout
     }));
     printTicket({ 
-      ticket: { ...lastTicket, bets: formattedBets }, 
+      ticket: { ...lastTicket, bets: formattedBets, cashier_name: cashierName || lastTicket.cashier_name }, 
       payout: lastTicket.status === 'won' || lastTicket.status === 'paid' ? {
         winning_number: lastTicket.winning_number,
         amount: lastTicket.potential_payout,
@@ -266,13 +343,45 @@ export default function CashierSpin() {
     }
   };
 
-  const timerText   = phase === 'SPINNING' ? '00:03' : `00:${String(spinCountdown).padStart(2,'0')}`;
+  const handleOpenViewer = () => {
+    const width = window.screen?.availWidth || window.innerWidth || 1280;
+    const height = window.screen?.availHeight || window.innerHeight || 720;
+    const features = [
+      'popup=yes',
+      'noopener=yes',
+      'noreferrer=yes',
+      `width=${width}`,
+      `height=${height}`,
+      'left=0',
+      'top=0',
+    ].join(',');
+    const viewerWindow = window.open('/spin?viewer=fullscreen', 'spin-viewer', features);
+    if (viewerWindow) {
+      viewerWindow.moveTo?.(0, 0);
+      viewerWindow.resizeTo?.(width, height);
+      viewerWindow.focus?.();
+    }
+  };
+
+  useEffect(() => {
+    if (lastResult?.winningNumber === 0 || lastResult?.winningNumber) {
+      setDisplayedResult(lastResult);
+    }
+  }, [lastResult]);
+
+  useEffect(() => {
+    if (phase === 'BETTING' && spinCountdown <= 0) {
+      setDisplayedResult(null);
+    }
+  }, [phase, spinCountdown]);
+
+  const timerText   = phase === 'SPINNING' ? '0:03' : formatCountdown(spinCountdown);
   const isTableView = viewMode === 'table';
 
   return (
     <CashierLayout>
-      <div className="roulette-cashier flex min-h-full bg-black text-white">
-        <div className="flex min-w-0 flex-1 flex-col">
+      <div className="roulette-cashier flex h-[calc(100vh-5rem)] min-h-0 overflow-hidden bg-black text-white xl:h-[calc(100vh-5.5rem)] 2xl:h-[calc(100vh-5rem)]">
+        <div className="flex min-w-0 min-h-0 flex-1 flex-col">
           <div className="relative flex-1 overflow-hidden bg-[linear-gradient(180deg,#214c40_0%,#163831_100%)]">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_8%,rgba(164,14,14,0.58),transparent_18%),radial-gradient(circle_at_18%_28%,rgba(255,255,255,0.06),transparent_20%)]" />
 
@@ -293,40 +402,44 @@ export default function CashierSpin() {
               </div>
             </div>
 
-            <div className="relative flex h-full flex-col px-7 pb-4 pt-3">
+            <div className="relative flex h-full flex-col px-3 pb-3 pt-2 xl:px-4 xl:pb-3 xl:pt-2 2xl:px-7 2xl:pb-4 2xl:pt-3">
               {/* Header */}
-              <div className="flex items-start gap-8">
-                <div className="ml-auto flex items-start gap-4">
-                  <div className="flex overflow-hidden bg-[#f5b300] shadow-[0_3px_10px_rgba(0,0,0,0.25)]">
-                    <div className="px-4 py-2 text-center font-black uppercase leading-none text-white">
-                      <div className="text-[14px]">GOLD</div><div className="text-[14px]">JACKPOT</div>
+              <div className="flex items-start gap-4 xl:gap-5 2xl:gap-8">
+                <div className="ml-auto flex items-start gap-3 xl:gap-3 2xl:gap-4">
+                  <div className="pill-header-shell overflow-hidden bg-[#f5b300]">
+                    <div className="px-3 py-1.5 text-center font-black uppercase leading-none text-white 2xl:px-4 2xl:py-2">
+                      <div className="text-[9px] 2xl:text-[14px]">GOLD</div><div className="text-[9px] 2xl:text-[14px]">JACKPOT</div>
                     </div>
-                    <div className="px-5 py-2 text-[28px] font-black text-white">{jackpot} KSh</div>
+                    <div className="px-3 py-1.5 text-[16px] font-black text-white 2xl:px-5 2xl:py-2 2xl:text-[28px]">{jackpot} KSh</div>
                   </div>
-                  <div className={`flex h-[74px] w-[168px] -translate-y-3 items-center justify-center rounded-[8px] border-[4px] ${phase==='BETTING'?'border-white':'border-[#ff1710]'} bg-black shadow-[0_6px_16px_rgba(0,0,0,0.38)]`}>
-                    <div className="text-center">
-                      <div className="text-[28px] font-black tracking-[0.08em] text-white">{timerText}</div>
-                      <div className="mt-[2px] text-[14px] font-black text-[#ff1710]">{mounted?clockLabel:'00:00'}</div>
+                  <div className="relative flex items-start">
+                    <div className={`pill-timer-shell flex h-[64px] w-[148px] -translate-y-2 items-center justify-center ${phase==='BETTING'?'border-white':'border-[#ff1710]'} bg-black 2xl:h-[74px] 2xl:w-[168px] 2xl:-translate-y-3`}>
+                      <div className="text-center">
+                        <div className="text-[24px] font-black tracking-[0.08em] text-white 2xl:text-[28px]">{timerText}</div>
+                        <div className="mt-[2px] text-[12px] font-black text-[#ff1710] 2xl:text-[14px]">{mounted?clockLabel:'00:00'}</div>
+                      </div>
                     </div>
+                    <button type="button" onClick={handleOpenViewer} className="viewer-mini-btn viewer-mini-btn--floating">Viewer</button>
                   </div>
                 </div>
               </div>
 
               {/* Board + Sectors */}
-              <div className={`${isTableView?'mt-8':'-mt-12'} grid min-h-0 flex-1 ${isTableView?'grid-cols-1':'grid-cols-[minmax(0,1fr)_410px]'} gap-9`}>
+              <div className="min-h-0 flex-1">
+              <div className={`${isTableView?'mt-5 xl:mt-6 2xl:mt-8':'-mt-7 xl:-mt-8 2xl:-mt-12'} grid min-h-0 h-full ${isTableView?'grid-cols-1':'grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_410px]'} gap-3 xl:gap-4 2xl:gap-9`}>
                 <div className={`min-w-0 ${isTableView?'mx-auto w-full max-w-[1380px]':''}`}>
                   <div className="rounded-[12px]">
                     <div className={`w-full select-none ${isTableView?'cashier-table-zoom':''}`}>
                       {/* Dozens */}
-                      <div className={`grid grid-cols-3 gap-[4px] pl-[76px] ${isTableView?'mx-auto max-w-[1120px]':''}`}>
+                      <div className={`grid grid-cols-3 gap-[6px] pl-[66px] pb-[2px] 2xl:pl-[76px] 2xl:gap-[8px] ${isTableView?'mx-auto max-w-[1120px]':''}`}>
                         {[{key:'dozen-1-12',label:'1 - 12'},{key:'dozen-13-24',label:'13 - 24'},{key:'dozen-25-36',label:'25 - 36'}].map(item=>(
-                          <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className="h-[48px] rounded-[4px] border-2 border-white/80 bg-[rgba(31,67,57,0.55)] text-[1.05rem] font-black">{item.label}</BoardButton>
+                          <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className="pill-outside-btn h-[42px] text-[0.92rem] font-black 2xl:h-[48px] 2xl:text-[1.05rem]">{item.label}</BoardButton>
                         ))}
                       </div>
                       {/* Main grid */}
-                      <div className={`mt-[6px] grid grid-cols-[72px_minmax(0,1fr)] gap-[4px] ${isTableView?'mx-auto max-w-[1120px]':''}`}>
-                        <div className="relative min-h-[208px]">
-                          <BoardButton onClick={()=>placeBet('num-0')} chip={betMap['num-0']?.amount} className="min-h-[208px] w-full rounded-[4px] border-2 border-white/90 bg-[#05c300] text-[3rem] font-black">0</BoardButton>
+                      <div className={`mt-[8px] grid grid-cols-[62px_minmax(0,1fr)] gap-[6px] 2xl:mt-[10px] 2xl:grid-cols-[72px_minmax(0,1fr)] 2xl:gap-[8px] ${isTableView?'mx-auto max-w-[1120px]':''}`}>
+                        <div className="relative min-h-[178px] 2xl:min-h-[208px]">
+                          <BoardButton onClick={()=>placeBet('num-0')} chip={betMap['num-0']?.amount} className="min-h-[178px] w-full rounded-[4px] border-2 border-white/90 bg-[#05c300] text-[2.35rem] font-black 2xl:min-h-[208px] 2xl:text-[3rem]">0</BoardButton>
                           {[['split-0-3','right-[-6px] top-[26px] h-[12px] w-[12px] rounded-[3px]','inside-hotspot--zero'],['trio-0-2-3','right-[-8px] top-[60px] h-[14px] w-[16px] rounded-[3px]','inside-hotspot--trio'],['split-0-2','right-[-6px] top-[98px] h-[12px] w-[12px] rounded-[3px]','inside-hotspot--zero'],['trio-0-1-2','right-[-8px] bottom-[60px] h-[14px] w-[16px] rounded-[3px]','inside-hotspot--trio'],['split-0-1','right-[-6px] bottom-[26px] h-[12px] w-[12px] rounded-[3px]','inside-hotspot--zero']].map(([key,pos,cls])=>(
                             <button key={key} type="button" onClick={()=>placeBet(key)} className={`inside-hotspot ${cls} ${pos}`}>{betMap[key]?.amount?<div className="inside-hotspot-chip">{buildChip(betMap[key].amount,true)}</div>:null}</button>
                           ))}
@@ -335,11 +448,11 @@ export default function CashierSpin() {
                         </div>
                         <div className="grid gap-[4px]">
                           {ROWS.map((row,rowIndex)=>(
-                            <div key={rowIndex} className="grid grid-cols-[repeat(12,minmax(0,1fr))_72px] gap-[4px]">
+                            <div key={rowIndex} className="grid grid-cols-[repeat(12,minmax(0,1fr))_72px] gap-[6px] 2xl:gap-[8px]">
                               {row.map((num,colIndex)=>(
                                 <NumberCell key={num} num={num} rowIndex={rowIndex} colIndex={colIndex} row={row} betMap={betMap} placeBet={placeBet}/>
                               ))}
-                              <BoardButton onClick={()=>placeBet(`column-${rowIndex+1}`)} chip={betMap[`column-${rowIndex+1}`]?.amount} className="flex h-[68px] flex-col items-center justify-center rounded-[4px] border-2 border-white/80 bg-[rgba(31,67,57,0.55)] text-[0.86rem] font-black">
+                              <BoardButton onClick={()=>placeBet(`column-${rowIndex+1}`)} chip={betMap[`column-${rowIndex+1}`]?.amount} className="flex h-[58px] flex-col items-center justify-center rounded-[4px] border-2 border-white/80 bg-[rgba(31,67,57,0.55)] text-[0.75rem] font-black 2xl:h-[68px] 2xl:text-[0.86rem]">
                                 <span>2 TO 1</span><span>{rowIndex===0?'III':rowIndex===1?'II':'I'}</span>
                               </BoardButton>
                             </div>
@@ -347,10 +460,10 @@ export default function CashierSpin() {
                         </div>
                       </div>
                       {/* Outside bets */}
-                      <div className={`mt-[6px] grid grid-cols-6 gap-[4px] pl-[76px] ${isTableView?'mx-auto max-w-[1120px]':''}`}>
+                      <div className={`mt-[8px] grid grid-cols-6 gap-[6px] pl-[66px] pt-[2px] 2xl:mt-[10px] 2xl:pl-[76px] 2xl:gap-[8px] ${isTableView?'mx-auto max-w-[1120px]':''}`}>
                         {[{key:'low',label:'1 TO 18'},{key:'even',label:'EVEN'},{key:'red',diamond:'red'},{key:'black',diamond:'black'},{key:'odd',label:'ODD'},{key:'high',label:'19 TO 36'}].map(item=>(
-                          <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className="flex h-[48px] items-center justify-center rounded-[4px] border-2 border-white/80 bg-[rgba(31,67,57,0.55)] text-[1rem] font-black">
-                            {item.diamond?<span className={`h-[24px] w-[48px] clip-diamond border border-white/70 ${item.diamond==='red'?'bg-[#ff1710]':'bg-[#050505]'}`}/>:item.label}
+                          <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className="pill-outside-btn flex h-[42px] items-center justify-center text-[0.9rem] font-black 2xl:h-[48px] 2xl:text-[1rem]">
+                            {item.diamond?<span className={`h-[20px] w-[40px] clip-diamond border border-white/70 2xl:h-[24px] 2xl:w-[48px] ${item.diamond==='red'?'bg-[#ff1710]':'bg-[#050505]'}`}/>:item.label}
                           </BoardButton>
                         ))}
                       </div>
@@ -359,36 +472,36 @@ export default function CashierSpin() {
 
                   {/* Deluxe extras */}
                   {!isTableView?(
-                    <div className="deluxe-zoom-enter mt-6 grid grid-cols-[74px_minmax(0,1fr)] gap-4">
+                    <div className="deluxe-zoom-enter mt-2 grid grid-cols-[52px_minmax(0,1fr)] gap-2 xl:grid-cols-[58px_minmax(0,1fr)] xl:gap-2 2xl:mt-3 2xl:grid-cols-[74px_minmax(0,1fr)] 2xl:gap-3">
                       <div className="cashier-deluxe-side">Deluxe</div>
                       <div>
-                        <div className="grid grid-cols-2 gap-x-14 gap-y-4">
+                        <div className="grid grid-cols-2 gap-x-5 gap-y-1 xl:gap-x-6 2xl:gap-x-10 2xl:gap-y-2">
                           <div>
-                            <div className="mb-2 text-[18px] font-black uppercase text-[#ffbf00]">TWINS</div>
-                            <BoardButton onClick={()=>placeBet('twins')} chip={betMap.twins?.amount} className="h-[64px] w-[196px] rounded-[4px] border-2 border-white/80 bg-[rgba(25,44,39,0.6)] text-[1.05rem] font-black">11 | 22 | 33</BoardButton>
+                            <div className="mb-1 text-[14px] font-black uppercase text-[#ffbf00] xl:text-[15px] 2xl:text-[18px]">TWINS</div>
+                            <BoardButton onClick={()=>placeBet('twins')} chip={betMap.twins?.amount} className="pill-deluxe-btn w-[160px] text-[0.88rem] xl:w-[170px] xl:text-[0.92rem] 2xl:w-[196px] 2xl:text-[1.05rem]">11 | 22 | 33</BoardButton>
                           </div>
                           <div>
-                            <div className="mb-2 text-[18px] font-black uppercase text-[#ffbf00]">MIRROR</div>
-                            <div className="flex gap-4">
+                            <div className="mb-1 text-[14px] font-black uppercase text-[#ffbf00] xl:text-[15px] 2xl:text-[18px]">MIRROR</div>
+                            <div className="flex gap-2 xl:gap-2 2xl:gap-3">
                               {[{key:'mirror-12-21',label:'12 | 21'},{key:'mirror-13-31',label:'13 | 31'},{key:'mirror-23-32',label:'23 | 32'}].map(item=>(
-                                <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className="h-[64px] w-[128px] rounded-[4px] border-2 border-white/80 bg-[rgba(25,44,39,0.6)] text-[1.05rem] font-black">{item.label}</BoardButton>
+                                <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className="pill-deluxe-btn w-[94px] text-[0.82rem] xl:w-[100px] xl:text-[0.84rem] 2xl:w-[128px] 2xl:text-[1.05rem]">{item.label}</BoardButton>
                               ))}
                             </div>
                           </div>
                         </div>
-                        <div className="mt-5">
-                          <div className="mb-2 text-[18px] font-black uppercase text-[#ffbf00]">FINALS</div>
-                          <div className="grid grid-cols-10 gap-4">
+                        <div className="mt-2 xl:mt-2 2xl:mt-3">
+                          <div className="mb-1 text-[14px] font-black uppercase text-[#ffbf00] xl:text-[15px] 2xl:text-[18px]">FINALS</div>
+                          <div className="grid grid-cols-10 gap-2 xl:gap-2 2xl:gap-3">
                             {Array.from({length:10},(_,i)=>i).map(i=>(
-                              <BoardButton key={i} onClick={()=>placeBet(`final-${i}`)} chip={betMap[`final-${i}`]?.amount} className="h-[64px] rounded-[4px] border-2 border-white/80 bg-[rgba(25,44,39,0.52)] text-[1.1rem] font-black">{i}</BoardButton>
+                              <BoardButton key={i} onClick={()=>placeBet(`final-${i}`)} chip={betMap[`final-${i}`]?.amount} className="pill-deluxe-btn text-[0.95rem] xl:text-[1rem] 2xl:text-[1.1rem]">{i}</BoardButton>
                             ))}
                           </div>
                         </div>
-                        <div className="mt-5">
-                          <div className="mb-1 text-[15px] font-black uppercase text-[#ffbf00]">NEIGHBOURS</div>
+                        <div className="mt-2 xl:mt-2 2xl:mt-3">
+                          <div className="mb-0.5 text-[13px] font-black uppercase text-[#ffbf00] xl:text-[13px] 2xl:text-[15px]">NEIGHBOURS</div>
                           <div className="grid grid-cols-10 gap-[3px]">
                             {NUMBER_ORDER.map(center=>(
-                              <BoardButton key={center} onClick={()=>placeBet(`neighbors-${center}`)} chip={betMap[`neighbors-${center}`]?.amount} className={`h-[34px] rounded-[3px] border border-white/75 px-1 text-[0.78rem] font-black ${getNeighborNumberClass(center)}`}>{center}</BoardButton>
+                              <BoardButton key={center} onClick={()=>placeBet(`neighbors-${center}`)} chip={betMap[`neighbors-${center}`]?.amount} className={`pill-neighbor-btn text-[0.68rem] xl:text-[0.7rem] 2xl:text-[0.78rem] ${getNeighborNumberClass(center)}`}>{center}</BoardButton>
                             ))}
                           </div>
                         </div>
@@ -397,20 +510,20 @@ export default function CashierSpin() {
                   ):null}
 
                   {/* Bottom controls */}
-                  <div className={`${isTableView?'mt-16 gap-5':'mt-8 gap-10'} flex items-end justify-between`}>
-                    <div className="flex items-end gap-5">
+                  <div className={`${isTableView?'mt-8 gap-4 xl:mt-10 xl:gap-5 2xl:mt-12':'mt-3 gap-3 xl:mt-4 xl:gap-4 2xl:mt-5 2xl:gap-8'} flex items-end justify-between`}>
+                    <div className="flex items-end gap-2 xl:gap-3 2xl:gap-4">
                       <div className="casinochip-container">
                         {CHIPS.map(chip=>(
                           <button key={chip} type="button" onClick={()=>setSelectedChip(chip)} className={`chip-select ${selectedChip===chip?'chip-select--active':''}`}>{buildChip(chip)}</button>
                         ))}
                       </div>
                     </div>
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3 xl:gap-4 2xl:gap-5">
                       <div className="flex overflow-hidden rounded-[16px] border-2 border-[#f1b400] bg-[#163a30]">
-                        <button type="button" onClick={()=>setViewMode('table')} className={`px-16 py-5 text-[21px] font-black ${isTableView?'bg-[#f1b400] text-black':'text-[#f7c946]'}`}>Table</button>
-                        <button type="button" onClick={()=>setViewMode('deluxe')} className={`px-16 py-5 text-[21px] font-black ${isTableView?'text-[#f7c946]':'bg-[#f1b400] text-black'}`}>Deluxe</button>
+                        <button type="button" onClick={()=>setViewMode('table')} className={`px-8 py-3 text-[16px] font-black xl:px-10 xl:text-[17px] 2xl:px-16 2xl:py-4 2xl:text-[21px] ${isTableView?'bg-[#f1b400] text-black':'text-[#f7c946]'}`}>Table</button>
+                        <button type="button" onClick={()=>setViewMode('deluxe')} className={`px-8 py-3 text-[16px] font-black xl:px-10 xl:text-[17px] 2xl:px-16 2xl:py-4 2xl:text-[21px] ${isTableView?'text-[#f7c946]':'bg-[#f1b400] text-black'}`}>Deluxe</button>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex gap-2 xl:gap-3 2xl:gap-4">
                         <button type="button" onClick={doubleBets} className="action-btn">2x</button>
                         <button type="button" onClick={undoBet}    className="action-btn">⟳</button>
                         <button type="button" onClick={clearBets}  className="action-btn">×</button>
@@ -421,38 +534,45 @@ export default function CashierSpin() {
 
                 {/* Sectors panel */}
                 {!isTableView?(
-                  <div className="deluxe-zoom-enter mt-10 flex flex-col items-center">
-                    <div className="mt-8 w-[370px] rounded-full border border-transparent">
-                      <div className="relative mx-auto h-[360px] w-[360px]">
+                  <div className="deluxe-zoom-enter mt-4 flex flex-col items-center xl:mt-5 2xl:mt-10">
+                    <div className="mt-2 w-[228px] rounded-full border border-transparent xl:mt-3 xl:w-[240px] 2xl:mt-8 2xl:w-[370px]">
+                      <div className="relative mx-auto h-[220px] w-[220px] xl:h-[236px] xl:w-[236px] 2xl:h-[360px] 2xl:w-[360px]">
                         {Object.keys(SECTOR_MAP).map((sector,index)=>{
-                          const positions=['left-[188px] top-0','right-0 top-[84px]','right-[44px] bottom-[24px]','left-[96px] bottom-0','left-0 top-[84px]','left-[84px] top-[24px]'];
+                          const positions=[
+                            'left-[116px] top-0 xl:left-[126px] 2xl:left-[188px] 2xl:top-0',
+                            'right-0 top-[58px] xl:top-[62px] 2xl:top-[84px]',
+                            'right-[22px] bottom-[12px] xl:right-[26px] xl:bottom-[14px] 2xl:right-[44px] 2xl:bottom-[24px]',
+                            'left-[58px] bottom-0 xl:left-[64px] 2xl:left-[96px] 2xl:bottom-0',
+                            'left-0 top-[58px] xl:top-[62px] 2xl:top-[84px]',
+                            'left-[50px] top-[16px] xl:left-[56px] xl:top-[18px] 2xl:left-[84px] 2xl:top-[24px]'
+                          ];
                           return(
-                            <button key={sector} type="button" onClick={()=>placeBet(`sector-${sector}`)} className={`absolute ${positions[index]} flex h-[132px] w-[132px] items-center justify-center rounded-full border-4 border-white/85 bg-[rgba(23,58,48,0.55)] text-[2.2rem] font-black`}>
+                            <button key={sector} type="button" onClick={()=>placeBet(`sector-${sector}`)} className={`absolute ${positions[index]} flex h-[90px] w-[90px] items-center justify-center rounded-full border-[3px] border-white/85 bg-[rgba(23,58,48,0.55)] text-[1.45rem] font-black xl:h-[96px] xl:w-[96px] xl:text-[1.58rem] 2xl:h-[132px] 2xl:w-[132px] 2xl:border-4 2xl:text-[2.2rem]`}>
                               {sector}
                               {betMap[`sector-${sector}`]?.amount?<div className="board-chip">{buildChip(betMap[`sector-${sector}`].amount,true)}</div>:null}
                             </button>
                           );
                         })}
-                        <div className="absolute left-1/2 top-1/2 flex h-[184px] w-[184px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[14px] border-[#f6b11d] bg-[rgba(24,67,55,0.88)] text-[1.25rem] font-black uppercase text-[#ffbf00] shadow-[inset_0_0_0_4px_#ffe4a3]">SECTORS</div>
+                        <div className="absolute left-1/2 top-1/2 flex h-[128px] w-[128px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[10px] border-[#f6b11d] bg-[rgba(24,67,55,0.88)] text-[0.82rem] font-black uppercase text-[#ffbf00] shadow-[inset_0_0_0_4px_#ffe4a3] xl:h-[136px] xl:w-[136px] xl:text-[0.88rem] 2xl:h-[184px] 2xl:w-[184px] 2xl:border-[14px] 2xl:text-[1.25rem]">SECTORS</div>
                       </div>
                     </div>
-                    <div className="mt-9 flex w-full justify-between px-14">
+                    <div className="mt-4 flex w-full justify-between px-2 xl:px-3 2xl:mt-9 2xl:px-14">
                       {[{key:'high-red',label:'HIGH',tone:'red'},{key:'high-black',label:'HIGH',tone:'black'}].map(item=>(
-                        <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className={`hex-btn ${item.tone==='red'?'hex-btn--red':'hex-btn--black'}`}>{item.label}</BoardButton>
+                        <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className={`pill-polar-btn ${item.tone==='red'?'pill-polar-btn--red':'pill-polar-btn--black'}`}>{item.label}</BoardButton>
                       ))}
                     </div>
-                    <div className="mt-7 text-[20px] font-black uppercase text-[#ffbf00]">LOW/HIGH COLOR</div>
-                    <div className="mt-6 flex w-full justify-between px-14">
+                    <div className="mt-4 text-[14px] font-black uppercase text-[#ffbf00] xl:text-[15px] 2xl:mt-7 2xl:text-[20px]">LOW/HIGH COLOR</div>
+                    <div className="mt-3 flex w-full justify-between px-2 xl:px-3 2xl:mt-6 2xl:px-14">
                       {[{key:'low-red',label:'LOW',tone:'red'},{key:'low-black',label:'LOW',tone:'black'}].map(item=>(
-                        <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className={`hex-btn ${item.tone==='red'?'hex-btn--red':'hex-btn--black'}`}>{item.label}</BoardButton>
+                        <BoardButton key={item.key} onClick={()=>placeBet(item.key)} chip={betMap[item.key]?.amount} className={`pill-polar-btn ${item.tone==='red'?'pill-polar-btn--red':'pill-polar-btn--black'}`}>{item.label}</BoardButton>
                       ))}
                     </div>
 
                     {/* Result panel */}
-                    {lastResult?(
+                    {displayedResult?(
                       <div className="mt-8 w-full rounded-xl border border-white/15 bg-black/25 px-6 py-4 text-center">
                         <div className="text-[11px] font-black uppercase tracking-[0.25em] text-white/55">Winning Number</div>
-                        <div className={`mt-1 text-5xl font-black ${lastResult.winningNumber===0?'text-[#45ff72]':RED_NUMBERS.has(lastResult.winningNumber)?'text-[#ff5757]':'text-white'}`}>{lastResult.winningNumber}</div>
+                        <div className={`mt-1 text-2xl font-black xl:text-[1.65rem] 2xl:text-[2.2rem] ${displayedResult.winningNumber===0?'text-[#45ff72]':RED_NUMBERS.has(displayedResult.winningNumber)?'text-[#ff5757]':'text-white'}`}>{displayedResult.winningNumber}</div>
                         {lastTicket && lastTicket.status === 'won' && (
                           <div className="mt-2 text-sm font-black text-[#59ea88]">
                             WIN: {lastTicket.potential_payout} KSh
@@ -463,53 +583,50 @@ export default function CashierSpin() {
                   </div>
                 ):null}
               </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── FASTBET sidebar ── */}
-        <aside className="w-[420px] shrink-0 border-l border-white/10 bg-[#050505] shadow-[-12px_0_28px_rgba(0,0,0,0.3)]">
-          <div className="flex h-full flex-col">
-            <div className="border-b border-white/10 bg-[linear-gradient(180deg,#1d1d1d_0%,#090909_100%)] px-4 py-3 text-center text-[18px] font-black uppercase tracking-[0.22em] text-[#d8d8d8]">FASTBET</div>
+        {/* ── BETSLIP sidebar ── */}
+        <aside className="w-[340px] min-h-0 shrink-0 overflow-hidden border-l border-white/10 bg-[rgb(11_15_26)] shadow-[-22px_0_48px_rgba(0,0,0,0.52),inset_1px_0_0_rgba(255,255,255,0.06)] xl:w-[360px] 2xl:w-[420px]">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="border-b border-white/10 bg-[linear-gradient(180deg,rgba(34,42,64,0.98)_0%,rgba(11,15,26,1)_100%)] px-4 py-3 text-center text-[18px] font-black uppercase tracking-[0.22em] text-[#f3f6ff] shadow-[0_10px_22px_rgba(0,0,0,0.34)]">BETSLIP</div>
             {betEntries.length===0?(
-              <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.03),transparent_58%)]">
-                <div className="text-center text-white/20">
+              <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.05),transparent_58%)]">
+                <div className="text-center text-white/30">
                   <div className="text-[92px] font-black leading-none">+</div>
                   <div className="mt-2 text-[17px] uppercase tracking-[0.14em]">Place a bet to begin</div>
                 </div>
               </div>
             ):(
               <>
-                <div className="grid grid-cols-[minmax(0,1fr)_72px_70px_34px] border-b border-white/10 bg-[linear-gradient(180deg,#741313_0%,#430808_100%)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/92">
+                <div className="grid grid-cols-[minmax(0,1fr)_82px_88px_38px] border-b border-white/10 bg-[linear-gradient(180deg,rgba(23,125,220,0.98)_0%,rgba(13,82,146,1)_100%)] px-3 py-2 text-[11px] font-black uppercase tracking-[0.08em] text-white shadow-[0_8px_18px_rgba(0,0,0,0.24)]">
                   <div>Selection</div><div className="text-center">Odds</div><div className="text-center">Stake</div><div/>
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#141414_0%,#090909_100%)]">
+                <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(18,24,38,0.98)_0%,rgba(11,15,26,1)_100%)]">
                   {betEntries.map((bet,index)=>(
-                    <div key={bet.key} className={`grid grid-cols-[minmax(0,1fr)_72px_70px_34px] items-center border-b border-white/8 px-3 py-2 ${index%2===0?'bg-white/[0.03]':'bg-white/[0.06]'}`}>
-                      <div className="truncate pr-2 text-[11px] font-bold text-white/92">{bet.label}</div>
-                      <div className="text-center text-[11px] font-black text-white/80">{bet.payout.toFixed(2)}</div>
-                      <div className="flex justify-center"><div className="min-w-[54px] rounded border border-white/15 bg-black/55 px-2 py-1 text-right text-[11px] font-black text-[#f2d48c] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">{bet.amount}</div></div>
-                      <div className="flex justify-center"><button type="button" onClick={()=>removeBet(bet.key)} className="flex h-7 w-7 items-center justify-center rounded border border-white/10 bg-[#4d0b0b] text-[18px] font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">×</button></div>
+                    <div key={bet.key} className={`grid grid-cols-[minmax(0,1fr)_82px_88px_38px] items-center border-b border-white/8 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] ${index%2===0?'bg-white/[0.04]':'bg-white/[0.07]'}`}>
+                      <div className="min-w-0 break-words pr-2 text-[13px] font-bold leading-5 text-white">{bet.label}</div>
+                      <div className="text-center text-[12px] font-black text-white/90">{bet.payout.toFixed(2)}</div>
+                      <div className="flex justify-center"><div className="min-w-[72px] rounded-[8px] border border-[#f0cd7b]/25 bg-[rgba(22,28,42,0.96)] px-2 py-1.5 text-right text-[13px] font-black text-[#ffe29b] shadow-[0_8px_18px_rgba(0,0,0,0.28)]">{formatMoney(bet.amount)}</div></div>
+                      <div className="flex justify-center"><button type="button" onClick={()=>removeBet(bet.key)} className="flex h-8 w-8 items-center justify-center rounded border border-white/10 bg-[#651010] text-white shadow-[0_6px_12px_rgba(0,0,0,0.24)]"><FooterGlyph type="cancel" /></button></div>
                     </div>
                   ))}
                 </div>
               </>
             )}
             <div className="mt-auto">
-              <div className="border-t border-white/10 bg-[#121212] px-4 py-3 text-[11px] font-black text-white/82">
-                <div className="flex items-center justify-between"><span className="uppercase tracking-[0.08em] text-white/55">Potential Min Win</span><span>{Math.max(Math.round(totalStake*0.05),0)} KSh</span></div>
-                <div className="mt-1 flex items-center justify-between"><span className="uppercase tracking-[0.08em] text-white/55">Potential Max Win</span><span className="text-[#f0cd7b]">{maxTotalWin} KSh</span></div>
+              <div className="bg-[linear-gradient(180deg,rgba(23,125,220,0.98)_0%,rgba(13,82,146,1)_100%)] px-4 py-3 text-[12px] font-black text-white shadow-[0_-10px_20px_rgba(0,0,0,0.28)]">
+                <div className="flex items-center justify-between"><span className="uppercase tracking-[0.08em] text-white/80">Total Stake</span><span className="text-[15px] text-white">{formatMoney(totalStake)} KSh</span></div>
+                <div className="mt-1 flex items-center justify-between"><span className="uppercase tracking-[0.08em] text-white/80">Max Total Win</span><span className="text-[15px] text-[#ffe29b]">{formatMoney(maxTotalWin)} KSh</span></div>
               </div>
-              <div className="bg-[linear-gradient(180deg,#831515_0%,#540909_100%)] px-4 py-3 text-[11px] font-black text-white">
-                <div className="flex items-center justify-between"><span className="uppercase tracking-[0.08em] text-white/72">Total Stake</span><span className="text-[13px]">{totalStake} KSh</span></div>
-                <div className="mt-1 flex items-center justify-between"><span className="uppercase tracking-[0.08em] text-white/72">Max Total Win</span><span className="text-[13px] text-[#ffe29b]">{maxTotalWin} KSh</span></div>
-              </div>
-              <div className="grid grid-cols-5 border-t border-white/10 bg-[#090909]">
-                <button type="button" onClick={clearBets} className="footer-btn footer-btn--red" title="Delete Selections (Clear)">🗑</button>
-                <button type="button" onClick={handleCancel} className="footer-btn footer-btn--amber" title="Cancel Last Ticket">❌</button>
-                <button type="button" onClick={handlePayout} className="footer-btn footer-btn--cyan" title="Payout Last Ticket">💵</button>
-                <button type="button" onClick={handleReprint} className="footer-btn footer-btn--lime" title="Reprint Last Ticket">🖨</button>
-                <button type="button" onClick={handleSubmitAndPrint} disabled={phase!=='BETTING'||totalStake===0} className="footer-btn footer-btn--green disabled:opacity-40" title="Print Ticket">$</button>
+              <div className="grid grid-cols-5 border-t border-white/10 bg-[rgb(11_15_26)] shadow-[0_-10px_24px_rgba(0,0,0,0.3)]">
+                <button type="button" onClick={clearBets} className="footer-btn footer-btn--red" title="Delete Selections (Clear)"><FooterGlyph type="clear" /></button>
+                <button type="button" onClick={handleCancel} className="footer-btn footer-btn--amber" title="Cancel Last Ticket"><FooterGlyph type="cancel" /></button>
+                <button type="button" onClick={handlePayout} className="footer-btn footer-btn--cyan" title="Payout Last Ticket"><FooterGlyph type="redeem" /></button>
+                <button type="button" onClick={handleReprint} className="footer-btn footer-btn--lime" title="Reprint Last Ticket"><FooterGlyph type="reprint" /></button>
+                <button type="button" onClick={handleSubmitAndPrint} disabled={phase!=='BETTING'||totalStake===0} className="footer-btn footer-btn--green disabled:opacity-40" title="Print Ticket"><FooterGlyph type="submit" /></button>
               </div>
             </div>
           </div>
@@ -518,7 +635,7 @@ export default function CashierSpin() {
 
       {/* All CSS identical to doc 6 */}
       <style jsx global>{`
-        .cashier-deluxe-side{font-family:Georgia,serif;font-size:4.4rem;font-style:italic;line-height:1;color:#c59c42;text-shadow:0 3px 8px rgba(0,0,0,0.42);transform:rotate(-90deg);transform-origin:center;margin-top:100px}
+        .cashier-deluxe-side{font-family:Georgia,serif;font-size:clamp(2.7rem,3.2vw,4.4rem);font-style:italic;line-height:1;color:#c59c42;text-shadow:0 3px 8px rgba(0,0,0,0.42);transform:rotate(-90deg);transform-origin:center;margin-top:72px}
         .cashier-table-zoom{transform:scale(1.12);transform-origin:top center;transition:transform 240ms ease}
         .casino-watermark{position:absolute;left:50%;top:52%;display:flex;height:560px;width:620px;transform:translate(-50%,-50%) rotate(-18deg);align-items:center;justify-content:center;pointer-events:none;opacity:0.2}
         .casino-watermark__chip{position:absolute;border-radius:9999px;border:14px solid rgba(255,239,199,0.19);box-shadow:inset 0 0 0 3px rgba(255,239,199,0.15)}
@@ -554,21 +671,50 @@ export default function CashierSpin() {
         .chip-token--compact .chip-token__inner{inset:8px;border-width:1px}
         .chip-token__inner span{font-size:1.05rem;font-weight:900;color:#222;line-height:1}
         .chip-token--compact .chip-token__inner span{font-size:0.86rem}
-        .casinochip-container{display:flex;align-items:flex-end;gap:18px}
+        .casinochip-container{display:flex;align-items:flex-end;gap:12px}
         .chip-select{background:transparent;padding:0;opacity:0.9;transition:transform 160ms ease,filter 160ms ease}
         .chip-select--active{transform:translateY(-2px) scale(1.04);filter:drop-shadow(0 0 10px rgba(255,255,255,0.3))}
-        .action-btn{width:96px;height:82px;border-radius:10px;background:rgba(212,218,212,0.78);color:rgba(255,255,255,0.9);font-size:2.2rem;font-weight:900}
-        .hex-btn{position:relative;width:122px;height:70px;clip-path:polygon(16% 0%,84% 0%,100% 50%,84% 100%,16% 100%,0% 50%);border:2px solid rgba(255,255,255,0.88);color:#fff;font-size:1rem;font-weight:900;text-transform:uppercase;box-shadow:0 10px 18px rgba(0,0,0,0.34),inset 0 2px 0 rgba(255,255,255,0.34),inset 0 -7px 10px rgba(0,0,0,0.34);transform:translateZ(0);transition:transform 140ms ease,box-shadow 140ms ease,filter 140ms ease}
-        .hex-btn::before{content:'';position:absolute;inset:4px 10px 52%;border-radius:9999px;background:rgba(255,255,255,0.22);filter:blur(1px);pointer-events:none}
-        .hex-btn:hover{transform:translateY(-2px);box-shadow:0 14px 22px rgba(0,0,0,0.4),inset 0 2px 0 rgba(255,255,255,0.38),inset 0 -8px 12px rgba(0,0,0,0.38)}
-        .hex-btn--red{background:linear-gradient(180deg,#ff7b73 0%,#ff1f15 42%,#b10700 100%)}
-        .hex-btn--black{background:linear-gradient(180deg,#626262 0%,#151515 42%,#000000 100%)}
-        .footer-btn{display:flex;height:72px;align-items:center;justify-content:center;font-size:2rem;font-weight:900;color:#fff;border-right:1px solid rgba(255,255,255,0.08);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}
+        .action-btn{width:78px;height:68px;border-radius:10px;background:rgba(212,218,212,0.78);color:rgba(255,255,255,0.9);font-size:1.8rem;font-weight:900}
+        .viewer-mini-btn{display:flex;align-items:center;justify-content:center;min-width:90px;height:34px;padding:0 14px;border:2px solid rgba(255,255,255,0.72);border-radius:9999px;background:linear-gradient(180deg,#1b6554 0%,#103931 100%);color:#f7c946;font-size:0.72rem;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;box-shadow:0 4px 10px rgba(0,0,0,0.2);transition:transform 140ms ease,box-shadow 140ms ease}
+        .viewer-mini-btn--floating{position:absolute;left:50%;top:52px;transform:translateX(-50%)}
+        .viewer-mini-btn:hover{transform:translateY(-1px);box-shadow:0 6px 12px rgba(0,0,0,0.24)}
+        .viewer-mini-btn--floating:hover{transform:translateX(-50%) translateY(-1px)}
+        .pill-polar-btn{position:relative;display:flex;align-items:center;justify-content:center;width:100px;height:58px;border:2px solid rgba(255,255,255,0.88);border-radius:9999px;color:#fff;font-size:0.86rem;font-weight:900;text-transform:uppercase;transition:transform 140ms ease,box-shadow 140ms ease,filter 140ms ease;box-shadow:0 4px 10px rgba(0,0,0,0.18)}
+        .pill-polar-btn:hover{transform:translateY(-1px);box-shadow:0 7px 14px rgba(0,0,0,0.24)}
+        .pill-polar-btn--red{background:#cf2f2f}
+        .pill-polar-btn--black{background:#1b1f27}
+        .pill-outside-btn{border:2px solid rgba(255,255,255,0.8);border-radius:9999px;background:rgba(31,67,57,0.72);box-shadow:0 4px 10px rgba(0,0,0,0.18);transition:transform 140ms ease,box-shadow 140ms ease}
+        .pill-outside-btn:hover{transform:translateY(-1px);box-shadow:0 7px 14px rgba(0,0,0,0.24)}
+        .pill-header-shell{display:flex;align-items:stretch;border:2px solid rgba(255,255,255,0.78);border-radius:9999px;box-shadow:0 4px 12px rgba(0,0,0,0.18)}
+        .pill-timer-shell{border:4px solid;border-radius:9999px;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+        .pill-deluxe-btn{height:46px;border:2px solid rgba(255,255,255,0.8);border-radius:9999px;background:rgba(25,44,39,0.72);color:#fff;font-weight:900;box-shadow:0 4px 10px rgba(0,0,0,0.18);transition:transform 140ms ease,box-shadow 140ms ease}
+        .pill-deluxe-btn:hover{transform:translateY(-1px);box-shadow:0 7px 14px rgba(0,0,0,0.24)}
+        .pill-neighbor-btn{height:28px;border:1px solid rgba(255,255,255,0.75);border-radius:9999px;padding-left:0.25rem;padding-right:0.25rem;font-weight:900;box-shadow:0 3px 8px rgba(0,0,0,0.14);transition:transform 140ms ease,box-shadow 140ms ease}
+        .pill-neighbor-btn:hover{transform:translateY(-1px);box-shadow:0 5px 10px rgba(0,0,0,0.2)}
+        .footer-btn{display:flex;height:72px;align-items:center;justify-content:center;font-size:2rem;font-weight:900;color:#fff;border-right:1px solid rgba(255,255,255,0.08);box-shadow:0 4px 10px rgba(0,0,0,0.18)}
         .footer-btn--red{background:linear-gradient(180deg,#8e1717 0%,#590707 100%)}
         .footer-btn--amber{background:linear-gradient(180deg,#9d5f0b 0%,#684006 100%)}
         .footer-btn--cyan{background:linear-gradient(180deg,#156b87 0%,#0a4152 100%)}
         .footer-btn--lime{background:linear-gradient(180deg,#5b7f14 0%,#39500c 100%)}
         .footer-btn--green{background:linear-gradient(180deg,#256d23 0%,#154514 100%)}
+        @media (min-width: 1280px) and (max-width: 1535px) and (max-height: 800px){
+          .roulette-cashier{
+            transform:scale(0.84);
+            transform-origin:top left;
+            width:119%;
+            height:119%;
+          }
+        }
+        @media (min-width: 1536px){
+          .cashier-deluxe-side{margin-top:100px}
+          .casinochip-container{gap:18px}
+          .action-btn{width:96px;height:82px;font-size:2.2rem}
+          .viewer-mini-btn{min-width:102px;height:38px;font-size:0.78rem}
+          .viewer-mini-btn--floating{top:60px}
+          .pill-polar-btn{width:122px;height:70px;font-size:1rem}
+          .pill-deluxe-btn{height:56px}
+          .pill-neighbor-btn{height:34px}
+        }
       `}</style>
     </CashierLayout>
   );

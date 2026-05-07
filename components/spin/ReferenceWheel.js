@@ -187,7 +187,7 @@ function drawReferenceWheel(ctx, rotation, size, displayNumber, isSpinning) {
   ctx.restore();
 }
 
-export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete, showCenterValue = true, lastWinningNumber }) {
+export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete, showCenterValue = true }) {
   const wrapperRef = useRef(null);
   const canvasRef = useRef(null);
   const centerValueRef = useRef(null);
@@ -198,53 +198,33 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
   const lastSpinKeyRef = useRef(null);
   const lastResultRef = useRef(null);
   const spinningRef = useRef(false);
-  const hasInitializedRef = useRef(false);
   const [size, setSize] = useState(720);
   const [pointerDuration, setPointerDuration] = useState('0.6s');
   const [dotDuration, setDotDuration] = useState('2.5s');
   const [isSpinning, setIsSpinning] = useState(false);
 
-  // Offscreen canvas for pre-rendering
-  const offscreenCanvasRef = useRef(null);
-  const lastRenderedValueRef = useRef(null);
-
-  // Initialize position based on lastWinningNumber
   useEffect(() => {
-    if (!hasInitializedRef.current && lastWinningNumber !== null && lastWinningNumber !== undefined) {
-      const idx = WHEEL_NUMBERS.indexOf(Number(lastWinningNumber));
-      if (idx !== -1) {
-        const targetNumberAngle = (idx * OUTER_SEGMENT_ANGLE);
-        const centerPocketShift = OUTER_SEGMENT_ANGLE / 2;
-        angleRef.current = (2 * Math.PI - targetNumberAngle - centerPocketShift) % (2 * Math.PI);
-        lastResultRef.current = lastWinningNumber;
-        hasInitializedRef.current = true;
-      }
-    }
-  }, [lastWinningNumber]);
+    const updateSize = () => {
+      const node = wrapperRef.current;
+      if (!node) return;
+      const next = Math.max(340, Math.min(Math.floor(node.clientWidth), 940));
+      setSize(next);
+    };
 
-  // Pre-render the static wheel once
-  useEffect(() => {
-    if (!size) return;
-    
-    const dpr = window.devicePixelRatio || 1;
-    const offscreen = document.createElement('canvas');
-    offscreen.width = size * dpr;
-    offscreen.height = size * dpr;
-    const ctx = offscreen.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    updateSize();
+    const node = wrapperRef.current;
+    const observer = typeof ResizeObserver !== 'undefined' && node
+      ? new ResizeObserver(() => updateSize())
+      : null;
 
-    // Draw the static wheel (at 0 rotation)
-    drawReferenceWheel(ctx, 0, size, null, false);
-    offscreenCanvasRef.current = offscreen;
-  }, [size]);
+    if (observer && node) observer.observe(node);
+    window.addEventListener('resize', updateSize);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-  }, [size]);
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, []);
 
   useEffect(() => {
     const render = () => {
@@ -253,44 +233,32 @@ export default function ReferenceWheel({ winningNumber, spinKey, onSpinComplete,
 
       const ctx = canvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
-      const center = size / 2;
+      canvas.width = size * dpr;
+      canvas.height = size * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      ctx.clearRect(0, 0, size * dpr, size * dpr);
-      
-      if (offscreenCanvasRef.current) {
-        ctx.save();
-        ctx.translate(center * dpr, center * dpr);
-        ctx.rotate(angleRef.current);
-        ctx.translate(-center * dpr, -center * dpr);
-        ctx.drawImage(offscreenCanvasRef.current, 0, 0);
-        ctx.restore();
-      }
+      drawReferenceWheel(ctx, angleRef.current, size, lastResultRef.current, spinningRef.current);
 
       const centerValueNode = centerValueRef.current;
       const centerCoreNode = centerCoreRef.current;
-      
       if (centerValueNode) {
         const liveValue = spinningRef.current
           ? getIndicatedNumber(angleRef.current)
-          : lastResultRef.current;
+          : (showCenterValue ? lastResultRef.current : null);
 
-        // Optimization: Only touch the DOM if the value changed
-        if (liveValue !== lastRenderedValueRef.current) {
-          if (liveValue !== null && liveValue !== undefined) {
-            centerValueNode.textContent = String(liveValue);
-            centerValueNode.style.opacity = '1';
-            if (centerCoreNode) {
-              const pocketColor = getPocketColor(Number(liveValue));
-              centerCoreNode.style.background = `radial-gradient(circle at 35% 35%, ${pocketColor}, #000000)`;
-            }
-          } else {
-            centerValueNode.textContent = '';
-            centerValueNode.style.opacity = '0';
-            if (centerCoreNode) {
-              centerCoreNode.style.background = 'radial-gradient(circle at 35% 35%, #8c1117, #000000)';
-            }
+        if (showCenterValue && liveValue !== null && liveValue !== undefined) {
+          centerValueNode.textContent = String(liveValue);
+          centerValueNode.style.opacity = '1';
+          if (centerCoreNode) {
+            const pocketColor = getPocketColor(Number(liveValue));
+            centerCoreNode.style.background = `radial-gradient(circle at 35% 35%, ${pocketColor}, #000000)`;
           }
-          lastRenderedValueRef.current = liveValue;
+        } else {
+          centerValueNode.textContent = '';
+          centerValueNode.style.opacity = '0';
+          if (centerCoreNode) {
+            centerCoreNode.style.background = 'radial-gradient(circle at 35% 35%, #8c1117, #000000)';
+          }
         }
       }
       renderRafRef.current = requestAnimationFrame(render);
