@@ -20,34 +20,16 @@ const sportTabs = [
   { id: 'table-tennis', name: 'Table Tennis', icon: '🏓', sportKey: 'table-tennis' },
 ];
 
-// Format time — shows date if not today
+// Format time — Full format
 function formatMatchTime(dateString) {
   if (!dateString) return 'TBD';
   const matchDate = new Date(dateString);
-  const now = new Date();
-
-  const isToday =
-    matchDate.getDate() === now.getDate() &&
-    matchDate.getMonth() === now.getMonth() &&
-    matchDate.getFullYear() === now.getFullYear();
-
-  const isTomorrow =
-    matchDate.getDate() === now.getDate() + 1 &&
-    matchDate.getMonth() === now.getMonth() &&
-    matchDate.getFullYear() === now.getFullYear();
-
-  const timeStr = matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-
-  if (isToday) return timeStr;
-  if (isTomorrow) return `Tomorrow ${timeStr}`;
-
-  // Different month/year — show full date
-  const dateStr = matchDate.toLocaleDateString([], { day: 'numeric', month: 'short' });
-  return `${dateStr} ${timeStr}`;
+  return `${matchDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${matchDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
 }
 
 export default function Home({ initialMatches = [] }) {
   const [activeTab, setActiveTab] = useState('soccer');
+  const [activeDate, setActiveDate] = useState('all');
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const { slipItems, setSlipItems } = useBets();
@@ -70,7 +52,7 @@ export default function Home({ initialMatches = [] }) {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, selectedLeague, searchQuery]);
+  }, [activeTab, selectedLeague, searchQuery, activeDate]);
 
   const getMatchStatus = (startTime) => {
     if (!startTime) return { isLocked: false, isStartingSoon: false };
@@ -126,6 +108,20 @@ export default function Home({ initialMatches = [] }) {
     const currentSport = sportTabs.find(t => t.id === activeTab);
     filtered = filtered.filter(m => m.sport_key === currentSport?.sportKey);
 
+    // Filter by date
+    if (activeDate !== 'all') {
+      const now = new Date();
+      if (activeDate === 'today') {
+        const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+        filtered = filtered.filter(m => m.start_time?.startsWith(todayStr));
+      } else if (activeDate === 'tomorrow') {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toLocaleDateString('en-CA');
+        filtered = filtered.filter(m => m.start_time?.startsWith(tomorrowStr));
+      }
+    }
+
     // Filter by selected league
     if (selectedLeague) {
       filtered = filtered.filter(m => m.league_name === selectedLeague);
@@ -140,7 +136,7 @@ export default function Home({ initialMatches = [] }) {
     }
 
     return filtered;
-  }, [initialMatches, selectedLeague, searchQuery, activeTab]);
+  }, [initialMatches, selectedLeague, searchQuery, activeTab, activeDate]);
 
   const paginatedMatches = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -187,20 +183,43 @@ export default function Home({ initialMatches = [] }) {
         <main ref={scrollRef} className="flex-1 overflow-y-auto bg-[#0b0f1a] no-scrollbar flex flex-col relative">
 
           {/* SPORT TABS */}
-          <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex items-center px-4 py-3 gap-2 shrink-0 overflow-x-auto no-scrollbar">
-            {sportTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); }}
-                className={`py-2 px-5 rounded-full text-[11px] font-bold capitalize italic tracking-wide transition-all border whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20'
-                    : 'bg-[#1c2636]/40 border-white/5 text-slate-400 hover:border-white/20'
-                }`}
-              >
-                <span className="mr-2">{tab.icon}</span>{tab.name}
-              </button>
-            ))}
+          <div className="sticky top-0 z-20 bg-[#0b0f1a]/95 backdrop-blur-xl border-b border-white/5 flex flex-col shrink-0 overflow-hidden">
+            <div className="flex items-center px-4 py-3 gap-2 overflow-x-auto no-scrollbar">
+              {sportTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => { setActiveTab(tab.id); setSelectedLeague(null); setActiveDate('all'); }}
+                  className={`py-2 px-5 rounded-full text-[11px] font-bold capitalize italic tracking-wide transition-all border whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'bg-[#10b981] border-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20'
+                      : 'bg-[#1c2636]/40 border-white/5 text-slate-400 hover:border-white/20'
+                  }`}
+                >
+                  <span className="mr-2">{tab.icon}</span>{tab.name}
+                </button>
+              ))}
+            </div>
+
+            {/* DATE TABS */}
+            <div className="flex items-center px-4 pb-2 gap-2 overflow-x-auto no-scrollbar bg-[#0b0f1a]/40">
+               {[
+                 { id: 'all', name: 'All Dates' },
+                 { id: 'today', name: 'Today' },
+                 { id: 'tomorrow', name: 'Tomorrow' },
+               ].map((tab) => (
+                 <button
+                   key={tab.id}
+                   onClick={() => setActiveDate(tab.id)}
+                   className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap border ${
+                     activeDate === tab.id 
+                       ? 'bg-white/10 border-white/20 text-white' 
+                       : 'bg-transparent border-transparent text-slate-600 hover:text-slate-400'
+                   }`}
+                 >
+                   {tab.name}
+                 </button>
+               ))}
+            </div>
           </div>
 
           <div className="pb-32 lg:pb-10 flex-1 w-full">
