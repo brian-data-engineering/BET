@@ -5,42 +5,18 @@ import { AdminContext } from './AdminLayout';
 import { supabase } from '../../lib/supabaseClient';
 import { 
   LayoutDashboard, Wallet, LogOut, ShieldCheck, 
-  Globe, BarChart3, Gavel, Database, Cpu 
+  Globe, BarChart3, Gavel, Database, Cpu, Image
 } from 'lucide-react';
 
 export default function AdminSidebar() {
   const router = useRouter();
-  const { profile, setProfile, handleSecureSignOut } = useContext(AdminContext);
-
-  useEffect(() => {
-    if (!profile?.id) return;
-
-    // REAL-TIME TREASURY SYNC
-    const channel = supabase
-      .channel('admin-treasury-sync')
-      .on('postgres_changes', 
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'profiles',
-          filter: `id=eq.${profile.id}`
-        }, 
-        (payload) => {
-          // Updates the global AdminContext so all admin pages see the new balance
-          if (setProfile) {
-            setProfile(prev => ({ ...prev, balance: payload.new.balance }));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [profile?.id, setProfile]);
+  const { profile, handleSecureSignOut } = useContext(AdminContext);
 
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={18} /> },
     { name: 'Operators', path: '/admin/operator', icon: <ShieldCheck size={18} /> },
     { name: 'Settlement', path: '/admin/settle', icon: <Gavel size={18} /> },
+    { name: 'Banners', path: '/admin/banners', icon: <Image size={18} /> },
     { name: 'League Bridge', path: '/admin/leagues', icon: <Globe size={18} /> },
     { name: 'Funding', path: '/admin/funding', icon: <Wallet size={18} /> },
     { name: 'Network Audit', path: '/admin/reports', icon: <BarChart3 size={18} /> },
@@ -49,7 +25,7 @@ export default function AdminSidebar() {
   const isAuthorized = profile?.role === 'super_admin' || profile?.role === 'admin';
 
   return (
-    <div className="w-64 bg-[#0b0f1a] border-r border-white/5 flex flex-col h-screen sticky top-0 shadow-2xl">
+    <div className="hidden lg:flex w-64 bg-[#0b0f1a] border-r border-white/5 flex-col h-screen sticky top-0 shadow-2xl">
       <div className="p-8 border-b border-white/5 flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <Cpu size={14} className="text-[#10b981] animate-pulse" />

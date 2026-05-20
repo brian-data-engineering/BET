@@ -16,13 +16,18 @@ import {
 
 export default function ManageOperators() {
   // --- STATE MANAGEMENT ---
-  const [allProfiles, setAllProfiles] = useState([]);
+  const [allProfiles, setAllProfiles] = useState([]); // Used for dropdowns and stats
+  const [paginatedNodes, setPaginatedNodes] = useState([]); // The actual list shown
   const [searchTerm, setSearchTerm] = useState('');
   const [adminId, setAdminId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editingNode, setEditingNode] = useState(null);
   const [provisionType, setProvisionType] = useState('operator'); 
   
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 10;
+
   const [form, setForm] = useState({ 
     password: '', 
     username: '', 
@@ -34,14 +39,36 @@ export default function ManageOperators() {
   });
 
   // --- DATA SYNCING ---
-  const syncNetworkState = useCallback(async () => {
-    const { data: profiles, error } = await supabase
+  const syncNetworkState = useCallback(async (page = 1, search = '') => {
+    setLoading(true);
+    
+    // 1. Fetch Stats & Dropdown Data (All profiles for now, or could be optimized further)
+    const { data: statsData } = await supabase
       .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+    setAllProfiles(statsData || []);
 
-    if (error) return console.error("Sync Error:", error.message);
-    setAllProfiles(profiles || []);
+    // 2. Fetch Paginated List with Search
+    let query = supabase
+      .from('profiles')
+      .select('*', { count: 'exact' });
+
+    if (search) {
+      query = query.or(`username.ilike.%${search}%,display_name.ilike.%${search}%,role.ilike.%${search}%`);
+    }
+
+    const { data, count, error } = await query
+      .order('created_at', { ascending: false })
+      .range((page - 1) * itemsPerPage, page * itemsPerPage - 1);
+
+    if (error) {
+      console.error("Sync Error:", error.message);
+    } else {
+      setPaginatedNodes(data || []);
+      setTotalCount(count || 0);
+    }
+    
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -49,24 +76,35 @@ export default function ManageOperators() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setAdminId(user.id);
-        syncNetworkState();
+        syncNetworkState(currentPage, searchTerm);
       }
     };
     init();
   }, [syncNetworkState]);
 
-  // --- MEMOIZED ROLE FILTERING ---
+  // Handle Search with debounce or immediate reset
+  useEffect(() => {
+    setCurrentPage(1);
+    syncNetworkState(1, searchTerm);
+  }, [searchTerm, syncNetworkState]);
+
+  // Handle Page Change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    syncNetworkState(newPage, searchTerm);
+    // Scroll to ledger top
+    const ledger = document.getElementById('network-ledger');
+    if (ledger) {
+      ledger.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  // --- MEMOIZED ROLE FILTERING (For Dropdowns) ---
   const operators = useMemo(() => allProfiles.filter(p => p.role === 'operator'), [allProfiles]);
   const agents = useMemo(() => allProfiles.filter(p => p.role === 'agent'), [allProfiles]);
   const shops = useMemo(() => allProfiles.filter(p => p.role === 'shop'), [allProfiles]);
 
-  const filteredNodes = useMemo(() => {
-    return allProfiles.filter(p => 
-      p.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.display_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.role.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [allProfiles, searchTerm]);
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   // --- CORE LOGIC ---
   const handleAction = async (e) => {
@@ -264,50 +302,53 @@ export default function ManageOperators() {
               />
             </div>
 
-            <div className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+            <div id="network-ledger" className="bg-[#111926] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
               <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                 <div className="flex items-center gap-3">
                   <Database size={18} className="text-blue-500" />
                   <h2 className="text-[10px] font-black uppercase italic tracking-widest text-slate-400">Master Identity Ledger</h2>
                 </div>
-                <span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter">Sync: Healthy</span>
+                <div className="flex flex-col items-end">
+                   <span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter italic">Total Nodes: {totalCount}</span>
+                   <span className="text-[7px] font-black text-blue-500 uppercase tracking-[0.2em]">Live Sync Active</span>
+                </div>
               </div>
 
-              <div className="divide-y divide-white/5 max-h-[700px] overflow-y-auto custom-scrollbar">
-                {filteredNodes.length > 0 ? filteredNodes.map(node => (
-                  <div key={node.id} className="p-7 flex items-center justify-between hover:bg-white/[0.02] transition-all group relative overflow-hidden">
-                    <div className="flex items-center gap-6 relative z-10">
-                      <div className={`w-14 h-14 rounded-2xl bg-black border flex items-center justify-center overflow-hidden transition-all group-hover:border-blue-500/50 ${node.role === 'operator' ? 'border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.1)]' : 'border-white/5'}`}>
+              <div className="divide-y divide-white/5 max-h-[800px] overflow-y-auto custom-scrollbar">
+                {paginatedNodes.length > 0 ? paginatedNodes.map(node => (
+                  <div key={node.id} className="p-7 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-white/[0.02] transition-all group relative overflow-hidden gap-6">
+                    <div className="flex items-center gap-4 md:gap-6 relative z-10 w-full sm:w-auto">
+                      <div className={`w-14 h-14 rounded-2xl bg-black border flex items-center justify-center overflow-hidden transition-all group-hover:border-blue-500/50 shrink-0 ${node.role === 'operator' ? 'border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.1)]' : 'border-white/5'}`}>
                         {node.logo_url ? <img src={node.logo_url} className="w-full h-full object-cover" /> : <ImageIcon className="text-slate-800" size={18} />}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-black text-white uppercase italic text-xl tracking-tighter">{node.username}</span>
-                          <span className={`text-[7px] font-black px-2 py-0.5 rounded border uppercase tracking-widest ${
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                          <span className="font-black text-white uppercase italic text-lg md:text-xl tracking-tighter truncate">{node.username}</span>
+                          <span className={`text-[7px] font-black px-2 py-0.5 rounded border uppercase tracking-widest shrink-0 ${
                             node.role === 'operator' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 
                             node.role === 'agent' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' : 
                             'bg-slate-500/10 text-slate-500 border-white/10'
                           }`}>{node.role}</span>
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{node.display_name || 'Lucra Node'}</p>
-                          <ArrowRight size={10} className="text-slate-700" />
-                          <span className="text-[8px] font-mono text-slate-600 uppercase">UID: {node.id.slice(0, 8)}</span>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{node.display_name || 'Lucra Node'}</p>
+                          <ArrowRight size={10} className="text-slate-700 hidden md:block" />
+                          <span className="text-[8px] font-mono text-slate-600 uppercase hidden md:block">UID: {node.id.slice(0, 8)}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right relative z-10">
+                    <div className="text-left sm:text-right relative z-10 w-full sm:w-auto flex flex-col sm:items-end">
                       <span className="block text-[9px] font-black text-slate-600 uppercase mb-1 tracking-widest italic group-hover:text-blue-500 transition-colors">Vault Balance</span>
-                      <span className="text-2xl font-black italic tracking-tighter text-white">KES {parseFloat(node.balance || 0).toLocaleString()}</span>
-                      <div className="mt-3 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                      <span className="text-2xl font-black italic tracking-tighter text-white leading-none">KES {parseFloat(node.balance || 0).toLocaleString()}</span>
+                      <div className="mt-4 sm:mt-3 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all translate-y-0 sm:translate-y-2 group-hover:translate-y-0">
                          <button 
                           onClick={() => {
                             setEditingNode(node);
                             setForm({ ...form, displayName: node.display_name, logoUrl: node.logo_url });
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }} 
-                          className="text-[9px] font-black text-blue-500 hover:text-white transition-colors uppercase italic tracking-[0.2em]"
+                          className="w-full sm:w-auto bg-white/5 sm:bg-transparent border border-white/5 sm:border-0 p-3 sm:p-0 rounded-xl text-[9px] font-black text-blue-500 hover:text-white transition-colors uppercase italic tracking-[0.2em]"
                          >
                            Configure Identity
                          </button>
@@ -318,6 +359,61 @@ export default function ManageOperators() {
                   <div className="p-20 text-center opacity-20 italic text-sm">No network nodes found matching search...</div>
                 )}
               </div>
+
+              {/* PAGINATION CONTROLS */}
+              {totalPages > 1 && (
+                <div className="p-8 border-t border-white/5 bg-white/[0.01] flex flex-col sm:flex-row items-center justify-between gap-6">
+                  <div className="text-[10px] font-black text-slate-600 uppercase italic tracking-widest">
+                    Page <span className="text-blue-500">{currentPage}</span> of <span className="text-white">{totalPages}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button 
+                      disabled={currentPage === 1 || loading}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      className="px-4 py-2 rounded-xl bg-white/5 border border-white/5 text-[10px] font-black uppercase italic tracking-widest text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 transition-all"
+                    >
+                      Previous
+                    </button>
+                    
+                    <div className="flex items-center gap-1 mx-2">
+                      {[...Array(totalPages)].map((_, i) => {
+                        const pageNum = i + 1;
+                        // Only show a few pages around current
+                        if (
+                          pageNum === 1 || 
+                          pageNum === totalPages || 
+                          (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                        ) {
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${currentPage === pageNum ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        } else if (
+                          pageNum === currentPage - 2 || 
+                          pageNum === currentPage + 2
+                        ) {
+                          return <span key={pageNum} className="text-slate-700 text-[10px]">...</span>;
+                        }
+                        return null;
+                      })}
+                    </div>
+
+                    <button 
+                      disabled={currentPage === totalPages || loading}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      className="px-4 py-2 rounded-xl bg-white/5 border border-white/5 text-[10px] font-black uppercase italic tracking-widest text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 transition-all"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

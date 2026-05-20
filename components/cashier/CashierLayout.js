@@ -55,7 +55,7 @@ export default function CashierLayout({ children }) {
       
       {/* Top Navbar: Added 'print:hidden' */}
       <header className="border-b border-white/5 bg-[#0b0f1a] shadow-2xl print:hidden sticky top-0 z-50">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
+        <div className="max-w-none mx-auto px-4 sm:px-6">
           <div className="h-20 flex items-center justify-between gap-4">
             
             {/* Logo and Desktop Nav */}

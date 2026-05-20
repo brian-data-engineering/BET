@@ -56,12 +56,21 @@ export default function Home({ initialMatches = [] }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileSlipOpen, setIsMobileSlipOpen] = useState(false);
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
   const scrollRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 10000);
     return () => clearInterval(timer);
   }, []);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, selectedLeague, searchQuery]);
 
   const getMatchStatus = (startTime) => {
     if (!startTime) return { isLocked: false, isStartingSoon: false };
@@ -133,6 +142,18 @@ export default function Home({ initialMatches = [] }) {
     return filtered;
   }, [initialMatches, selectedLeague, searchQuery, activeTab]);
 
+  const paginatedMatches = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return displayMatches.slice(startIndex, startIndex + itemsPerPage);
+  }, [displayMatches, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(displayMatches.length / itemsPerPage);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="min-h-screen w-full bg-[#0b0f1a] text-white flex flex-col overflow-hidden font-sans">
       <Navbar onSearch={setSearchQuery} />
@@ -202,7 +223,7 @@ export default function Home({ initialMatches = [] }) {
                 )}
               </div>
 
-              {displayMatches.length > 0 ? displayMatches.map((match) => {
+              {paginatedMatches.length > 0 ? paginatedMatches.map((match) => {
                 const { isStartingSoon, isLocked } = getMatchStatus(match.start_time);
                 const noDraw = NO_DRAW_SPORTS.has(match.sport_key);
                 const timeLabel = formatMatchTime(match.start_time);
@@ -268,6 +289,61 @@ export default function Home({ initialMatches = [] }) {
                 <div className="py-32 text-center opacity-20 flex flex-col items-center">
                   <AlertCircle size={48} className="mb-4 text-[#10b981]" />
                   <p className="text-sm font-bold italic tracking-widest uppercase">No Markets Available</p>
+                </div>
+              )}
+
+              {/* PAGINATION CONTROLS */}
+              {totalPages > 1 && (
+                <div className="mt-8 mb-12 flex flex-col items-center gap-6 border-t border-white/5 pt-10">
+                  <div className="flex items-center gap-2">
+                    <button 
+                      disabled={currentPage === 1}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      className="px-4 py-2 rounded-xl bg-[#1c2636]/60 border border-white/5 text-[10px] font-black uppercase italic tracking-widest text-slate-400 hover:text-white disabled:opacity-20 transition-all"
+                    >
+                      Prev
+                    </button>
+                    
+                    <div className="flex items-center gap-1">
+                      {[...Array(totalPages)].map((_, i) => {
+                        const pageNum = i + 1;
+                        if (
+                          pageNum === 1 || 
+                          pageNum === totalPages || 
+                          (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                        ) {
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`w-9 h-9 rounded-xl text-[11px] font-black transition-all ${
+                                currentPage === pageNum 
+                                  ? 'bg-[#10b981] text-[#0b0f1a] shadow-lg shadow-[#10b981]/20' 
+                                  : 'text-slate-500 hover:bg-white/5'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        } else if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
+                          return <span key={pageNum} className="text-slate-700 px-1">...</span>;
+                        }
+                        return null;
+                      })}
+                    </div>
+
+                    <button 
+                      disabled={currentPage === totalPages}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      className="px-4 py-2 rounded-xl bg-[#1c2636]/60 border border-white/5 text-[10px] font-black uppercase italic tracking-widest text-slate-400 hover:text-white disabled:opacity-20 transition-all"
+                    >
+                      Next
+                    </button>
+                  </div>
+                  
+                  <div className="text-[9px] font-black text-slate-600 uppercase italic tracking-[0.2em]">
+                    Showing <span className="text-white">{Math.min((currentPage - 1) * itemsPerPage + 1, displayMatches.length)}</span> to <span className="text-white">{Math.min(currentPage * itemsPerPage, displayMatches.length)}</span> of <span className="text-white">{displayMatches.length}</span> Events
+                  </div>
                 </div>
               )}
             </div>

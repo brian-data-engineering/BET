@@ -2,6 +2,7 @@ import { useEffect, useState, createContext, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
 import AdminSidebar from './AdminSidebar';
+import AdminMobileNav from './AdminMobileNav';
 
 export const AdminContext = createContext({
   profile: null,
@@ -22,8 +23,6 @@ export default function AdminLayout({ children }) {
   };
 
   useEffect(() => {
-    let channel;
-
     const checkAuth = async () => {
       // 1. Bypass check for login page
       if (router.pathname === '/admin/login') {
@@ -39,7 +38,7 @@ export default function AdminLayout({ children }) {
         return;
       }
 
-      // 3. Fetch Profile Row
+      // 3. Fetch Profile Row (Only if not already loaded or on critical refresh)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -55,23 +54,31 @@ export default function AdminLayout({ children }) {
       // 4. Set State & Stop Loading
       setProfile(profileData);
       setLoading(false);
-
-      // 5. Realtime Profile Sync (Balance updates, etc)
-      channel = supabase
-        .channel(`live-profile-${user.id}`)
-        .on('postgres_changes', { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'profiles', 
-          filter: `id=eq.${user.id}` 
-        }, (payload) => {
-          setProfile(payload.new);
-        }).subscribe();
     };
 
     checkAuth();
-    return () => { if (channel) supabase.removeChannel(channel); };
   }, [router.pathname]);
+
+  // Realtime Profile Sync (Balance updates, etc) - Separated from Auth lifecycle
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    const channel = supabase
+      .channel(`live-profile-${profile.id}`)
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'profiles', 
+        filter: `id=eq.${profile.id}` 
+      }, (payload) => {
+        setProfile(payload.new);
+      })
+      .subscribe();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [profile?.id]);
 
   const contextValue = useMemo(() => ({ profile, handleSecureSignOut }), [profile]);
 
@@ -93,7 +100,8 @@ export default function AdminLayout({ children }) {
     <AdminContext.Provider value={contextValue}>
       <div className="flex min-h-screen bg-[#0b0f1a] text-white font-sans">
         <AdminSidebar profile={profile} />
-        <main className="flex-1 overflow-y-auto">
+        <AdminMobileNav profile={profile} handleSecureSignOut={handleSecureSignOut} />
+        <main className="flex-1 overflow-y-auto pt-16 lg:pt-0">
           {/* Ensure children only render if profile exists to prevent build crashes */}
           {profile ? children : (
             <div className="p-20 text-center text-slate-800 font-black uppercase italic">
